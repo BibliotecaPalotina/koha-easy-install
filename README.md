@@ -38,7 +38,7 @@ O sistema opera através do comando `sudo options.sh` e oferece mais de 20 ferra
 
 ## ⚡ Instalação Rápida (Quick Start)
 
-Abra o terminal do seu servidor Linux e cole os três comandos abaixo. Eles farão o download seguro do script, darão permissão de execução e iniciarão o painel:
+Abra o terminal do seu servidor Linux e cole o comando único abaixo. Ele fará o download seguro do script, dará permissão de execução e iniciará o painel interativo:
 
 ```bash
 sudo curl -fsSL "https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer" -o /usr/local/bin/options.sh && sudo chmod +x /usr/local/bin/options.sh && sudo options.sh
