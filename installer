@@ -867,9 +867,13 @@ if [ "\$TAM" -lt 10240 ]; then
 fi
 registrar "OK: \$ARQ (\$TAM bytes)"
 
+# Sanitiza e valida o remoto antes de enviar para a nuvem
+RCLONE_REMOTE="\$(printf '%s' "\$RCLONE_REMOTE" | xargs)"
 if [ -n "\$RCLONE_REMOTE" ] && [ -f /root/.config/rclone/rclone.conf ]; then
-    if /usr/bin/rclone --config /root/.config/rclone/rclone.conf copy "\$ARQ" "\${RCLONE_REMOTE}:\${RCLONE_PASTA_SQL}" >>"\$LOG" 2>&1; then
-        registrar "Nuvem OK: \${RCLONE_REMOTE}:\${RCLONE_PASTA_SQL}"
+    if ! rclone listremotes --config /root/.config/rclone/rclone.conf 2>/dev/null | grep -qx "\${RCLONE_REMOTE}:"; then
+        registrar "AVISO: RCLONE_REMOTE='\${RCLONE_REMOTE}' não existe no rclone.conf; upload pulado"
+    elif /usr/bin/rclone --config /root/.config/rclone/rclone.conf copy "\$ARQ" "\${RCLONE_REMOTE}:\${RCLONE_PASTA_SQL}/" >>"\$LOG" 2>&1; then
+        registrar "Nuvem OK: \${RCLONE_REMOTE}:\${RCLONE_PASTA_SQL}/"
     else
         registrar "AVISO: envio para a nuvem falhou (cópia local preservada)"
     fi
@@ -915,9 +919,16 @@ tar -czf "\$PACOTE" -C "\$DIR" "\$(basename "\$BIB")" "\$(basename "\$AUT")" 2>>
 rm -f "\$BIB" "\$AUT"
 registrar "OK: \$PACOTE (\$(stat -c %s "\$PACOTE" 2>/dev/null) bytes)"
 
+# Sanitiza e valida o remoto antes de enviar o pacote MARC para a nuvem
+RCLONE_REMOTE="\$(printf '%s' "\$RCLONE_REMOTE" | xargs)"
 if [ -n "\$RCLONE_REMOTE" ] && [ -f /root/.config/rclone/rclone.conf ]; then
-    /usr/bin/rclone --config /root/.config/rclone/rclone.conf copy "\$PACOTE" "\${RCLONE_REMOTE}:\${RCLONE_PASTA_MARC}" >>"\$LOG" 2>&1 \
-        && registrar "Nuvem OK" || registrar "AVISO: envio para a nuvem falhou"
+    if ! rclone listremotes --config /root/.config/rclone/rclone.conf 2>/dev/null | grep -qx "\${RCLONE_REMOTE}:"; then
+        registrar "AVISO: RCLONE_REMOTE='\${RCLONE_REMOTE}' não existe no rclone.conf; upload pulado"
+    elif /usr/bin/rclone --config /root/.config/rclone/rclone.conf copy "\$PACOTE" "\${RCLONE_REMOTE}:\${RCLONE_PASTA_MARC}/" >>"\$LOG" 2>&1; then
+        registrar "Nuvem OK: \${RCLONE_REMOTE}:\${RCLONE_PASTA_MARC}/"
+    else
+        registrar "AVISO: envio para a nuvem falhou"
+    fi
 fi
 
 find "\$DIR" -name 'koha_marc_*.tar.gz' -mtime "+\${MANTER_DIAS}" -delete 2>/dev/null
@@ -1759,24 +1770,65 @@ funcao_dimensionar_servidor() {
 }
 
 # ======================================================================
+# CONFIG DE BACKUP: gravação robusta de chave=valor (substitui o sed frágil)
+# ======================================================================
+backup_conf_definir() {
+    local chave="$1" valor="$2"
+    escrever_config_backup   # garante que o arquivo existe com o template padrão
+    
+    if grep -qE "^${chave}=" "$BACKUP_CONF" 2>/dev/null; then
+        sed -i -E "s|^${chave}=.*|${chave}=\"${valor}\"|" "$BACKUP_CONF"
+    else
+        echo "${chave}=\"${valor}\"" >> "$BACKUP_CONF"
+    fi
+    
+    # Confirma que a gravação realmente pegou
+    if ! grep -qE "^${chave}=\"${valor}\"$" "$BACKUP_CONF" 2>/dev/null; then
+        log "FALHA ao gravar ${chave} em ${BACKUP_CONF}"
+        return 1
+    fi
+    
+    return 0
+}
+
+# ======================================================================
 # 10. BACKUP EM NUVEM (RCLONE)
 # ======================================================================
 rclone_validar_e_registrar() {
     local nome="$1" erro
     [ -z "$nome" ] && return 1
+    
     if ! rclone listremotes 2>/dev/null | grep -qx "${nome}:"; then
         msg_erro "" "$(t "Não existe nenhuma conexão chamada '$nome' no rclone.\n\nConexões existentes:\n$(rclone listremotes 2>/dev/null)" "There is no rclone remote called '$nome'.\n\nExisting remotes:\n$(rclone listremotes 2>/dev/null)")" 14 74
         return 1
     fi
+    
     if ! erro=$(rclone mkdir "${nome}:Backup_SQL_Koha" 2>&1); then
         msg_erro "" "$(t "A conexão '$nome' existe, mas o teste de escrita falhou.\n\nDetalhe:\n$erro" "Remote '$nome' exists but the write test failed.\n\nDetail:\n$erro")" 16 78
         return 1
     fi
+    
     rclone mkdir "${nome}:Backup_MARC_Koha" >/dev/null 2>&1
-    escrever_config_backup
-    sed -i "s|^RCLONE_REMOTE=.*|RCLONE_REMOTE=\"${nome}\"|" "$BACKUP_CONF"
+    
+    # Gravação garantida e auditada da variável de configuração
+    if ! backup_conf_definir "RCLONE_REMOTE" "${nome}"; then
+        msg_erro "" "$(t "A conexão foi validada, mas NÃO consegui salvar '${nome}' em ${BACKUP_CONF}.\nVerifique as permissões do arquivo." "The remote was validated, but I could NOT save '${nome}' in ${BACKUP_CONF}.\nCheck the file permissions.")" 11 76
+        return 1
+    fi
+    
+    chmod 600 "$BACKUP_CONF"
     log "rclone remote configurado: $nome"
-    msg_ok "$(t "Nuvem ativada. Os backups irão para a conexão: $nome\n\nTeste agora rodando: bash /root/backup_sql.sh" "Cloud enabled. Backups will go to remote: $nome\n\nTest it with: bash /root/backup_sql.sh")" 10 74
+    
+    # Prova real: executa o backup imediatamente e confere se o arquivo subiu de verdade
+    caixa_explicacao "Testando o envio real para a nuvem..." "Testing the real cloud upload..."
+    bash /root/backup_sql.sh >/dev/null 2>&1
+    
+    if rclone lsf "${nome}:Backup_SQL_Koha" 2>/dev/null | grep -q '\.sql\.gz$'; then
+        msg_ok "$(t "Nuvem ativada e testada com sucesso.\n\nRemoto: ${nome}\nPasta SQL: Backup_SQL_Koha (confirmada com arquivo dentro)" "Cloud enabled and tested successfully.\n\nRemote: ${nome}\nSQL folder: Backup_SQL_Koha (confirmed with a file inside)")" 11 76
+    else
+        msg_info "$(t "Nuvem configurada" "Cloud configured")" "$(t "A configuração foi salva, mas não encontrei o arquivo de teste em ${nome}:Backup_SQL_Koha.\n\nVeja o log: ${LOG_DIR}/backup_sql.log" "Configuration saved, but I could not find the test file at ${nome}:Backup_SQL_Koha.\n\nCheck the log: ${LOG_DIR}/backup_sql.log")" 11 76
+    fi
+    
     return 0
 }
 
@@ -1800,7 +1852,8 @@ funcao_configurar_rclone() {
         echo "$(t "a conexão a partir do seu próprio computador pessoal (Windows/Mac/Linux)." "the connection from your personal computer (Windows/Mac/Linux).")"
         echo ""
         echo "----------------------------------------------------------------------"
-        echo -e "\e[1;33m$(t "PASSO 1: No seu computador pessoal, abra o terminal/PowerShell e rode:" "STEP 1: On your personal PC, open terminal/PowerShell and run:")\e[0m"
+        echo -e "\e[1;33m$(t "PASSO 1: No seu computador pessoal, abra o PowerShell (Windows) ou Terminal (Mac/Linux)." "STEP 1: On your personal PC, open PowerShell (Windows) or Terminal (Mac/Linux).")\e[0m"
+        echo "$(t "Se estiver no Windows e o 'rclone' não for reconhecido, instale com: winget install Rclone.Rclone" "If on Windows and 'rclone' is not recognized, install with: winget install Rclone.Rclone")"
         echo ""
         echo '  rclone authorize "drive"'
         echo ""
