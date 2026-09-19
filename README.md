@@ -6,7 +6,6 @@
 
 [![Koha ILS](https://img.shields.io/badge/Koha-ILS-2563eb?style=flat-square&logo=koha)](https://koha-community.org/)
 [![Ubuntu Supported](https://img.shields.io/badge/Ubuntu-22.04%20%7C%2024.04-E95420?style=flat-square&logo=ubuntu)](#)
-[![Debian Supported](https://img.shields.io/badge/Debian-11%20%7C%2012-D70A53?style=flat-square&logo=debian)](#)
 [![Bash Script](https://img.shields.io/badge/Script-Bash-4EAA25?style=flat-square&logo=gnu-bash)](#)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
