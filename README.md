@@ -41,6 +41,4 @@ O sistema opera através do comando `sudo options.sh` e oferece mais de 20 ferra
 Abra o terminal do seu servidor Linux e cole os três comandos abaixo. Eles farão o download seguro do script, darão permissão de execução e iniciarão o painel:
 
 ```bash
-sudo curl -fsSL "[https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer](https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer)" -o /usr/local/bin/options.sh
-sudo chmod +x /usr/local/bin/options.sh
-sudo options.sh
+sudo curl -fsSL "https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer" -o /usr/local/bin/options.sh && sudo chmod +x /usr/local/bin/options.sh && sudo options.sh
