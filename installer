@@ -187,7 +187,7 @@ aguardar_travas_apt() {
     local espera=0
     while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
           fuser /var/lib/apt/lists/lock  >/dev/null 2>&1 || \
-          fuser /var/lib/dpkg/lock       >/dev/null 2>&1; do
+          fuser /var/lib/dpkg/lock        >/dev/null 2>&1; do
         echo "$(t "[INFO] APT ocupado. Aguardando 3s..." "[INFO] APT busy. Waiting 3s...")"
         sleep 3
         espera=$((espera + 3))
@@ -463,7 +463,7 @@ validar_backups() {
     if [ -f "$BACKUP_CONF" ] && grep -q '^RCLONE_REMOTE="[^"]\+"' "$BACKUP_CONF" 2>/dev/null; then
         v_ok "Nuvem: $(t "remote do rclone configurado" "rclone remote configured")."
     else
-        v_warn "Nuvem: $(t "backup remoto não configurado (opção 8)" "remote backup not configured (option 8)")."
+        v_warn "Nuvem: $(t "backup remoto não configurado (opção 10)" "remote backup not configured (option 10)")."
     fi
 }
 
@@ -613,8 +613,7 @@ xml_set_elasticsearch() {
     local corpo=""
     [ -f "$KOHA_CONF" ] || return 1
     if [ "$1" = "inserir" ]; then
-        corpo="  <elasticsearch>\n    <server>127.0.0.1:9200</server>\n    <index_name>${DB_NAME}</index_name>\n  </elasticsearch>\n"
-        corpo=$(printf '%b' "$corpo")
+        corpo=$(printf '  <elasticsearch>\n    <server>127.0.0.1:9200</server>\n    <index_name>%s</index_name>\n  </elasticsearch>\n' "${DB_NAME}")
     fi
     xml_editar "$1" "elasticsearch" "$corpo" || return 1
     if command -v xmllint >/dev/null 2>&1 && ! xmllint --noout "$KOHA_CONF" >/dev/null 2>&1; then
@@ -645,14 +644,6 @@ koha_es_worker_path() {
     return 1
 }
 
-# ----------------------------------------------------------------------
-# O daemon do pacote é supervisionado pelo utilitário "daemon": ao
-# receber SIGTERM ele registra "stopping" e NÃO volta sozinho, e o
-# koha-common só o reergue para instâncias listadas em
-# `koha-list --enabled --elasticsearch`. Resultado prático: o indexador
-# some e os registros novos nunca entram na busca. Por isso usamos uma
-# unidade systemd própria, com Restart=always, mais um watchdog.
-# ----------------------------------------------------------------------
 koha_instalar_servico_indexador() {
     local worker cmd
     worker=$(koha_es_worker_path) || return 1
@@ -691,7 +682,6 @@ UNIT="koha-es-indexer@\${INST}"
 
 grep -q "<elasticsearch>" "/etc/koha/sites/\${INST}/koha-conf.xml" 2>/dev/null || exit 0
 
-# Garante um único consumidor: derruba o daemon do wrapper do pacote.
 /usr/sbin/koha-es-indexer --stop --quiet "\$INST" >/dev/null 2>&1
 
 if ! systemctl is-active --quiet "\$UNIT"; then
@@ -749,8 +739,6 @@ koha_jobs_es_pendentes()   { local n; n=$(sql "SELECT COUNT(*) FROM ${DB_NAME}.b
 koha_es_total_documentos() { curl -sS --max-time 5 "http://127.0.0.1:9200/${DB_NAME}_biblios/_count" 2>/dev/null | grep -oP '"count"\s*:\s*\K[0-9]+' | head -n1; }
 koha_total_biblios()       { sql "SELECT COUNT(*) FROM ${DB_NAME}.biblio;"; }
 
-# Cancela jobs que o rebuild completo já contemplou, para o contador
-# de pendências não ficar sujo para sempre.
 koha_limpar_jobs_orfaos() {
     local corte="$1"
     mysql -e "UPDATE ${DB_NAME}.background_jobs SET status='cancelled' WHERE type='update_elastic_index' AND status='new' AND enqueued_on < '${corte}';" >/dev/null 2>&1
@@ -829,7 +817,7 @@ escrever_config_backup() {
     [ -f "$BACKUP_CONF" ] && return 0
     cat > "$BACKUP_CONF" << 'EOF'
 # Configuração dos backups do Koha / Koha backup settings.
-# Editada automaticamente pela opção 8 do painel (Backup em Nuvem).
+# Editada automaticamente pela opção 10 do painel (Backup em Nuvem).
 RCLONE_REMOTE=""
 RCLONE_PASTA_SQL="Backup_SQL_Koha"
 RCLONE_PASTA_MARC="Backup_MARC_Koha"
@@ -858,7 +846,6 @@ mkdir -p "\$DIR"
 
 ARQ="\$DIR/\${DB}_\$(date +%Y-%m-%d_%Hh%M).sql.gz"
 
-# --single-transaction evita travar o catálogo durante o dump (InnoDB).
 if ! mysqldump --single-transaction --quick --routines --triggers \\
         --default-character-set=utf8mb4 "\$DB" 2>>"\$LOG" | gzip > "\$ARQ"; then
     registrar "FALHA ao gerar \$ARQ"
@@ -880,7 +867,6 @@ if [ "\$TAM" -lt 10240 ]; then
 fi
 registrar "OK: \$ARQ (\$TAM bytes)"
 
-# Envio para a nuvem (copy, nunca move: o local é a nossa garantia).
 if [ -n "\$RCLONE_REMOTE" ] && [ -f /root/.config/rclone/rclone.conf ]; then
     if /usr/bin/rclone --config /root/.config/rclone/rclone.conf copy "\$ARQ" "\${RCLONE_REMOTE}:\${RCLONE_PASTA_SQL}" >>"\$LOG" 2>&1; then
         registrar "Nuvem OK: \${RCLONE_REMOTE}:\${RCLONE_PASTA_SQL}"
@@ -930,7 +916,7 @@ rm -f "\$BIB" "\$AUT"
 registrar "OK: \$PACOTE (\$(stat -c %s "\$PACOTE" 2>/dev/null) bytes)"
 
 if [ -n "\$RCLONE_REMOTE" ] && [ -f /root/.config/rclone/rclone.conf ]; then
-    /usr/bin/rclone --config /root/.config/rclone/rclone.conf copy "\$PACOTE" "\${RCLONE_REMOTE}:\${RCLONE_PASTA_MARC}" >>"\$LOG" 2>&1 \\
+    /usr/bin/rclone --config /root/.config/rclone/rclone.conf copy "\$PACOTE" "\${RCLONE_REMOTE}:\${RCLONE_PASTA_MARC}" >>"\$LOG" 2>&1 \
         && registrar "Nuvem OK" || registrar "AVISO: envio para a nuvem falhou"
 fi
 
@@ -942,7 +928,6 @@ EOF
 }
 
 escrever_cron_tarefas() {
-    # Preserva o bloco de e-mails se já existir
     local bloco_email=""
     if [ -f "$CRON_TASKS" ] && grep -q '^# BEGIN KOHA EMAIL NOTICES' "$CRON_TASKS"; then
         bloco_email=$(sed -n '/^# BEGIN KOHA EMAIL NOTICES$/,/^# END KOHA EMAIL NOTICES$/p' "$CRON_TASKS")
@@ -957,8 +942,6 @@ escrever_cron_tarefas() {
 # Exemplo: "30 01 * * *" = todo dia as 01:30.
 # Mexa apenas nas duas primeiras colunas (minuto e hora).
 # ======================================================================
-# A linha PATH abaixo e OBRIGATORIA: sem ela o cron nao encontra o
-# koha-shell (que fica em /usr/sbin) e as tarefas falham em silencio.
 $CRON_PATH
 MAILTO=""
 
@@ -1025,7 +1008,7 @@ escrever_banner() {
 \\S
 
   +-------------------------------------------------------------+
-  |                     K O H A   L I B R A R Y                  |
+  |                       K O H A   L I B R A R Y                 |
   |            PUBLIC CATALOG & AUTOMATION SUITE                 |
   +-------------------------------------------------------------+
   |  PAINEL DE CONTROLE / CONTROL DASHBOARD:  sudo options.sh    |
@@ -1088,7 +1071,7 @@ funcao_instalar_koha() {
     apt_atualizar_indices
     DEBIAN_FRONTEND=noninteractive apt-get upgrade "${APT_OPTS[@]}"
 
-caixa_explicacao "Instalando dependências essenciais..." "Installing essential dependencies..."
+    caixa_explicacao "Instalando dependências essenciais..." "Installing essential dependencies..."
     apt_instalar nano curl wget gpg ca-certificates ufw apt-transport-https \
                  fail2ban libsasl2-modules rclone avahi-daemon memcached \
                  python3 libxml2-utils unzip pv glabels || return 1
@@ -1198,7 +1181,7 @@ caixa_explicacao "Instalando dependências essenciais..." "Installing essential 
 
  Esta senha e a do banco de dados e serve para o primeiro acesso
  (Web Installer). Depois crie um superbibliotecario proprio
- (opcao 11 do painel) e guarde este arquivo em local seguro.
+ (opcao 13 do painel) e guarde este arquivo em local seguro.
 
  Configuracao : ${KOHA_CONF}
  Backups      : ${DIR_SQL} e ${DIR_MARC}
@@ -1295,13 +1278,12 @@ funcao_restaurar_banco() {
 
     msg_info "$(t "Origem do Arquivo" "File Source")" \
 "$(t "COMO TRAZER O BACKUP PARA O SERVIDOR\n\n  Pendrive/USB: costuma aparecer em /media ou /mnt\n  Pela rede:    scp seu_backup.sql.gz root@$(ip_servidor):${REAL_HOME}/\n\nNa próxima tela navegue até a pasta e escolha o arquivo." \
-"HOW TO GET THE BACKUP ONTO THE SERVER\n\n  USB drive: usually under /media or /mnt\n  Network:   scp your_backup.sql.gz root@$(ip_servidor):${REAL_HOME}/\n\nOn the next screen browse to the folder and pick the file.")" 14 78
+"HOW TO GET THE BACKUP ONTO THE SERVER\n\n  USB drive: usually under /media or /mnt\n  Network:    scp your_backup.sql.gz root@$(ip_servidor):${REAL_HOME}/\n\nOn the next screen browse to the folder and pick the file.")" 14 78
 
     local arquivo
     arquivo=$(selecionar_arquivo "$REAL_HOME") || return 0
     [ -z "$arquivo" ] && return 0
 
-    # --- validação do arquivo ANTES de tocar no banco ---
     caixa_explicacao "Conferindo o arquivo de backup..." "Checking the backup file..."
     if [[ "$arquivo" == *.gz ]]; then
         if ! gzip -t "$arquivo" 2>/dev/null; then
@@ -1322,7 +1304,6 @@ funcao_restaurar_banco() {
 "File:\n$arquivo\n\nWARNING: the current catalog will be REPLACED.\nA safety backup of the current state will be written first.\n\nContinue?")" 15 76 || return 0
 
     clear
-    # --- backup de segurança do estado atual ---
     local resgate=""
     if [ "$(sql "SELECT 1 FROM information_schema.schemata WHERE schema_name='${DB_NAME}';")" = "1" ]; then
         caixa_explicacao "Gravando backup de segurança do banco atual..." "Writing a safety backup of the current database..."
@@ -1611,8 +1592,6 @@ funcao_alternar_motor_busca() {
     caixa_explicacao "Reiniciando o Koha com o Elasticsearch ativo..." "Restarting Koha with Elasticsearch enabled..."
     systemctl restart koha-common >/dev/null 2>&1
 
-    # O indexador precisa estar no ar ANTES do rebuild, senão o que for
-    # catalogado durante a reindexação vira job órfão.
     caixa_explicacao "Subindo o indexador contínuo (systemd)..." "Starting the continuous indexer (systemd)..."
     koha_indexadores_gerenciar start
 
@@ -1621,7 +1600,7 @@ funcao_alternar_motor_busca() {
     if koha-elasticsearch --rebuild -d "$INSTANCIA"; then
         koha_limpar_jobs_orfaos "$corte"
     else
-        msg_erro "" "$(t "A reindexação falhou. O Elasticsearch segue ativo, mas o catálogo não está sincronizado.\nUse a opção 20 (Reparar Indexação)." "Reindexing failed. Elasticsearch stays active but the catalog is out of sync.\nUse option 20 (Repair Indexing).")" 11 78
+        msg_erro "" "$(t "A reindexação falhou. O Elasticsearch segue ativo, mas o catálogo não está sincronizado.\nUse a opção 8 (Reparar Indexação)." "Reindexing failed. Elasticsearch stays active but the catalog is out of sync.\nUse option 8 (Repair Indexing).")" 11 78
     fi
 
     koha-plack --restart "$INSTANCIA" >/dev/null 2>&1
@@ -1630,7 +1609,7 @@ funcao_alternar_motor_busca() {
     if koha_indexador_esta_rodando; then
         msg_ok "$(t "Sistema operando com ELASTICSEARCH.\n\nO indexador roda como serviço systemd com reinício automático,\ne um vigia confere a fila a cada 5 minutos.\n\nTeste: edite um registro e busque por ele em ~10 segundos." "System now running on ELASTICSEARCH.\n\nThe indexer runs as a systemd service with auto-restart,\nand a watchdog checks the queue every 5 minutes.\n\nTest: edit a record and search for it after ~10 seconds.")" 14 78
     else
-        msg_erro "" "$(t "O Elasticsearch está ativo, mas o indexador não subiu.\nUse a opção 20 (Reparar Indexação) e veja:\njournalctl -u koha-es-indexer@${INSTANCIA} -n 50" "Elasticsearch is active but the indexer did not start.\nUse option 20 (Repair Indexing) and check:\njournalctl -u koha-es-indexer@${INSTANCIA} -n 50")" 12 78
+        msg_erro "" "$(t "O Elasticsearch está ativo, mas o indexador não subiu.\nUse a opção 8 (Reparar Indexação) e veja:\njournalctl -u koha-es-indexer@${INSTANCIA} -n 50" "Elasticsearch is active but the indexer did not start.\nUse option 8 (Repair Indexing) and check:\njournalctl -u koha-es-indexer@${INSTANCIA} -n 50")" 12 78
     fi
 }
 
@@ -1756,7 +1735,7 @@ funcao_dimensionar_servidor() {
     }
     ajustar_chave_conf /etc/default/koha-common '^[[:space:]]*#?[[:space:]]*PLACK_WORKERS=.*'      "PLACK_WORKERS=$wk"
     ajustar_chave_conf /etc/default/koha-common '^[[:space:]]*#?[[:space:]]*PLACK_MAX_REQUESTS=.*' "PLACK_MAX_REQUESTS=100"
-    ajustar_chave_conf /etc/memcached.conf      '^[[:space:]]*-m[[:space:]]+.*'                     "-m $mem"
+    ajustar_chave_conf /etc/memcached.conf       '^[[:space:]]*-m[[:space:]]+.*'                     "-m $mem"
 
     mkdir -p /etc/mysql/mariadb.conf.d
     cp -f /etc/mysql/mariadb.conf.d/99-koha-tuning.cnf /tmp/99-koha-tuning.bak 2>/dev/null
@@ -1764,7 +1743,6 @@ funcao_dimensionar_servidor() {
 
     systemctl restart memcached >/dev/null 2>&1
     if ! systemctl restart mariadb; then
-        # Valor grande demais para esta máquina: desfaz para não derrubar o Koha.
         rm -f /etc/mysql/mariadb.conf.d/99-koha-tuning.cnf
         cp -f /tmp/99-koha-tuning.bak /etc/mysql/mariadb.conf.d/99-koha-tuning.cnf 2>/dev/null
         systemctl restart mariadb >/dev/null 2>&1
@@ -1783,7 +1761,7 @@ funcao_dimensionar_servidor() {
 # ======================================================================
 # 10. BACKUP EM NUVEM (RCLONE)
 # ======================================================================
-rclone_registrar() {
+rclone_validar_e_registrar() {
     local nome="$1" erro
     [ -z "$nome" ] && return 1
     if ! rclone listremotes 2>/dev/null | grep -qx "${nome}:"; then
@@ -1802,9 +1780,6 @@ rclone_registrar() {
     return 0
 }
 
-# ======================================================================
-# CONFIGURAR BACKUP EM NUVEM (RCLONE COM FLUXO OOB EM TERMINAL PURO)
-# ======================================================================
 funcao_configurar_rclone() {
     local escolha
     escolha=$(whiptail --title "$(t "Backup em Nuvem" "Cloud Backup")" \
@@ -1971,7 +1946,6 @@ funcao_criar_superbibliotecario() {
 
     clear
     caixa_explicacao "Gerando o hash da senha..." "Hashing the password..."
-    # A senha vai pela ENTRADA PADRÃO: nunca aparece em `ps` nem em log.
     cat > /tmp/koha_hash.pl << 'EOF'
 use strict; use warnings;
 use Koha::AuthUtils qw(hash_password);
@@ -1987,7 +1961,6 @@ EOF
         return 1
     fi
 
-    # Aspas simples dobradas: nenhum apóstrofo em nome/sobrenome quebra o SQL.
     esc() { printf '%s' "${1//\'/\'\'}"; }
     if mysql --default-character-set=utf8mb4 "$DB_NAME" << SQLEOF 2>/dev/null
 INSERT INTO borrowers (userid, password, surname, firstname, branchcode, categorycode, flags)
@@ -2034,7 +2007,7 @@ funcao_configurar_cloudflare() {
         systemctl enable --now cloudflared >/dev/null 2>&1
         sleep 3
         if systemctl is-active --quiet cloudflared; then
-            msg_ok "$(t "Túnel ativo.\n\nAgora no painel da Cloudflare crie os Public Hostnames:\n  catalogo.seudominio  ->  http://127.0.0.1:80   (OPAC)\n  admin.seudominio     ->  http://127.0.0.1:8080 (Staff)" "Tunnel is up.\n\nNow create the Public Hostnames in the Cloudflare dashboard:\n  catalog.yourdomain ->  http://127.0.0.1:80   (OPAC)\n  admin.yourdomain   ->  http://127.0.0.1:8080 (Staff)")" 13 78
+            msg_ok "$(t "Túnel ativo.\n\nAgora no painel da Cloudflare crie os Public Hostnames:\n  catalogo.seudominio  ->  http://127.0.0.1:80    (OPAC)\n  admin.seudominio     ->  http://127.0.0.1:8080 (Staff)" "Tunnel is up.\n\nNow create the Public Hostnames in the Cloudflare dashboard:\n  catalog.yourdomain ->  http://127.0.0.1:80    (OPAC)\n  admin.yourdomain   ->  http://127.0.0.1:8080 (Staff)")" 13 78
         else
             msg_erro "" "$(t "O serviço não ficou ativo. Veja: journalctl -u cloudflared -n 30" "The service is not active. Check: journalctl -u cloudflared -n 30")" 9 74
         fi
@@ -2207,15 +2180,13 @@ funcao_alternar_plugins() {
     if [ "$ativo" = "sim" ]; then
         perguntar "$(t "Plugins" "Plugins")" "$(t "Status atual: ATIVADOS.\n\nDesativar os plugins do Koha?" "Current status: ENABLED.\n\nDisable Koha plugins?")" 10 66 || return 0
         xml_editar remover enable_plugins
-        xml_editar inserir enable_plugins "  <enable_plugins>0</enable_plugins>
-"
+        xml_editar inserir enable_plugins "  <enable_plugins>0</enable_plugins>\n"
         mysql -e "UPDATE ${DB_NAME}.systempreferences SET value='0' WHERE variable='UseKohaPlugins';" >/dev/null 2>&1
         ativo="nao"
     else
         perguntar "$(t "Plugins" "Plugins")" "$(t "Status atual: DESATIVADOS.\n\nAtivar os plugins do Koha?\n(Só instale plugins de origem confiável: eles rodam com os\nmesmos privilégios do Koha.)" "Current status: DISABLED.\n\nEnable Koha plugins?\n(Only install plugins from trusted sources: they run with the\nsame privileges as Koha.)")" 12 74 || return 0
         xml_editar remover enable_plugins
-        xml_editar inserir enable_plugins "  <enable_plugins>1</enable_plugins>
-"
+        xml_editar inserir enable_plugins "  <enable_plugins>1</enable_plugins>\n"
         mysql -e "UPDATE ${DB_NAME}.systempreferences SET value='1' WHERE variable='UseKohaPlugins';" >/dev/null 2>&1
         mkdir -p "/var/lib/koha/${INSTANCIA}/plugins"
         chown -R "${INSTANCIA}-koha:${INSTANCIA}-koha" "/var/lib/koha/${INSTANCIA}/plugins" 2>/dev/null
@@ -2247,16 +2218,16 @@ funcao_status_detalhado() {
 
     whiptail --title "$(t "Status do Servidor" "Server Status")" --scrolltext --msgbox \
 "$(t "SERVIÇOS" "SERVICES")
-  Apache        : $(systemctl is-active apache2 2>/dev/null)
-  MariaDB       : $(systemctl is-active mariadb 2>/dev/null)
-  Memcached     : $(systemctl is-active memcached 2>/dev/null)
-  Koha common   : $(systemctl is-active koha-common 2>/dev/null)
-  Cron          : $(systemctl is-active cron 2>/dev/null)
-  Plack         : ${plack:-?}
-  Zebra         : $(systemctl is-active koha-zebra-daemon@${INSTANCIA} 2>/dev/null)
+  Apache         : $(systemctl is-active apache2 2>/dev/null)
+  MariaDB        : $(systemctl is-active mariadb 2>/dev/null)
+  Memcached      : $(systemctl is-active memcached 2>/dev/null)
+  Koha common    : $(systemctl is-active koha-common 2>/dev/null)
+  Cron           : $(systemctl is-active cron 2>/dev/null)
+  Plack          : ${plack:-?}
+  Zebra          : $(systemctl is-active koha-zebra-daemon@${INSTANCIA} 2>/dev/null)
   Elasticsearch : $(systemctl is-active elasticsearch 2>/dev/null)
   Indexador ES  : ${idx}
-  Cloudflare    : $(systemctl is-active cloudflared 2>/dev/null)
+  Cloudflare     : $(systemctl is-active cloudflared 2>/dev/null)
 
 $(t "BUSCA" "SEARCH")
   $(t "Motor" "Engine")        : ${motor:-?}
@@ -2268,7 +2239,7 @@ $(t "MÁQUINA" "MACHINE")
   $(t "Disco (/)" "Disk (/)")     : $(df -h / 2>/dev/null | awk 'NR==2{print $4" livres de "$2}')
   $(t "Ligado há" "Uptime")     : $(uptime -p 2>/dev/null)
   $(t "Fuso" "Timezone")          : $(timedatectl show -p Timezone --value 2>/dev/null)
-  IP            : $(ip_servidor)
+  IP             : $(ip_servidor)
 
 $(t "BACKUP" "BACKUP")
   $(t "Último SQL" "Latest SQL")    : $(find "$DIR_SQL" -name '*.sql.gz' -printf '%TY-%Tm-%Td %TH:%TM\n' 2>/dev/null | sort -r | head -n1 || echo '-')
