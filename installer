@@ -1298,11 +1298,11 @@ funcao_ver_credenciais() {
 # 3. RESTAURAR BANCO (com rede de segurança)
 # ======================================================================
 funcao_restaurar_banco() {
-    exigir_koha || return 0
+    ex exigir_koha || return 0
 
-msg_info "$(t "Origem do Arquivo" "File Source")" \
-"$(t "COMO ENVIAR O BACKUP PARA O SERVIDOR:\n\n1. No seu computador pessoal, abra o PowerShell ou Terminal.\n2. Digite o comando abaixo, arrastando o arquivo para dentro das aspas:\n\n   scp \"ARRASTE_O_ARQUIVO_AQUI\" ${REAL_USER}@$(ip_servidor):${REAL_HOME}/\n\n3. Ou via Pendrive/USB: verifique em /media ou /mnt\n\n(Na próxima tela, navegue até a pasta e selecione o arquivo importado.)" \
-"HOW TO SEND THE BACKUP TO THE SERVER:\n\n1. On your personal PC, open PowerShell or Terminal.\n2. Type the command below, dragging the file between the quotes:\n\n   scp \"DRAG_FILE_HERE\" ${REAL_USER}@$(ip_servidor):${REAL_HOME}/\n\n3. Or via USB drive: check under /media or /mnt\n\n(On the next screen, browse to the folder and select the file.)")" 16 78
+    msg_info "$(t "Origem do Arquivo" "File Source")" \
+"$(t "COMO ENVIAR O BACKUP PARA O SERVIDOR:\n\n⚠️ ATENÇÃO: NÃO digite isto na tela preta atual (SSH)!\nAbra o PowerShell ou Terminal NO SEU PRÓPRIO COMPUTADOR.\n\n1. No seu PC, digite o comando abaixo e arraste o arquivo:\n\n   scp \"ARRASTE_O_ARQUIVO_AQUI\" ${REAL_USER}@$(ip_servidor):${REAL_HOME}/\n\n2. Ou via Pendrive/USB: conecte no servidor e verifique em /media ou /mnt\n\n(Na próxima tela, navegue até a pasta e selecione o arquivo importado.)" \
+"HOW TO SEND THE BACKUP TO THE SERVER:\n\n⚠️ WARNING: DO NOT type this in the current SSH black screen!\nOpen PowerShell or Terminal ON YOUR OWN PERSONAL PC.\n\n1. On your PC, type the command below and drag the file:\n\n   scp \"DRAG_FILE_HERE\" ${REAL_USER}@$(ip_servidor):${REAL_HOME}/\n\n2. Or via USB drive: plug into server and check /media or /mnt\n\n(On the next screen, browse to the folder and select the file.)")" 20 78
 
     local arquivo
     arquivo=$(selecionar_arquivo "$REAL_HOME") || return 0
