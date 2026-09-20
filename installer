@@ -139,7 +139,7 @@ caixa_explicacao() {
 }
 
 msg_info()  { whiptail --title "$1" --msgbox "$2" "${3:-12}" "${4:-74}" 2>/dev/null || true; }
-msg_erro()  { log "ERRO: $2"; whiptail --title "$(t "Erro" "Error")" --msgbox "$2" "${3:-10}" "${4:-74}" 2>/dev/null || true; }
+msg_erro()  { log "ERRO: $2"; whiptail --title "$(t "Erro" "Error")" --msgbox "$2" "${3:-14}" "${4:-78}" 2>/dev/null || true; }
 msg_ok()    { whiptail --title "$(t "Sucesso" "Success")" --msgbox "$1" "${2:-10}" "${3:-74}" 2>/dev/null || true; }
 perguntar() { whiptail --title "$1" --yesno "$2" "${3:-12}" "${4:-74}" 2>/dev/null; }
 
@@ -203,7 +203,7 @@ sql() { mysql -N -B -e "$1" 2>/dev/null; }
 # ======================================================================
 # APT BLINDADO
 # ======================================================================
-APT_OPTS=(-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+APT_OPTS=(-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o Acquire::ForceIPv4=true)
 
 aguardar_travas_apt() {
     caixa_explicacao "Verificando travas do APT/DPKG..." "Checking APT/DPKG locks..."
@@ -233,15 +233,16 @@ aguardar_travas_apt() {
     fi
     return 0
 }
+
 apt_atualizar_indices() {
     local tentativa=1 max=4
     while [ "$tentativa" -le "$max" ]; do
-        if apt-get update -y >/tmp/koha_apt_update.log 2>&1; then
+        if apt-get update -y -o Acquire::ForceIPv4=true >/tmp/koha_apt_update.log 2>&1; then
             rm -f /tmp/koha_apt_update.log
             return 0
         fi
         sleep 2
-        if apt-get update -y --fix-missing >/tmp/koha_apt_update.log 2>&1; then
+        if apt-get update -y --fix-missing -o Acquire::ForceIPv4=true >>/tmp/koha_apt_update.log 2>&1; then
             rm -f /tmp/koha_apt_update.log
             return 0
         fi
@@ -261,7 +262,7 @@ apt_instalar() {
         fi
         echo ""
         echo "$(t "[AVISO] Tentativa $tentativa de $max falhou. Corrigindo índices..." "[WARN] Attempt $tentativa of $max failed. Fixing indices...")"
-        apt-get update -y --fix-missing >/dev/null 2>&1
+        apt_atualizar_indices >/dev/null 2>&1
         dpkg --configure -a >/dev/null 2>&1
         apt-get -f install "${APT_OPTS[@]}" >/dev/null 2>&1
         sleep 3
@@ -1313,7 +1314,9 @@ funcao_instalar_koha() {
     caixa_explicacao "Configurando idioma e codificação UTF-8..." "Configuring locales and UTF-8..."
     if ! apt_atualizar_indices; then
         restaurar_timers_apt
-        msg_erro "" "$(t "Não foi possível atualizar os índices do APT. A instalação foi interrompida." "Could not update APT package indexes. Installation was stopped.")" 9 74
+        local erro_apt
+        erro_apt=$(tail -n 6 /tmp/koha_apt_update.log 2>/dev/null | tr -d '\r' || echo "Erro de rede ou repositório.")
+        msg_erro "" "$(t "Não foi possível atualizar os índices do APT.\n\nDetalhes do erro:\n$erro_apt" "Could not update APT package indexes.\n\nError details:\n$erro_apt")" 14 78
         return 1
     fi
     apt_instalar locales || return 1
@@ -1346,7 +1349,9 @@ funcao_instalar_koha() {
     caixa_explicacao "Atualizando o sistema..." "Upgrading the system..."
     if ! apt_atualizar_indices; then
         restaurar_timers_apt
-        msg_erro "" "$(t "O APT não conseguiu atualizar os índices. A instalação foi interrompida." "APT could not update its indexes. Installation was stopped.")" 9 74
+        local erro_apt
+        erro_apt=$(tail -n 6 /tmp/koha_apt_update.log 2>/dev/null | tr -d '\r' || echo "Erro de rede ou repositório.")
+        msg_erro "" "$(t "O APT não conseguiu atualizar os índices.\n\nDetalhes do erro:\n$erro_apt" "APT could not update its indexes.\n\nError details:\n$erro_apt")" 14 78
         return 1
     fi
     if ! DEBIAN_FRONTEND=noninteractive apt-get upgrade "${APT_OPTS[@]}"; then
@@ -2648,7 +2653,9 @@ funcao_atualizar_sistema() {
     if ! aguardar_travas_apt; then return 1; fi
     if ! apt_atualizar_indices; then
         restaurar_timers_apt
-        msg_erro "" "$(t "Não foi possível atualizar os índices do APT. Nenhum upgrade foi iniciado." "Could not update APT package indexes. No upgrade was started.")" 10 74
+        local erro_apt
+        erro_apt=$(tail -n 6 /tmp/koha_apt_update.log 2>/dev/null | tr -d '\r' || echo "Erro de rede ou repositório.")
+        msg_erro "" "$(t "Não foi possível atualizar os índices do APT. Nenhum upgrade foi iniciado.\n\nDetalhes do erro:\n$erro_apt" "Could not update APT package indexes. No upgrade was started.\n\nError details:\n$erro_apt")" 14 78
         return 1
     fi
     if ! DEBIAN_FRONTEND=noninteractive apt-get upgrade "${APT_OPTS[@]}"; then
