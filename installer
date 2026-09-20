@@ -1903,8 +1903,8 @@ funcao_configurar_rclone() {
         echo -e "\e[1;34m[INFO] $(t "Registrando conexão remota 'gdrive' no Rclone..." "Registering 'gdrive' remote in Rclone...")\e[0m"
         rclone config delete gdrive >/dev/null 2>&1 || true
 
-        # Cria a conexão diretamente passando o token parseado e validado
-        if rclone config create gdrive drive token "$token_input" >/dev/null 2>&1; then
+# Cria a conexão diretamente passando o token parseado e validado
+        if rclone config create gdrive drive config_is_local false token "$token_input" --non-interactive < /dev/null >/dev/null 2>&1; then
             echo -e "\e[1;32m[OK] $(t "Conexão 'gdrive' criada com sucesso!" "'gdrive' remote successfully created!")\e[0m"
             rclone_validar_e_registrar "gdrive"
         else
