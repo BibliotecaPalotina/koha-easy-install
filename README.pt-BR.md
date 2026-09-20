@@ -20,4 +20,5 @@ Desenvolvida para bibliotecários e administradores de TI, esta ferramenta trans
 Execute o comando atômico em linha única abaixo como `root` (ou com `sudo`) para efetuar o download seguro do script, aplicar permissões de execução e iniciar o painel interativo:
 
 ```bash
-sudo curl -fsSL "[https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer](https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer)" -o /usr/local/bin/options.sh && sudo chmod +x /usr/local/bin/options.sh && sudo options.sh
+sudo curl -fsSL "https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer" -o /usr/local/bin/options.sh && sudo chmod +x /usr/local/bin/options.sh && sudo options.sh
+```
