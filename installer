@@ -234,14 +234,21 @@ aguardar_travas_apt() {
     return 0
 }
 apt_atualizar_indices() {
-    if apt-get update >/dev/null 2>&1; then
-        return 0
-    fi
-    log "APT update inicial falhou; tentando --fix-missing."
-    if apt-get update --fix-missing >/dev/null 2>&1; then
-        return 0
-    fi
-    log "APT update falhou nas duas tentativas."
+    local tentativa=1 max=4
+    while [ "$tentativa" -le "$max" ]; do
+        if apt-get update -y >/tmp/koha_apt_update.log 2>&1; then
+            rm -f /tmp/koha_apt_update.log
+            return 0
+        fi
+        sleep 2
+        if apt-get update -y --fix-missing >/tmp/koha_apt_update.log 2>&1; then
+            rm -f /tmp/koha_apt_update.log
+            return 0
+        fi
+        log "APT update falhou (tentativa $tentativa). Aguardando 5s..."
+        sleep 5
+        tentativa=$((tentativa + 1))
+    done
     return 1
 }
 
