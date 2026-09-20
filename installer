@@ -2322,16 +2322,21 @@ funcao_autoatualizar() {
 
     clear
     caixa_explicacao "Baixando a nova versão..." "Downloading the new version..."
-    local tmp="/tmp/koha-easy-install.novo"
+    local tmp; tmp="$(mktemp /tmp/koha-options-update.XXXXXX)"
+    
     if ! curl -fsSL --retry 3 --max-time 60 "$URL_ATUALIZACAO" -o "$tmp"; then
+        rm -f "$tmp"
         msg_erro "" "$(t "Não foi possível baixar. O painel atual continua funcionando." "Download failed. The current panel keeps working.")" 9 72
         return 1
     fi
-    if [ ! -s "$tmp" ] || ! head -n1 "$tmp" | grep -q '^#!'; then
+
+    local tam; tam=$(stat -c %s "$tmp" 2>/dev/null || echo 0)
+    if [ "$tam" -lt 10240 ] || ! head -n1 "$tmp" | grep -q '^#!'; then
         rm -f "$tmp"
-        msg_erro "" "$(t "O arquivo baixado não é um script válido. Atualização cancelada." "The downloaded file is not a valid script. Update cancelled.")" 9 74
+        msg_erro "" "$(t "O arquivo baixado está incompleto ou inválido ($tam bytes). Atualização cancelada." "Downloaded file is incomplete or invalid ($tam bytes). Update cancelled.")" 10 74
         return 1
     fi
+
     if ! bash -n "$tmp" 2>/dev/null; then
         rm -f "$tmp"
         msg_erro "" "$(t "O arquivo baixado tem erro de sintaxe. Atualização cancelada\npara não quebrar o painel." "The downloaded file has a syntax error. Update cancelled\nto avoid breaking the panel.")" 10 74
@@ -2339,11 +2344,18 @@ funcao_autoatualizar() {
     fi
 
     local destino="/usr/local/bin/options.sh"
-    [ -f "$destino" ] && cp -f "$destino" "${destino}.bak-$(date +%Y%m%d-%H%M%S)"
-    install -m 755 "$tmp" "$destino"
-    rm -f "$tmp"
-    log "painel atualizado a partir de $URL_ATUALIZACAO"
-    msg_ok "$(t "Painel atualizado.\n\nFeche e abra de novo com: sudo options.sh" "Panel updated.\n\nClose and reopen with: sudo options.sh")" 10 70
+    [ -f "$destino" ] && cp -f "$destino" "${destino}.bak-$(date +%Y%m%d-%H%M%S)" 2>/dev/null
+
+    chmod 755 "$tmp"
+    if mv -f "$tmp" "$destino"; then
+        log "painel atualizado a partir de $URL_ATUALIZACAO"
+        msg_ok "$(t "Painel atualizado com sucesso!\n\nFeche e abra de novo com: sudo options.sh" "Panel updated successfully!\n\nClose and reopen with: sudo options.sh")" 10 70
+        exit 0
+    else
+        rm -f "$tmp"
+        msg_erro "" "$(t "Falha ao gravar em $destino." "Failed to save to $destino.")" 8 60
+        return 1
+    fi
 }
 
 # ======================================================================
