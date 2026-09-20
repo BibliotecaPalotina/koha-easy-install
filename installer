@@ -2449,12 +2449,12 @@ while true; do
         "18" "$(t "Central de segurança" "Security center")" \
         "19" "$(t "Atualizar sistema e schemas" "Update system and schemas")" \
         "20" "$(t "Plugins: Ativar / Desativar" "Plugins: Enable / Disable")" \
-        "21" "$(t "Plugins: Injetar (.kpz / Repositories)" "Plugins: Inject (.kpz / Repositories)")" \
+        "21" "$(t "Plugins: Injetar (.kpz / Repositórios)" "Plugins: Inject (.kpz / Repositories)")" \
         "22" "$(t "Validar o sistema completo" "Full system validation")" \
         "23" "$(t "Status detalhado" "Detailed status")" \
-        "24" "$(t "Sobre o programa (GitHub / Apoio)" "About this program (GitHub / Support)")" \
-        "25" "$(t "Atualizar este painel" "Update this panel")" \
-        "26" "$(t "Reiniciar o servidor" "Reboot the server")" \
+        "24" "$(t "Atualizar este painel" "Update this panel")" \
+        "25" "$(t "Reiniciar o servidor" "Reboot the server")" \
+        "26" "$(t "Sobre o programa (GitHub / Apoio)" "About this program (GitHub / Support)")" \
         "27" "$(t "Sair" "Exit")" 3>&1 1>&2 2>&3) || { clear; exit 0; }
 
     [ -z "$OPCAO" ] && { clear; exit 0; }
@@ -2491,9 +2491,9 @@ while true; do
             mostrar_validacao
             ;;
         23) funcao_status_detalhado ;;
-        24) funcao_sobre ;;
-        25) funcao_autoatualizar ;;
-        26) funcao_reiniciar_servidor ;;
+        24) funcao_autoatualizar ;;
+        25) funcao_reiniciar_servidor ;;
+        26) funcao_sobre ;;
         27) clear; exit 0 ;;
     esac
 done
