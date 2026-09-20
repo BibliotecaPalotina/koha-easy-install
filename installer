@@ -1511,9 +1511,23 @@ EOF
     validar_sistema_completo "instalação concluída"
     log "instalacao concluida (ok=$V_OK warn=$V_WARN fail=$V_FAIL)"
 
-    msg_info "$(t "Instalação Concluída" "Installation Complete")" \
-"$(t "INSTALAÇÃO CONCLUÍDA.\n\nACESSO:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENCIAIS (também em /root/credenciais_koha.txt):\n  Usuário: ${DB_NAME}\n  Senha:   ${db_pass}\n\nPASSO FINAL: abra a URL do Staff no navegador e conclua o Web Installer.\nSe você já tem um backup antigo, pule o Web Installer e use a opção 3.\n\nValidação: OK=$V_OK  Avisos=$V_WARN  Falhas=$V_FAIL" \
-"INSTALLATION COMPLETE.\n\nACCESS:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENTIALS (also in /root/credenciais_koha.txt):\n  User: ${DB_NAME}\n  Pass: ${db_pass}\n\nFINAL STEP: open the Staff URL in your browser and finish the Web Installer.\nIf you already have a backup, skip it and use option 3.\n\nValidation: OK=$V_OK  Warnings=$V_WARN  Failures=$V_FAIL")" 24 78
+msg_info "$(t "Instalação Concluída" "Installation Complete")" \
+"$(t "INSTALAÇÃO CONCLUÍDA.\n\nACESSO:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENCIAIS (salvas em /root/credenciais_koha.txt):\n  Usuário: ${DB_NAME}\n  Senha:   ${db_pass}\n\nPASSO SEGUINTE: abra o Staff no navegador para o Web Installer (ou use a opção 3 se tiver backup).\n\nValidação: OK=$V_OK  Avisos=$V_WARN  Falhas=$V_FAIL" \
+"INSTALLATION COMPLETE.\n\nACCESS:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENTIALS (saved in /root/credenciais_koha.txt):\n  User: ${DB_NAME}\n  Pass: ${db_pass}\n\nNEXT STEP: open Staff in browser for the Web Installer (or use option 3 with a backup).\n\nValidation: OK=$V_OK  Warnings=$V_WARN  Failures=$V_FAIL")" 24 78
+
+    if perguntar "$(t "Reiniciar Servidor (Recomendado)" "Reboot Server (Recommended)")" \
+"$(t "Para ativar a aceleração total do Plack, carregar a SWAP e garantir o desempenho máximo do catálogo, é altamente recomendado reiniciar a máquina agora.\n\nAs credenciais já foram guardadas em /root/credenciais_koha.txt.\n\nDeseja reiniciar o servidor imediatamente?" \
+"To enable full Plack speed, initialize SWAP, and ensure peak catalog performance, rebooting the system now is strongly recommended.\n\nCredentials have been saved to /root/credenciais_koha.txt.\n\nDo you want to reboot the server immediately?")" 15 76; then
+        clear
+        echo "$(t "Reiniciando em 5 segundos para consolidar os serviços..." "Rebooting in 5 seconds to consolidate services...")"
+        log "reboot automatico pós-instalacao solicitado pelo usuario"
+        sleep 5
+        reboot
+    else
+        msg_info "$(t "Reinicialização Pendente" "Pending Reboot")" \
+"$(t "Tudo certo! Você optou por reiniciar mais tarde.\n\nLembre-se: se o catálogo parecer lento, reinicie o servidor através da opção 23 do painel antes de realizar cadastros pesados." \
+"All set! You chose to reboot later.\n\nRemember: if the catalog feels sluggish, restart the server via option 23 in the panel before heavy indexing.")" 11 74
+    fi
 }
 
 definir_koha_sites_conf() {
