@@ -683,11 +683,18 @@ koha_es_ativo_no_xml() {
     if command -v xmllint >/dev/null 2>&1; then
         local n
         n=$(xmllint --xpath 'count(/config/elasticsearch)' "$KOHA_CONF" 2>/dev/null || echo 0)
-        [ "$n" = "1" ] && return 0
-        return 1
+        [ "$n" -gt 0 ] && return 0
     fi
-    # Fallback somente se xmllint não estiver disponível.
-    grep -qE '^[[:space:]]*<elasticsearch>[[:space:]]*$' "$KOHA_CONF" 2>/dev/null
+    # Fallback: verifica se a tag existe fora de comentários do XML
+    python3 - "$KOHA_CONF" << 'PYEOF'
+import sys, re
+with open(sys.argv[1], 'r', encoding='utf-8') as f:
+    txt = f.read()
+clean = re.sub(r'<!--.*?-->', '', txt, flags=re.DOTALL)
+if '<elasticsearch>' in clean:
+    sys.exit(0)
+sys.exit(1)
+PYEOF
 }
 
 # Mensageria opcional. Sem ela o Koha lê a fila direto do banco.
@@ -991,25 +998,9 @@ validar_elasticsearch() {
 
     [ "$e" = "Elasticsearch" ] || return 0
 
-koha_es_ativo_no_xml() {
-    [ -f "$KOHA_CONF" ] || return 1
-    if command -v xmllint >/dev/null 2>&1; then
-        local n
-        n=$(xmllint --xpath 'count(/config/elasticsearch)' "$KOHA_CONF" 2>/dev/null || echo 0)
-        [ "$n" -gt 0 ] && return 0
-    fi
-    # Fallback: verifica se a tag existe fora de comentários do XML
-    python3 - "$KOHA_CONF" << 'PYEOF'
-import sys, re
-with open(sys.argv[1], 'r', encoding='utf-8') as f:
-    txt = f.read()
-# Remove comentários XML
-clean = re.sub(r'<!--.*?-->', '', txt, flags=re.DOTALL)
-if '<elasticsearch>' in clean:
-    sys.exit(0)
-sys.exit(1)
-PYEOF
-}
+    koha_es_ativo_no_xml \
+        && v_ok "Koha: $(t "bloco <elasticsearch> presente no koha-conf.xml" "<elasticsearch> block present in koha-conf.xml")." \
+        || v_fail "Koha: $(t "bloco <elasticsearch> AUSENTE (o indexador não sobe sem ele)" "<elasticsearch> block MISSING (the indexer will not start)")."
 
     curl -sS --max-time 5 "http://127.0.0.1:9200/_cat/indices/${DB_NAME}_*?format=json" 2>/dev/null | grep -q "${DB_NAME}_" \
         && v_ok "Elasticsearch: $(t "índices do Koha encontrados" "Koha indices found")." \
@@ -1293,11 +1284,11 @@ escrever_banner() {
 \S
 
 
-            ________________________________________________
-          //===============================================\\\\
-         //        .-----------------------------.          \\\\
-         //         |   K O H A   L I B R A R Y   |           \\\\
-          //       .----'-----------------------------'----.       \\\\
+               _________________________________________________
+              //================================================\\\\
+             //         .-----------------------------.          \\\\
+            //          |   K O H A   L I B R A R Y   |           \\\\
+          //      .----'-----------------------------'----.       \\\\
         _//_======[     PUBLIC CATALOG & AUTOMATION SUITE   ]======_\\\\_
        |____|____________________________________________________|_____|
         |--|  PAINEL DE CONTROLE / CONTROL DASHBOARD:             |--|
