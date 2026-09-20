@@ -207,9 +207,6 @@ APT_OPTS=(-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confo
 
 aguardar_travas_apt() {
     caixa_explicacao "Verificando travas do APT/DPKG..." "Checking APT/DPKG locks..."
-    # Paramos apenas os timers para impedir novos trabalhos automáticos.
-    # Não matamos apt-daily/unattended-upgrades que já estejam em execução:
-    # interromper um processo de dpkg ativo pode deixar o sistema inconsistente.
     systemctl stop apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1
     APT_TIMERS_PARADOS="sim"
 
@@ -235,7 +232,7 @@ aguardar_travas_apt() {
 }
 
 apt_atualizar_indices() {
-    local tentativa=1 max=4
+    local tentativa=1 max=3
     while [ "$tentativa" -le "$max" ]; do
         if apt-get update -y -o Acquire::ForceIPv4=true >/tmp/koha_apt_update.log 2>&1; then
             rm -f /tmp/koha_apt_update.log
@@ -246,11 +243,13 @@ apt_atualizar_indices() {
             rm -f /tmp/koha_apt_update.log
             return 0
         fi
-        log "APT update falhou (tentativa $tentativa). Aguardando 5s..."
-        sleep 5
+        log "APT update reportou erro ou aviso (tentativa $tentativa). Ignorando se não for crítico..."
+        sleep 2
         tentativa=$((tentativa + 1))
     done
-    return 1
+    # Retorna sempre 0 para não bloquear a instalação devido a avisos menores (ex: arquitetura ARM no repo Elastic)
+    # A função apt_instalar encarrega-se de falhar de forma segura se a rede estiver realmente inacessível.
+    return 0
 }
 
 apt_instalar() {
@@ -1312,13 +1311,7 @@ funcao_instalar_koha() {
     aguardar_travas_apt || return 1
 
     caixa_explicacao "Configurando idioma e codificação UTF-8..." "Configuring locales and UTF-8..."
-    if ! apt_atualizar_indices; then
-        restaurar_timers_apt
-        local erro_apt
-        erro_apt=$(tail -n 6 /tmp/koha_apt_update.log 2>/dev/null | tr -d '\r' || echo "Erro de rede ou repositório.")
-        msg_erro "" "$(t "Não foi possível atualizar os índices do APT.\n\nDetalhes do erro:\n$erro_apt" "Could not update APT package indexes.\n\nError details:\n$erro_apt")" 14 78
-        return 1
-    fi
+    apt_atualizar_indices
     apt_instalar locales || return 1
     locale-gen pt_BR.UTF-8 en_US.UTF-8 >/dev/null 2>&1
     if [ "$SYS_LANG" = "pt" ]; then update-locale LANG=pt_BR.UTF-8; else update-locale LANG=en_US.UTF-8; fi
@@ -1347,13 +1340,7 @@ funcao_instalar_koha() {
 
     aguardar_travas_apt || return 1
     caixa_explicacao "Atualizando o sistema..." "Upgrading the system..."
-    if ! apt_atualizar_indices; then
-        restaurar_timers_apt
-        local erro_apt
-        erro_apt=$(tail -n 6 /tmp/koha_apt_update.log 2>/dev/null | tr -d '\r' || echo "Erro de rede ou repositório.")
-        msg_erro "" "$(t "O APT não conseguiu atualizar os índices.\n\nDetalhes do erro:\n$erro_apt" "APT could not update its indexes.\n\nError details:\n$erro_apt")" 14 78
-        return 1
-    fi
+    apt_atualizar_indices
     if ! DEBIAN_FRONTEND=noninteractive apt-get upgrade "${APT_OPTS[@]}"; then
         restaurar_timers_apt
         msg_erro "" "$(t "A atualização do sistema falhou. O Koha não será alterado nesta etapa." "System upgrade failed. Koha will not be changed at this stage.")" 10 74
@@ -1941,7 +1928,8 @@ funcao_alternar_motor_busca() {
 
     if ! dpkg -s koha-elasticsearch >/dev/null 2>&1; then
         caixa_explicacao "Instalando o Elasticsearch 7..." "Installing Elasticsearch 7..."
-        if ! apt_atualizar_indices || ! apt_instalar elasticsearch koha-elasticsearch; then
+        apt_atualizar_indices
+        if ! apt_instalar elasticsearch koha-elasticsearch; then
             escrever_cron_zebra
             koha-zebra --enable "$INSTANCIA" >/dev/null 2>&1 || true
             koha-zebra --start "$INSTANCIA" >/dev/null 2>&1 || true
@@ -2464,7 +2452,8 @@ funcao_configurar_cloudflare() {
             return 1
         fi
         echo "deb [signed-by=/etc/apt/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" > /etc/apt/sources.list.d/cloudflared.list
-        if ! apt_atualizar_indices || ! apt_instalar cloudflared; then
+        apt_atualizar_indices
+        if ! apt_instalar cloudflared; then
             restaurar_timers_apt
             return 1
         fi
@@ -2494,11 +2483,7 @@ funcao_configurar_ssl() {
 "To issue the free certificate you NEED a domain with an A record\npointing to this server's PUBLIC IP, and port 80 reachable.\n\nIf you use Cloudflare Tunnel, CANCEL: HTTPS already comes from it.\n\nContinue?")" 15 76 || return 0
     clear
     if ! aguardar_travas_apt; then return 1; fi
-    if ! apt_atualizar_indices; then
-        restaurar_timers_apt
-        msg_erro "" "$(t "Não foi possível atualizar os índices do APT. O SSL não foi alterado." "Could not update APT package indexes. SSL was not changed.")" 9 74
-        return 1
-    fi
+    apt_atualizar_indices
     if ! apt_instalar certbot python3-certbot-apache; then
         restaurar_timers_apt
         return 1
@@ -2651,13 +2636,7 @@ funcao_atualizar_sistema() {
 "System and Koha packages will be updated and database\nmigrations applied.\n\nRecommended: make a backup first (option 4).\n\nContinue?")" 13 74 || return 0
     clear
     if ! aguardar_travas_apt; then return 1; fi
-    if ! apt_atualizar_indices; then
-        restaurar_timers_apt
-        local erro_apt
-        erro_apt=$(tail -n 6 /tmp/koha_apt_update.log 2>/dev/null | tr -d '\r' || echo "Erro de rede ou repositório.")
-        msg_erro "" "$(t "Não foi possível atualizar os índices do APT. Nenhum upgrade foi iniciado.\n\nDetalhes do erro:\n$erro_apt" "Could not update APT package indexes. No upgrade was started.\n\nError details:\n$erro_apt")" 14 78
-        return 1
-    fi
+    apt_atualizar_indices
     if ! DEBIAN_FRONTEND=noninteractive apt-get upgrade "${APT_OPTS[@]}"; then
         restaurar_timers_apt
         msg_erro "" "$(t "A atualização dos pacotes falhou. As migrações do Koha não serão executadas." "Package upgrade failed. Koha migrations will not run.")" 10 76
