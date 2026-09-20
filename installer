@@ -1725,7 +1725,7 @@ funcao_dimensionar_servidor() {
     systemctl restart memcached >/dev/null 2>&1
     if ! systemctl restart mariadb; then
         rm -f /etc/mysql/mariadb.conf.d/99-koha-tuning.cnf
-        cp -f /tmp/99-koha-tuning.bak /etc/mysql/mariadb.conf.d/99-koha-tuning.bak 2>/dev/null
+        cp -f /tmp/99-koha-tuning.bak /etc/mysql/mariadb.conf.d/99-koha-tuning.cnf 2>/dev/null
         systemctl restart mariadb >/dev/null 2>&1
         msg_erro "" "$(t "O MariaDB não subiu com innodb_buffer_pool_size=$db.\nO ajuste foi DESFEITO e o banco voltou ao normal.\n\nEscolha um perfil menor." "MariaDB failed to start with innodb_buffer_pool_size=$db.\nThe change was REVERTED and the database is back up.\n\nPick a smaller profile.")" 12 76
         return 1
@@ -1785,6 +1785,7 @@ rclone_validar_e_registrar() {
     fi
     return 0
 }
+
 funcao_configurar_rclone() {
     local escolha
     escolha=$(whiptail --title "$(t "Backup em Nuvem" "Cloud Backup")" \
@@ -1988,7 +1989,7 @@ funcao_configurar_cloudflare() {
         sleep 3
         if systemctl is-active --quiet cloudflared; then
             msg_ok "$(t "TÚNEL ATIVO! PASSO FINAL NO ZERO TRUST:\n\n1. No túnel, vá em 'Public Hostnames' > 'Add a public hostname'.\n\n   IMPORTANTE: Use sempre 'localhost' (ou 127.0.0.1).\n   NUNCA use o IP da rede local (ex: 192.168.x.x), pois se o IP do\n   servidor mudar via DHCP, o túnel vai quebrar!\n\n   PARA O CATÁLOGO PÚBLICO (OPAC):\n   - Subdomain: catalogo   | Domain: selecione o seu domínio\n   - Type: HTTP            | URL: localhost:80 (ou 127.0.0.1:80)\n\n   PARA A ADMINISTRAÇÃO (STAFF):\n   - Subdomain: admin      | Domain: selecione o seu domínio\n   - Type: HTTP            | URL: localhost:8080 (ou 127.0.0.1:8080)\n\n2. GOOGLE SEARCH CONSOLE:\n   - Adicione via 'Prefixo do URL': https://catalogo.seudominio\n   - Pegue a 'Tag HTML' (<meta ...>) e cole em:\n     Koha Staff > Administração > Preferências > opacheader\n   - Envie o sitemap: sitemap.xml" \
-"TUNNEL ACTIVE! FINAL STEP IN ZERO TRUST:\n\n1. In your tunnel, go to 'Public Hostnames' > 'Add a public hostname'.\n\n   IMPORTANT: Always use 'localhost' (or 127.0.0.1).\n   NEVER use local LAN IP (e.g. 192.168.x.x). If DHCP changes the\n   server IP, the tunnel will immediately break!\n\n   FOR OPAC (PUBLIC CATALOG):\n   - Subdomain: catalog    | Domain: select your domain\n   - Type: HTTP            | URL: localhost:80 (or 127.0.0.1:80)\n\n   FOR STAFF (ADMIN):\n   - Subdomain: admin      | Domain: select your domain\n   - Type: HTTP            | URL: localhost:8080 (ou 127.0.0.1:8080)\n\n2. GOOGLE SEARCH CONSOLE:\n   - Add property via 'URL prefix': https://catalog.yourdomain\n   - Copy 'HTML Tag' (<meta ...>) and paste into:\n     Koha Staff > Administration > Preferences > opacheader\n   - Submit sitemap: sitemap.xml")" 26 80
+"TUNNEL ACTIVE! FINAL STEP IN ZERO TRUST:\n\n1. In your tunnel, go to 'Public Hostnames' > 'Add a public hostname'.\n\n   IMPORTANT: Always use 'localhost' (or 127.0.0.1).\n   NEVER use local LAN IP (e.g. 192.168.x.x). If DHCP changes the\n   server IP, the tunnel will immediately break!\n\n   FOR OPAC (PUBLIC CATALOG):\n   - Subdomain: catalog    | Domain: select your domain\n   - Type: HTTP            | URL: localhost:80 (or 127.0.0.1:80)\n\n   FOR STAFF (ADMIN):\n   - Subdomain: admin      | Domain: select your domain\n   - Type: HTTP            | URL: localhost:8080 (or 127.0.0.1:8080)\n\n2. GOOGLE SEARCH CONSOLE:\n   - Add property via 'URL prefix': https://catalog.yourdomain\n   - Copy 'HTML Tag' (<meta ...>) and paste into:\n     Koha Staff > Administration > Preferences > opacheader\n   - Submit sitemap: sitemap.xml")" 26 80
         else
             msg_erro "" "$(t "O serviço não ficou ativo. Veja: journalctl -u cloudflared -n 30" "The service is not active. Check: journalctl -u cloudflared -n 30")" 9 74
         fi
@@ -2160,7 +2161,6 @@ path = sys.argv[3]
 with open(path, "r", encoding="utf-8") as f:
     texto = f.read()
 
-# Remove versoes antigas ou corrompidas das tags
 texto = re.sub(r"[ \t]*<enable_plugins>.*?</enable_plugins>[ \t]*\n?", "", texto)
 texto = re.sub(r"[ \t]*<pluginsdir>.*?</pluginsdir>[ \t]*\n?", "", texto)
 texto = re.sub(r"[ \t]*<plugins_dir>.*?</plugins_dir>[ \t]*\n?", "", texto)
@@ -2171,7 +2171,7 @@ else:
     bloco = "  <enable_plugins>0</enable_plugins>\n"
 
 if "</config>" not in texto:
-    sys.exit("ERRO: </config> nao encontrado no XML")
+    sys.exit("ERRO: </config> nao encontrado em koha-conf.xml")
 
 texto = texto.replace("</config>", bloco + "</config>", 1)
 
@@ -2199,10 +2199,8 @@ funcao_alternar_plugins() {
     else
         perguntar "$(t "Plugins" "Plugins")" "$(t "Status atual: DESATIVADOS.\n\nAtivar os plugins do Koha?\n(Apenas extensões estáveis devem ser instaladas.)" "Current status: DISABLED.\n\nEnable Koha plugins?\n(Only stable extensions should be installed.)")" 11 74 || return 0
         
-        # Garante as dependências Perl para plugins não causarem 502
         DEBIAN_FRONTEND=noninteractive apt-get install -y libarchive-zip-perl libjson-perl libwww-perl >/dev/null 2>&1
         
-        # Cria a pasta de plugins com ownership estrito do usuario da instancia
         mkdir -p "$plugdir"
         chown -R "${INSTANCIA}-koha:${INSTANCIA}-koha" "$plugdir" 2>/dev/null
         chmod -R 775 "$plugdir" 2>/dev/null
@@ -2212,7 +2210,6 @@ funcao_alternar_plugins() {
         ativo="sim"
     fi
 
-    # Validação estrutural do XML
     if command -v xmllint >/dev/null 2>&1 && ! xmllint --noout "$KOHA_CONF" >/dev/null 2>&1; then
         msg_erro "" "$(t "A edição gerou XML inválido! Revertendo..." "The edit produced invalid XML! Reverting...")" 8 62
         xml_configurar_plugins "desativar" "$plugdir"
@@ -2223,7 +2220,6 @@ funcao_alternar_plugins() {
     koha-plack --restart "$INSTANCIA" >/dev/null 2>&1
     sleep 3
 
-    # Rede de segurança: se a ativação causou erro 502, desativa automaticamente
     if [ "$ativo" = "sim" ] && ! validar_http "http://127.0.0.1:8080/" "Staff" >/dev/null 2>&1; then
         xml_configurar_plugins "desativar" "$plugdir"
         mysql -e "UPDATE ${DB_NAME}.systempreferences SET value='0' WHERE variable='UseKohaPlugins';" >/dev/null 2>&1
@@ -2418,12 +2414,21 @@ funcao_reiniciar_servidor() {
 }
 
 # ======================================================================
+# 24. SOBRE O PROGRAMA
+# ======================================================================
+funcao_sobre() {
+    whiptail --title "$(t "Sobre / About" "Sobre / About")" --msgbox \
+"$(t "Koha Easy Install v${VERSAO_PAINEL}\n\nEste projeto nasceu da vivência real de quem já enfrentou os inúmeros desafios e barreiras técnicas na gestão de acervos. Foi pensado especialmente para bibliotecas que não possuem recursos financeiros para sistemas proprietários ou suporte técnico especializado, democratizando o acesso a uma tecnologia robusta, gratuita e verdadeiramente acessível.\n\nO objetivo é estender a mão a outras instituições e profissionais que passam pelas mesmas dificuldades.\n\nSe esta iniciativa te ajudou:\n⭐ Deixe sua estrela no repositório do GitHub!\n📢 Compartilhe com amigos e colegas que precisam.\n\nRepositório: github.com/BibliotecaPalotina/koha-easy-install\n\nCriado com dedicação por Paulo F. Baldi FH.\nAuxiliar de Biblioteca - Biblioteca Pública Municipal Castro Alves\nPalotina, Paraná, Brasil" \
+"Koha Easy Install v${VERSAO_PAINEL}\n\nThis project was born from real-life experience facing technical barriers in collection management. It was specifically designed for libraries lacking financial resources for proprietary systems or specialized technical support, democratizing access to robust, free, and truly accessible technology.\n\nThe goal is to help other institutions facing the same struggles.\n\nIf this initiative helped you:\n⭐ Star the repository on GitHub!\n📢 Share it with friends and colleagues.\n\nRepository: github.com/BibliotecaPalotina/koha-easy-install\n\nCreated with dedication by Paulo F. Baldi FH.\nLibrary Assistant - Castro Alves Public Library\nPalotina, Paraná, Brazil")" 22 76 2>/dev/null || true
+}
+
+# ======================================================================
 # MENU PRINCIPAL
 # ======================================================================
 while true; do
     OPCAO=$(whiptail --title "Koha Easy Install v${VERSAO_PAINEL} - $(t "Painel de Controle" "Control Dashboard")" \
         --cancel-button "$(t "Sair" "Exit")" \
-        --menu "$(t "Escolha uma opção:" "Choose an action:")" 25 78 18 \
+        --menu "$(t "Escolha uma opção:" "Choose an action:")" 26 78 19 \
         "1"  "$(t "Instalar o servidor Koha" "Install the Koha server")" \
         "2"  "$(t "Ver credenciais de acesso" "View access credentials")" \
         "3"  "$(t "Restaurar acervo de um backup" "Restore catalog from a backup")" \
@@ -2444,12 +2449,13 @@ while true; do
         "18" "$(t "Central de segurança" "Security center")" \
         "19" "$(t "Atualizar sistema e schemas" "Update system and schemas")" \
         "20" "$(t "Plugins: Ativar / Desativar" "Plugins: Enable / Disable")" \
-        "21" "$(t "Plugins: Injetar (.kpz / Repositórios)" "Plugins: Inject (.kpz / Repositories)")" \
+        "21" "$(t "Plugins: Injetar (.kpz / Repositories)" "Plugins: Inject (.kpz / Repositories)")" \
         "22" "$(t "Validar o sistema completo" "Full system validation")" \
         "23" "$(t "Status detalhado" "Detailed status")" \
-        "24" "$(t "Atualizar este painel" "Update this panel")" \
-        "25" "$(t "Reiniciar o servidor" "Reboot the server")" \
-        "26" "$(t "Sair" "Exit")" 3>&1 1>&2 2>&3) || { clear; exit 0; }
+        "24" "$(t "Sobre o programa (GitHub / Apoio)" "About this program (GitHub / Support)")" \
+        "25" "$(t "Atualizar este painel" "Update this panel")" \
+        "26" "$(t "Reiniciar o servidor" "Reboot the server")" \
+        "27" "$(t "Sair" "Exit")" 3>&1 1>&2 2>&3) || { clear; exit 0; }
 
     [ -z "$OPCAO" ] && { clear; exit 0; }
 
@@ -2485,8 +2491,9 @@ while true; do
             mostrar_validacao
             ;;
         23) funcao_status_detalhado ;;
-        24) funcao_autoatualizar ;;
-        25) funcao_reiniciar_servidor ;;
-        26) clear; exit 0 ;;
+        24) funcao_sobre ;;
+        25) funcao_autoatualizar ;;
+        26) funcao_reiniciar_servidor ;;
+        27) clear; exit 0 ;;
     esac
 done
