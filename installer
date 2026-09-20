@@ -74,7 +74,7 @@ log "===== painel iniciado (v$VERSAO_PAINEL, usuario=$REAL_USER) ====="
 # ======================================================================
 # DEPENDÊNCIAS MÍNIMAS DO PRÓPRIO PAINEL
 # ======================================================================
-for dep in whiptail curl python3; do
+for dep in whiptail curl python3 unzip; do
     if ! command -v "$dep" >/dev/null 2>&1; then
         echo "$(t "Instalando dependência do painel: $dep" "Installing panel dependency: $dep")"
         DEBIAN_FRONTEND=noninteractive apt-get install -y "$dep" >/dev/null 2>&1 || {
@@ -1300,9 +1300,9 @@ funcao_ver_credenciais() {
 funcao_restaurar_banco() {
     exigir_koha || return 0
 
-    msg_info "$(t "Origem do Arquivo" "File Source")" \
-"$(t "COMO TRAZER O BACKUP PARA O SERVIDOR\n\n  Pendrive/USB: costuma aparecer em /media ou /mnt\n  Pela rede:    scp seu_backup.sql.gz root@$(ip_servidor):${REAL_HOME}/\n\nNa próxima tela navegue até a pasta e escolha o arquivo." \
-"HOW TO GET THE BACKUP ONTO THE SERVER\n\n  USB drive: usually under /media or /mnt\n  Network:    scp your_backup.sql.gz root@$(ip_servidor):${REAL_HOME}/\n\nOn the next screen browse to the folder and pick the file.")" 14 78
+msg_info "$(t "Origem do Arquivo" "File Source")" \
+"$(t "COMO ENVIAR O BACKUP PARA O SERVIDOR:\n\n1. No seu computador pessoal, abra o PowerShell ou Terminal.\n2. Digite o comando abaixo, arrastando o arquivo para dentro das aspas:\n\n   scp \"ARRASTE_O_ARQUIVO_AQUI\" ${REAL_USER}@$(ip_servidor):${REAL_HOME}/\n\n3. Ou via Pendrive/USB: verifique em /media ou /mnt\n\n(Na próxima tela, navegue até a pasta e selecione o arquivo importado.)" \
+"HOW TO SEND THE BACKUP TO THE SERVER:\n\n1. On your personal PC, open PowerShell or Terminal.\n2. Type the command below, dragging the file between the quotes:\n\n   scp \"DRAG_FILE_HERE\" ${REAL_USER}@$(ip_servidor):${REAL_HOME}/\n\n3. Or via USB drive: check under /media or /mnt\n\n(On the next screen, browse to the folder and select the file.)")" 16 78
 
     local arquivo
     arquivo=$(selecionar_arquivo "$REAL_HOME") || return 0
@@ -2299,6 +2299,96 @@ funcao_alternar_plugins() {
     fi
 }
 
+funcao_injetar_plugins() {
+    exigir_koha || return 0
+    local plugdir="/var/lib/koha/${INSTANCIA}/plugins"
+
+    # 1. Garante que os plugins estão habilitados antes da injeção
+    if ! grep -q "<enable_plugins>1</enable_plugins>" "$KOHA_CONF" 2>/dev/null; then
+        perguntar "$(t "Plugins Desativados" "Plugins Disabled")" \
+            "$(t "O sistema de plugins precisa estar ATIVADO antes de instalar extensões.\n\nDeseja ativar os plugins agora?" \
+                 "The plugin system must be ENABLED before installing extensions.\n\nEnable plugins now?")" 10 68 || return 0
+        funcao_alternar_plugins || return 1
+    fi
+
+    # 2. Menu interativo com plugins estáveis da comunidade Koha
+    local escolha
+    escolha=$(whiptail --title "$(t "Injetar Plugins" "Inject Plugins")" \
+        --menu "$(t "Selecione o plugin para baixar e instalar:" "Select plugin to download and install:")" 17 76 5 \
+        "1" "Koha CoverFlow (Carrossel de capas no OPAC/Staff)" \
+        "2" "Koha Kitchen Sink (Template e utilitários ByWater)" \
+        "3" "Koha Spine Label Maker (Criador avançado de etiquetas)" \
+        "4" "$(t "Inserir URL externa de pacote .kpz" "Enter external .kpz package URL")" \
+        "5" "$(t "Voltar" "Back")" 3>&1 1>&2 2>&3) || return 0
+
+    local url_plugin="" nome_amigavel=""
+    case "$escolha" in
+        1)
+            url_plugin="https://github.com/bywatersolutions/koha-plugin-coverflow/releases/latest/download/koha-plugin-coverflow.kpz"
+            nome_amigavel="Koha CoverFlow"
+            ;;
+        2)
+            url_plugin="https://github.com/bywatersolutions/koha-plugin-kitchen-sink/releases/latest/download/koha-plugin-kitchen-sink.kpz"
+            nome_amigavel="Koha Kitchen Sink"
+            ;;
+        3)
+            url_plugin="https://github.com/bywatersolutions/koha-plugin-spine-label-maker/releases/latest/download/koha-plugin-spine-label-maker.kpz"
+            nome_amigavel="Spine Label Maker"
+            ;;
+        4)
+            url_plugin=$(whiptail --title "$(t "URL do Plugin" "Plugin URL")" \
+                --inputbox "$(t "Cole a URL direta do arquivo .kpz:" "Paste the direct URL to the .kpz file:")" 10 74 3>&1 1>&2 2>&3) || return 0
+            nome_amigavel="Plugin Externo"
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+
+    [ -z "$url_plugin" ] && return 0
+
+    local arq_temp="/tmp/koha_plugin_$$.kpz"
+    local dir_temp="/tmp/koha_plugin_extraido_$$"
+
+    rm -rf "$arq_temp" "$dir_temp"
+    mkdir -p "$dir_temp" "$plugdir"
+
+    msg_info "$(t "Baixando o pacote do plugin..." "Downloading plugin package...")"
+    if ! curl -sSL -f -o "$arq_temp" "$url_plugin"; then
+        rm -rf "$arq_temp" "$dir_temp"
+        msg_erro "" "$(t "Falha ao baixar o arquivo .kpz da URL fornecida." "Failed to download .kpz file from provided URL.")" 8 66
+        return 1
+    fi
+
+    # Arquivos .kpz utilizam formato ZIP ou TAR.GZ
+    if ! unzip -q -o "$arq_temp" -d "$dir_temp" >/dev/null 2>&1; then
+        if ! tar -xzf "$arq_temp" -C "$dir_temp" >/dev/null 2>&1; then
+            rm -rf "$arq_temp" "$dir_temp"
+            msg_erro "" "$(t "O arquivo baixado não é um pacote .kpz válido!" "Downloaded file is not a valid .kpz package!")" 8 64
+            return 1
+        fi
+    fi
+
+    cp -rf "$dir_temp"/* "$plugdir/"
+    rm -rf "$arq_temp" "$dir_temp"
+
+    chown -R "${INSTANCIA}-koha:${INSTANCIA}-koha" "$plugdir"
+    chmod -R 755 "$plugdir"
+
+    systemctl restart memcached apache2 koha-common >/dev/null 2>&1
+    koha-plack --restart "$INSTANCIA" >/dev/null 2>&1
+    sleep 3
+
+    if ! validar_http "http://127.0.0.1:8080/" "Staff" >/dev/null 2>&1; then
+        msg_erro "" "$(t "O plugin causou erro no Plack!\nConsulte: /var/log/koha/${INSTANCIA}/plack-error.log" \
+                         "The plugin caused Plack to fail!\nCheck: /var/log/koha/${INSTANCIA}/plack-error.log")" 10 70
+        return 1
+    fi
+
+    msg_ok "$(t "O plugin '${nome_amigavel}' foi instalado com sucesso!\n\nAcesse: Ferramentas > Plugins do Koha para ativá-lo." \
+               "Plugin '${nome_amigavel}' successfully installed!\n\nGo to: Tools > Koha Plugins to activate it.")" 11 72
+}
+
 # ======================================================================
 # 21. STATUS DETALHADO
 # ======================================================================
@@ -2406,7 +2496,7 @@ funcao_reiniciar_servidor() {
 while true; do
     OPCAO=$(whiptail --title "Koha Easy Install v${VERSAO_PAINEL} - $(t "Painel de Controle" "Control Dashboard")" \
         --cancel-button "$(t "Sair" "Exit")" \
-        --menu "$(t "Escolha uma opção:" "Choose an option:")" 25 78 17 \
+        --menu "$(t "Escolha uma opção:" "Choose an option:")" 25 78 18 \
         "1"  "$(t "Instalar o servidor Koha" "Install the Koha server")" \
         "2"  "$(t "Ver credenciais de acesso" "View access credentials")" \
         "3"  "$(t "Restaurar acervo de um backup" "Restore catalog from a backup")" \
@@ -2426,12 +2516,13 @@ while true; do
         "17" "$(t "Relógio e fuso horário" "Clock and timezone")" \
         "18" "$(t "Central de segurança" "Security center")" \
         "19" "$(t "Atualizar sistema e schemas" "Update system and schemas")" \
-        "20" "$(t "Plugins do Koha" "Koha plugins")" \
-        "21" "$(t "Validar o sistema completo" "Full system validation")" \
-        "22" "$(t "Status detalhado" "Detailed status")" \
-        "23" "$(t "Atualizar este painel" "Update this panel")" \
-        "24" "$(t "Reiniciar o servidor" "Reboot the server")" \
-        "25" "$(t "Sair" "Exit")" 3>&1 1>&2 2>&3) || { clear; exit 0; }
+        "20" "$(t "Plugins: Ativar / Desativar" "Plugins: Enable / Disable")" \
+        "21" "$(t "Plugins: Injetar (.kpz / Repositórios)" "Plugins: Inject (.kpz / Repositories)")" \
+        "22" "$(t "Validar o sistema completo" "Full system validation")" \
+        "23" "$(t "Status detalhado" "Detailed status")" \
+        "24" "$(t "Atualizar este painel" "Update this panel")" \
+        "25" "$(t "Reiniciar o servidor" "Reboot the server")" \
+        "26" "$(t "Sair" "Exit")" 3>&1 1>&2 2>&3) || { clear; exit 0; }
 
     [ -z "$OPCAO" ] && { clear; exit 0; }
 
@@ -2456,7 +2547,8 @@ while true; do
         18) funcao_central_seguranca ;;
         19) funcao_atualizar_sistema ;;
         20) funcao_alternar_plugins ;;
-        21)
+        21) funcao_injetar_plugins ;;
+        22)
             clear
             if validar_sistema_completo "validação manual"; then
                 msg_ok "$(t "Nenhuma falha crítica.\n\nOK: $V_OK   Avisos: $V_WARN" "No critical failures.\n\nOK: $V_OK   Warnings: $V_WARN")" 10 70
@@ -2465,9 +2557,9 @@ while true; do
             fi
             mostrar_validacao
             ;;
-        22) funcao_status_detalhado ;;
-        23) funcao_autoatualizar ;;
-        24) funcao_reiniciar_servidor ;;
-        25) clear; exit 0 ;;
+        23) funcao_status_detalhado ;;
+        24) funcao_autoatualizar ;;
+        25) funcao_reiniciar_servidor ;;
+        26) clear; exit 0 ;;
     esac
 done
