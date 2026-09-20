@@ -2256,10 +2256,12 @@ funcao_alternar_plugins() {
         chown -R "${INSTANCIA}-koha:${INSTANCIA}-koha" "$plugdir" 2>/dev/null
         chmod 755 "$plugdir" 2>/dev/null
 
-        # Correção crucial: a tag do Koha é <plugins_dir> (com underline)
+        # A tag correta do Koha é <pluginsdir> (sem underline). Uma versão
+        # anterior deste script usou <plugins_dir> por engano — removemos
+        # qualquer resquício dela antes de gravar a tag certa.
         xml_editar remover plugins_dir
         xml_editar remover pluginsdir
-        xml_editar inserir plugins_dir "  <plugins_dir>${plugdir}</plugins_dir>\n"
+        xml_editar inserir pluginsdir "  <pluginsdir>${plugdir}</pluginsdir>\n"
         xml_editar remover enable_plugins
         xml_editar inserir enable_plugins "  <enable_plugins>1</enable_plugins>\n"
 
@@ -2273,10 +2275,22 @@ funcao_alternar_plugins() {
     fi
     systemctl restart memcached koha-common >/dev/null 2>&1
     koha-plack --restart "$INSTANCIA" >/dev/null 2>&1
-    systemctl reload apache2 >/dev/null 2>&1
+    sleep 2
+
+    # Rede de segurança: se a ativação derrubou o Staff, desfaz sozinho
+    # em vez de deixar a biblioteca fora do ar.
+    if [ "$ativo" = "sim" ] && ! validar_http "http://127.0.0.1:8080/" "Staff" >/dev/null 2>&1; then
+        xml_editar remover enable_plugins
+        xml_editar inserir enable_plugins "  <enable_plugins>0</enable_plugins>\n"
+        mysql -e "UPDATE ${DB_NAME}.systempreferences SET value='0' WHERE variable='UseKohaPlugins';" >/dev/null 2>&1
+        systemctl restart memcached koha-common >/dev/null 2>&1
+        koha-plack --restart "$INSTANCIA" >/dev/null 2>&1
+        msg_erro "" "$(t "A ativação derrubou o Staff, então os plugins foram DESATIVADOS de novo automaticamente e o site foi restaurado.\n\nVeja o erro real em:\ntail -n 50 /var/log/koha/${INSTANCIA}/plack-error.log" "Activation brought the Staff interface down, so plugins were AUTOMATICALLY DISABLED again and the site was restored.\n\nCheck the real error at:\ntail -n 50 /var/log/koha/${INSTANCIA}/plack-error.log")" 13 78
+        return 1
+    fi
 
     if [ "$ativo" = "sim" ]; then
-        msg_ok "$(t "Plugins ATIVADOS.\n\nPasta: ${plugdir}\n\nAcesse: Ferramentas > Koha plugins (ou Mais > Gerenciar Plugins)." "Plugins ENABLED.\n\nFolder: ${plugdir}\n\nGo to: Tools > Koha plugins (or More > Manage Plugins).")" 11 74
+        msg_ok "$(t "Plugins ATIVADOS e o site continua respondendo.\n\nPasta: ${plugdir}\n\nAcesse: Ferramentas > Koha plugins (ou Mais > Gerenciar Plugins)." "Plugins ENABLED and the site is still responding.\n\nFolder: ${plugdir}\n\nGo to: Tools > Koha plugins (or More > Manage Plugins).")" 12 76
     else
         msg_ok "$(t "Plugins DESATIVADOS." "Plugins DISABLED.")" 8 60
     fi
