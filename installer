@@ -2459,7 +2459,7 @@ while true; do
 
     [ -z "$OPCAO" ] && { clear; exit 0; }
 
-    case "$OPCAO" in
+case "$OPCAO" in
         1)  funcao_instalar_koha ;;
         2)  funcao_ver_credenciais ;;
         3)  funcao_restaurar_banco ;;
@@ -2479,9 +2479,7 @@ while true; do
         17) funcao_configurar_relogio ;;
         18) funcao_central_seguranca ;;
         19) funcao_atualizar_sistema ;;
-        20) funcao_alternar_plugins ;;
-        21) funcao_injetar_plugins ;;
-        22)
+        20)
             clear
             if validar_sistema_completo "validação manual"; then
                 msg_ok "$(t "Nenhuma falha crítica.\n\nOK: $V_OK   Avisos: $V_WARN" "No critical failures.\n\nOK: $V_OK   Warnings: $V_WARN")" 10 70
@@ -2490,10 +2488,12 @@ while true; do
             fi
             mostrar_validacao
             ;;
-        23) funcao_status_detalhado ;;
-        24) funcao_autoatualizar ;;
-        25) funcao_reiniciar_servidor ;;
-        26) funcao_sobre ;;
-        27) clear; exit 0 ;;
+        21) funcao_status_detalhado ;;
+        22) funcao_autoatualizar ;;
+        23) funcao_reiniciar_servidor ;;
+        24) funcao_sobre ;;
+        25) clear; exit 0 ;;
+        # 26) funcao_alternar_plugins ;;  (Desativado / Branch futura)
+        # 27) funcao_injetar_plugins ;;    (Desativado / Branch futura)
     esac
 done
