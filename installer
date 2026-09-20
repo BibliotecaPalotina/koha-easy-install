@@ -1301,8 +1301,8 @@ funcao_restaurar_banco() {
     exigir_koha || return 0
 
     msg_info "$(t "Origem do Arquivo" "File Source")" \
-"$(t "COMO ENVIAR O BACKUP PARA O SERVIDOR:\n\n⚠️ ATENÇÃO: NÃO digite isto na tela preta atual (SSH)!\nAbra o PowerShell ou Terminal NO SEU PRÓPRIO COMPUTADOR.\n\n1. No seu PC, digite o comando abaixo e arraste o arquivo:\n\n   scp \"ARRASTE_O_ARQUIVO_AQUI\" ${REAL_USER}@$(ip_servidor):${REAL_HOME}/\n\n2. Ou via Pendrive/USB: conecte no servidor e verifique em /media ou /mnt\n\n(Na próxima tela, navegue até a pasta e selecione o arquivo importado.)" \
-"HOW TO SEND THE BACKUP TO THE SERVER:\n\n⚠️ WARNING: DO NOT type this in the current SSH black screen!\nOpen PowerShell or Terminal ON YOUR OWN PERSONAL PC.\n\n1. On your PC, type the command below and drag the file:\n\n   scp \"DRAG_FILE_HERE\" ${REAL_USER}@$(ip_servidor):${REAL_HOME}/\n\n2. Or via USB drive: plug into server and check /media or /mnt\n\n(On the next screen, browse to the folder and select the file.)")" 20 78
+"$(t "COMO ENVIAR O BACKUP PARA O SERVIDOR (MÉTODO DEFINITIVO):\n\n1. No SEU PC (fora do SSH), abra o Bloco de Notas,\n   cole o código abaixo e salve na Área de Trabalho\n   com o nome: Enviar_Backup.bat\n\n   @echo off\n   chcp 65001 >nul\n   scp \"%~1\" ${REAL_USER}@$(ip_servidor):${REAL_HOME}/\n   pause\n\n2. PRONTO! De agora em diante, para mandar qualquer backup,\n   basta ARRASTAR o arquivo .sql em cima desse ícone na Área de Trabalho.\n\n3. Ou via Pendrive/USB: conecte no servidor e verifique em /media ou /mnt\n\n(Na próxima tela, navegue até a pasta e selecione o arquivo importado.)" \
+"HOW TO SEND THE BACKUP TO THE SERVER (DEFINITIVE METHOD):\n\n1. On your PC (outside SSH), open Notepad,\n   paste the code below and save it on your Desktop\n   as: Enviar_Backup.bat\n\n   @echo off\n   chcp 65001 >nul\n   scp \"%~1\" ${REAL_USER}@$(ip_servidor):${REAL_HOME}/\n   pause\n\n2. DONE! From now on, to send any backup,\n   just DRAG the .sql file onto that Desktop icon.\n\n3. Or via USB drive: plug into server and check /media or /mnt\n\n(On the next screen, browse to the folder and select the file.)")" 25 80
 
     local arquivo
     arquivo=$(selecionar_arquivo "$REAL_HOME") || return 0
@@ -1362,7 +1362,7 @@ funcao_restaurar_banco() {
     local tabelas; tabelas=$(sql "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}';")
     if [ "$ok" = "nao" ] || [ "${tabelas:-0}" -lt 50 ] 2>/dev/null; then
         if [ -n "$resgate" ] && perguntar "$(t "Restauração falhou" "Restore failed")" \
-            $(t "A importação falhou (${tabelas:-0} tabelas).\n\nQuer voltar ao estado anterior usando o backup de segurança?" "The import failed (${tabelas:-0} tables).\n\nRoll back to the previous state using the safety backup?") 11 74; then
+            "$(t "A importação falhou (${tabelas:-0} tabelas).\n\nQuer voltar ao estado anterior usando o backup de segurança?" "The import failed (${tabelas:-0} tables).\n\nRoll back to the previous state using the safety backup?")" 11 74; then
             caixa_explicacao "Revertendo para o estado anterior..." "Rolling back to the previous state..."
             mysql -e "DROP DATABASE IF EXISTS ${DB_NAME}; CREATE DATABASE ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_NAME}'@'localhost'; FLUSH PRIVILEGES;"
             zcat "$resgate" | mysql "$DB_NAME"
