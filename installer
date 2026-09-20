@@ -50,31 +50,34 @@ esac
 t() { if [ "$SYS_LANG" = "pt" ]; then printf '%b' "$1"; else printf '%b' "$2"; fi; }
 
 # ======================================================================
-# TRAVAS DE EXECUÇÃO / EXECUTION LOCKS
+# TRAVAS DE EXECUÇÃO / EXECUTION LOCKS (PID BASED)
 # ======================================================================
-PANEL_LOCK_FILE="/var/lock/koha_easy_install.lock"
-if ! command -v flock >/dev/null 2>&1; then
-    echo "ERRO/ERROR: o comando 'flock' não está disponível no sistema."
-    exit 1
+PANEL_LOCK_FILE="/var/run/koha_easy_install.pid"
+if [ -f "$PANEL_LOCK_FILE" ]; then
+    LOCK_PID=$(cat "$PANEL_LOCK_FILE" 2>/dev/null | tr -dc '0-9')
+    if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
+        echo ""
+        echo "$(t "ERRO: o Koha Easy Install já está em execução (PID: $LOCK_PID)." "ERROR: Koha Easy Install is already running (PID: $LOCK_PID).")"
+        echo ""
+        exit 1
+    fi
 fi
-exec 8>"$PANEL_LOCK_FILE"
-chmod 600 "$PANEL_LOCK_FILE" 2>/dev/null || true
-if ! flock -n 8; then
-    echo ""
-    echo "$(t "ERRO: o Koha Easy Install já está em execução em outro processo." "ERROR: Koha Easy Install is already running in another process.")"
-    echo ""
-    exit 1
-fi
+echo $$ > "$PANEL_LOCK_FILE"
 
-BACKUP_LOCK_FILE="/var/lock/koha_backup.lock"
+BACKUP_LOCK_FILE="/var/run/koha_backup.pid"
 backup_lock_acquire() {
-    exec 9>"$BACKUP_LOCK_FILE"
-    chmod 600 "$BACKUP_LOCK_FILE" 2>/dev/null || true
-    flock -n 9
+    if [ -f "$BACKUP_LOCK_FILE" ]; then
+        local b_pid
+        b_pid=$(cat "$BACKUP_LOCK_FILE" 2>/dev/null | tr -dc '0-9')
+        if [ -n "$b_pid" ] && kill -0 "$b_pid" 2>/dev/null; then
+            return 1
+        fi
+    fi
+    echo $$ > "$BACKUP_LOCK_FILE"
+    return 0
 }
 backup_lock_release() {
-    flock -u 9 >/dev/null 2>&1 || true
-    exec 9>&-
+    rm -f "$BACKUP_LOCK_FILE" 2>/dev/null || true
 }
 
 # ======================================================================
@@ -107,13 +110,14 @@ for dep in whiptail curl python3 unzip; do
         echo "$(t "Instalando dependência do painel: $dep" "Installing panel dependency: $dep")"
         DEBIAN_FRONTEND=noninteractive apt-get install -y "$dep" >/dev/null 2>&1 || {
             echo "$(t "Não foi possível instalar '$dep'. Abortando." "Could not install '$dep'. Aborting.")"
+            rm -f "$PANEL_LOCK_FILE"
             exit 1
         }
     fi
 done
 
 # ======================================================================
-# LIMPEZA AO SAIR (mesmo com Ctrl+C): devolve os timers do APT
+# LIMPEZA AO SAIR
 # ======================================================================
 APT_TIMERS_PARADOS="nao"
 restaurar_timers_apt() {
@@ -121,7 +125,11 @@ restaurar_timers_apt() {
     systemctl start apt-daily.timer apt-daily-upgrade.timer unattended-upgrades >/dev/null 2>&1
     APT_TIMERS_PARADOS="nao"
 }
-ao_sair() { restaurar_timers_apt; log "===== painel encerrado ====="; }
+ao_sair() { 
+    restaurar_timers_apt
+    rm -f "$PANEL_LOCK_FILE"
+    log "===== painel encerrado ====="
+}
 trap ao_sair EXIT
 trap 'echo ""; echo "$(t "Interrompido pelo usuário." "Interrupted by user.")"; exit 130' INT TERM
 
@@ -247,8 +255,6 @@ apt_atualizar_indices() {
         sleep 2
         tentativa=$((tentativa + 1))
     done
-    # Retorna sempre 0 para não bloquear a instalação devido a avisos menores (ex: arquitetura ARM no repo Elastic)
-    # A função apt_instalar encarrega-se de falhar de forma segura se a rede estiver realmente inacessível.
     return 0
 }
 
@@ -759,15 +765,20 @@ INST="${INSTANCIA}"
 DB="${DB_NAME}"
 UNIT="koha-es-indexer@\${INST}"
 MARKER="/run/koha-easy-install/es-rebuild.in-progress"
-LOCK_FILE="/var/lock/koha_es_watchdog.lock"
+LOCK_FILE="/var/run/koha_es_watchdog.pid"
 
 mkdir -p "\$(dirname "\$MARKER")" 2>/dev/null || exit 0
-exec 9>"\$LOCK_FILE"
-flock -n 9 || exit 0
+
+if [ -f "\$LOCK_FILE" ]; then
+    L_PID=\$(cat "\$LOCK_FILE" 2>/dev/null | tr -dc '0-9')
+    if [ -n "\$L_PID" ] && kill -0 "\$L_PID" 2>/dev/null; then
+        exit 0
+    fi
+fi
+echo \$$ > "\$LOCK_FILE"
+trap 'rm -f "\$LOCK_FILE"' EXIT
 
 # Durante um rebuild completo não interromper o indexador no meio da operação.
-# Se o painel morreu abruptamente (SIGKILL), o marker pode sobreviver; nesse
-# caso só o consideramos válido enquanto o PID salvo ainda estiver vivo.
 if [ -e "\$MARKER" ]; then
     REBUILD_PID=""
     read -r REBUILD_PID < "\$MARKER" 2>/dev/null || true
@@ -852,7 +863,6 @@ koha_indexadores_gerenciar() {
         if koha_es_ativo_no_xml; then
             koha_instalar_servico_indexador || return 1
             if ! systemctl restart "koha-es-indexer@${INSTANCIA}" >/dev/null 2>&1; then
-                # Fallback: o koha-common oficial pode ter acabado de iniciar o daemon.
                 /usr/sbin/koha-es-indexer --start --quiet "$INSTANCIA" >/dev/null 2>&1 || true
             fi
             local i
@@ -875,12 +885,9 @@ koha_indexadores_gerenciar() {
 
 koha_indexador_esta_rodando() {
     koha_indexador_oficial_esta_rodando && return 0
-    # Fallbacks sempre limitados à instância atual para evitar falsos positivos
-    # quando houver mais de uma instância Koha no mesmo servidor.
     pgrep -af '[e]s_indexer_daemon' 2>/dev/null | grep -Fq "$INSTANCIA" && return 0
     pgrep -af '[b]ackground_jobs_worker' 2>/dev/null | grep -Fq "$INSTANCIA" && \
         pgrep -af '[b]ackground_jobs_worker' 2>/dev/null | grep -Fq 'elastic_index' && return 0
-    # Último fallback: só o status da unidade da instância atual.
     systemctl is-active --quiet "koha-es-indexer@${INSTANCIA}" && return 0
     return 1
 }
@@ -1150,7 +1157,7 @@ if [ ! -s "\$BIB" ]; then
     exit 1
 fi
 if [ ! -s "\$AUT" ]; then
-    registrar "AVISO: exportacao de autoridades vazia"
+    registrar "AVISO: exportacao de authorities vazia"
 fi
 
 if ! tar -czf "\$PACOTE" -C "\$DIR" "\$(basename "\$BIB")" "\$(basename "\$AUT")" 2>>"\$LOG"; then
@@ -1511,7 +1518,7 @@ EOF
     validar_sistema_completo "instalação concluída"
     log "instalacao concluida (ok=$V_OK warn=$V_WARN fail=$V_FAIL)"
 
-msg_info "$(t "Instalação Concluída" "Installation Complete")" \
+    msg_info "$(t "Instalação Concluída" "Installation Complete")" \
 "$(t "INSTALAÇÃO CONCLUÍDA.\n\nACESSO:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENCIAIS (salvas em /root/credenciais_koha.txt):\n  Usuário: ${DB_NAME}\n  Senha:   ${db_pass}\n\nPASSO SEGUINTE: abra o Staff no navegador para o Web Installer (ou use a opção 3 se tiver backup).\n\nValidação: OK=$V_OK  Avisos=$V_WARN  Falhas=$V_FAIL" \
 "INSTALLATION COMPLETE.\n\nACCESS:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENTIALS (saved in /root/credenciais_koha.txt):\n  User: ${DB_NAME}\n  Pass: ${db_pass}\n\nNEXT STEP: open Staff in browser for the Web Installer (or use option 3 with a backup).\n\nValidation: OK=$V_OK  Warnings=$V_WARN  Failures=$V_FAIL")" 24 78
 
@@ -1728,9 +1735,8 @@ funcao_restaurar_banco() {
         if ! koha_indexadores_gerenciar start; then rebuild_ok="nao"; fi
         if [ "$rebuild_ok" = "sim" ] && ! koha_rebuild_elasticsearch "$corte"; then rebuild_ok="nao"; fi
     else
-        koha-zebra --enable "$INSTANCIA" >/dev/null 2>&1 || true
         systemctl enable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1 || true
-        koha-zebra --start "$INSTANCIA" >/dev/null 2>&1 || true
+        systemctl restart "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1 || true
         escrever_cron_zebra
         if ! koha-rebuild-zebra -f -v -b -a "$INSTANCIA"; then rebuild_ok="nao"; fi
     fi
@@ -1892,16 +1898,15 @@ funcao_alternar_motor_busca() {
         caixa_explicacao "Limpando o cache de preferências (Memcached)..." "Flushing the preferences cache (Memcached)..."
         systemctl restart memcached >/dev/null 2>&1 || true
         caixa_explicacao "Destravando e religando o Zebra..." "Unlocking and restarting Zebra..."
-        koha-zebra --stop "$INSTANCIA" >/dev/null 2>&1 || true
+        systemctl disable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1 || true
         koha_zebra_force_stop
         rm -f /var/lock/koha/${INSTANCIA}/rebuild/*.LCK 2>/dev/null
         rm -f /var/run/koha/${INSTANCIA}/zebrasrv.pid 2>/dev/null
         chown -R "${INSTANCIA}-koha:${INSTANCIA}-koha" \
             "/var/lib/koha/${INSTANCIA}/biblios" "/var/lib/koha/${INSTANCIA}/authorities" \
             "/var/lock/koha/${INSTANCIA}" 2>/dev/null || true
-        koha-zebra --enable "$INSTANCIA" >/dev/null 2>&1
-        koha-zebra --start "$INSTANCIA" >/dev/null 2>&1
-        if ! systemctl enable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1; then
+        systemctl enable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1
+        if ! systemctl is-active --quiet "koha-zebra-daemon@${INSTANCIA}"; then
             backup_lock_release
             msg_erro "" "$(t "O daemon do Zebra não pôde ser iniciado. A troca de motor foi interrompida." "Zebra daemon could not be started. Engine switch was interrupted.")" 10 74
             return 1
@@ -1936,17 +1941,13 @@ funcao_alternar_motor_busca() {
 
     caixa_explicacao "Desativando o Zebra e sua fila..." "Disabling Zebra and its queue..."
     rm -f "$CRON_ZEBRA"; systemctl restart cron >/dev/null 2>&1 || true
-    koha-zebra --stop "$INSTANCIA" >/dev/null 2>&1 || true
     systemctl disable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1 || true
-    koha-zebra --disable "$INSTANCIA" >/dev/null 2>&1 || true
 
     if ! dpkg -s koha-elasticsearch >/dev/null 2>&1; then
         caixa_explicacao "Instalando o Elasticsearch 7..." "Installing Elasticsearch 7..."
         apt_atualizar_indices
         if ! apt_instalar elasticsearch koha-elasticsearch; then
             escrever_cron_zebra
-            koha-zebra --enable "$INSTANCIA" >/dev/null 2>&1 || true
-            koha-zebra --start "$INSTANCIA" >/dev/null 2>&1 || true
             systemctl enable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1 || true
             backup_lock_release
             msg_erro "" "$(t "Falha ao instalar o Elasticsearch. O Zebra foi restaurado." "Elasticsearch installation failed. Zebra was restored.")" 10 72
@@ -1957,8 +1958,6 @@ funcao_alternar_motor_busca() {
     caixa_explicacao "Ajustando memória e configuração do Elasticsearch..." "Tuning Elasticsearch memory and configuration..."
     if ! ajustar_heap_elasticsearch; then
         escrever_cron_zebra
-        koha-zebra --enable "$INSTANCIA" >/dev/null 2>&1 || true
-        koha-zebra --start "$INSTANCIA" >/dev/null 2>&1 || true
         systemctl enable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1 || true
         backup_lock_release
         msg_erro "" "$(t "Não foi possível gravar a configuração de memória do Elasticsearch. O Zebra foi restaurado." "Could not write Elasticsearch memory configuration. Zebra was restored.")" 11 78
@@ -1967,7 +1966,7 @@ funcao_alternar_motor_busca() {
     if [ ! -f /etc/elasticsearch/elasticsearch.yml ]; then
         backup_lock_release
         msg_erro "" "$(t "O arquivo de configuração do Elasticsearch não existe." "Elasticsearch configuration file is missing.")" 9 70
-        escrever_cron_zebra; koha-zebra --enable "$INSTANCIA" >/dev/null 2>&1; koha-zebra --start "$INSTANCIA" >/dev/null 2>&1; systemctl enable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1 || true
+        escrever_cron_zebra; systemctl enable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1 || true
         return 1
     fi
     cp -f /etc/elasticsearch/elasticsearch.yml "/etc/elasticsearch/elasticsearch.yml.bak-$(date +%Y%m%d-%H%M%S)" 2>/dev/null || true
@@ -1977,8 +1976,6 @@ funcao_alternar_motor_busca() {
         if ! /usr/share/elasticsearch/bin/elasticsearch-plugin install --batch analysis-icu >/dev/null 2>&1; then
             systemctl disable --now elasticsearch >/dev/null 2>&1 || true
             escrever_cron_zebra
-            koha-zebra --enable "$INSTANCIA" >/dev/null 2>&1 || true
-            koha-zebra --start "$INSTANCIA" >/dev/null 2>&1 || true
             systemctl enable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1 || true
             backup_lock_release
             msg_erro "" "$(t "Não foi possível instalar o plugin analysis-icu do Elasticsearch. O Zebra foi restaurado." "Could not install the Elasticsearch analysis-icu plugin. Zebra was restored.")" 11 78
@@ -1991,7 +1988,7 @@ funcao_alternar_motor_busca() {
     systemctl enable elasticsearch >/dev/null 2>&1 || true
     if ! systemctl restart elasticsearch; then
         systemctl disable --now elasticsearch >/dev/null 2>&1 || true
-        escrever_cron_zebra; koha-zebra --enable "$INSTANCIA" >/dev/null 2>&1; koha-zebra --start "$INSTANCIA" >/dev/null 2>&1; systemctl enable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1 || true
+        escrever_cron_zebra; systemctl enable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1 || true
         backup_lock_release
         msg_erro "" "$(t "O Elasticsearch falhou ao iniciar. O Zebra foi restaurado." "Elasticsearch failed to start. Zebra was restored.")" 12 76
         return 1
@@ -2004,8 +2001,6 @@ funcao_alternar_motor_busca() {
     if [ "$es_ok" = "nao" ]; then
         systemctl disable --now elasticsearch >/dev/null 2>&1 || true
         escrever_cron_zebra
-        koha-zebra --enable "$INSTANCIA" >/dev/null 2>&1 || true
-        koha-zebra --start "$INSTANCIA" >/dev/null 2>&1 || true
         systemctl enable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1 || true
         backup_lock_release
         msg_erro "" "$(t "O Elasticsearch não subiu na porta 9200. O Zebra foi mantido." "Elasticsearch did not start on port 9200. Zebra was kept.")" 12 76
@@ -2016,8 +2011,6 @@ funcao_alternar_motor_busca() {
     if ! xml_set_elasticsearch inserir; then
         systemctl disable --now elasticsearch >/dev/null 2>&1 || true
         escrever_cron_zebra
-        koha-zebra --enable "$INSTANCIA" >/dev/null 2>&1 || true
-        koha-zebra --start "$INSTANCIA" >/dev/null 2>&1 || true
         systemctl enable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1 || true
         backup_lock_release
         msg_erro "" "$(t "Não consegui ativar o bloco do Elasticsearch no koha-conf.xml. O Zebra foi restaurado." "Could not enable the Elasticsearch block in koha-conf.xml. Zebra was restored.")" 11 78
@@ -2025,7 +2018,7 @@ funcao_alternar_motor_busca() {
     fi
     if ! mysql -e "UPDATE ${DB_NAME}.systempreferences SET value='Elasticsearch' WHERE variable='SearchEngine';" >/dev/null 2>&1; then
         xml_set_elasticsearch remover >/dev/null 2>&1 || true
-        escrever_cron_zebra; koha-zebra --enable "$INSTANCIA" >/dev/null 2>&1; koha-zebra --start "$INSTANCIA" >/dev/null 2>&1; systemctl enable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1 || true
+        escrever_cron_zebra; systemctl enable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1 || true
         systemctl disable --now elasticsearch >/dev/null 2>&1 || true
         backup_lock_release
         msg_erro "" "$(t "Não foi possível mudar SearchEngine para Elasticsearch. O Zebra foi restaurado." "Could not set SearchEngine to Elasticsearch. Zebra was restored.")" 10 76
@@ -2127,15 +2120,13 @@ $(t "Fila crescendo + índice menor que o banco = indexador parado." "Growing qu
     perguntar "$(t "Reparar Zebra" "Repair Zebra")" "$(t "Destravar o Zebra e reconstruir os índices do zero?" "Unlock Zebra and rebuild the indices from scratch?")" 10 70 || return 0
     clear
     caixa_explicacao "Destravando o Zebra..." "Unlocking Zebra..."
-    koha-zebra --stop "$INSTANCIA" >/dev/null 2>&1
+    systemctl disable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1 || true
     koha_zebra_force_stop
     rm -f /var/lock/koha/${INSTANCIA}/rebuild/*.LCK 2>/dev/null
     rm -f /var/run/koha/${INSTANCIA}/zebrasrv.pid 2>/dev/null
     chown -R "${INSTANCIA}-koha:${INSTANCIA}-koha" \
         "/var/lib/koha/${INSTANCIA}/biblios" "/var/lib/koha/${INSTANCIA}/authorities" \
         "/var/lock/koha/${INSTANCIA}" 2>/dev/null
-    koha-zebra --enable "$INSTANCIA" >/dev/null 2>&1
-    koha-zebra --start  "$INSTANCIA" >/dev/null 2>&1
     systemctl enable --now "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1
     escrever_cron_zebra
     systemctl restart memcached koha-common >/dev/null 2>&1
@@ -2402,6 +2393,19 @@ funcao_criar_superbibliotecario() {
         msg_erro "" "$(t "O usuário '$usuario' já existe.\nPara trocar a senha dele use a interface web do Koha." "User '$usuario' already exists.\nUse the Koha web interface to change its password.")" 9 70
         return 0
     fi
+    
+    # NOVO: Pergunta o cardnumber obrigatório
+    local cardnumber existe_card
+    cardnumber=$(whiptail --title "$(t "Número do Cartão" "Card Number")" --inputbox "$(t "Número do cartão (cardnumber) para $usuario:" "Card number for $usuario:")" 9 60 3>&1 1>&2 2>&3) || return 0
+    [ -z "$cardnumber" ] && return 0
+    
+    # Verifica se o cardnumber já está em uso
+    existe_card=$(sql "SELECT COUNT(*) FROM ${DB_NAME}.borrowers WHERE cardnumber='${cardnumber}';")
+    if [ "${existe_card:-0}" -gt 0 ] 2>/dev/null; then
+        msg_erro "" "$(t "O número de cartão '$cardnumber' já está em uso por outro leitor. Tente novamente com outro número." "Card number '$cardnumber' is already in use by another patron. Try again with a different number.")" 10 74
+        return 0
+    fi
+
     senha=$(whiptail --title "$(t "Senha" "Password")" --passwordbox "$(t "Senha para $usuario (mínimo 8 caracteres):" "Password for $usuario (at least 8 characters):")" 9 64 3>&1 1>&2 2>&3) || return 0
     [ "${#senha}" -lt 8 ] && { msg_erro "" "$(t "Senha curta demais (mínimo 8 caracteres)." "Password too short (minimum 8 characters).")" 8 62; return 0; }
     local senha2
@@ -2425,13 +2429,15 @@ EOF
         return 1
     fi
     esc() { printf '%s' "${1//\'/\'\'}"; }
+    
+    # Inserção agora inclui o cardnumber
     if mysql --default-character-set=utf8mb4 "$DB_NAME" << SQLEOF 2>/dev/null
-INSERT INTO borrowers (userid, password, surname, firstname, branchcode, categorycode, flags)
-VALUES ('$(esc "$usuario")', '$(esc "$hash")', '$(esc "$sobrenome")', '$(esc "$nome")', '$(esc "$branch")', '$(esc "$cat_")', 1);
+INSERT INTO borrowers (userid, cardnumber, password, surname, firstname, branchcode, categorycode, flags)
+VALUES ('$(esc "$usuario")', '$(esc "$cardnumber")', '$(esc "$hash")', '$(esc "$sobrenome")', '$(esc "$nome")', '$(esc "$branch")', '$(esc "$cat_")', 1);
 SQLEOF
     then
-        log "superbibliotecario criado: $usuario"
-        msg_ok "$(t "Superbibliotecário criado.\n\nUsuário: $usuario\n\nGuarde a senha: ela não fica salva em lugar nenhum." "Super Librarian created.\n\nUser: $usuario\n\nKeep the password safe: it is not stored anywhere.")" 11 70
+        log "superbibliotecario criado: $usuario (cardnumber: $cardnumber)"
+        msg_ok "$(t "Superbibliotecário criado com sucesso.\n\nUsuário: $usuario\nCartão:  $cardnumber\n\nGuarde a senha: ela não fica salva em lugar nenhum." "Super Librarian created successfully.\n\nUser: $usuario\nCard: $cardnumber\n\nKeep the password safe: it is not stored anywhere.")" 12 70
     else
         msg_erro "" "$(t "Não foi possível criar o usuário. Ele já existe ou faltam campos obrigatórios nesta versão do Koha.\nCrie pela interface web e marque 'Superlibrarian'." "Could not create the user. It may already exist or this Koha version requires more fields.\nCreate it in the web interface and tick 'Superlibrarian'.")" 11 76
     fi
@@ -2530,18 +2536,24 @@ funcao_interoperabilidade() {
     ufw allow 2100/tcp >/dev/null 2>&1 || true
     ufw allow 6001/tcp >/dev/null 2>&1 || true
 
-    local z39_ok="sim" sip_ok="sim"
-    if ! koha-z3950-responder --enable "$INSTANCIA" >/dev/null 2>&1 || \
-       ! systemctl enable --now "koha-z3950-responder@${INSTANCIA}" >/dev/null 2>&1; then
-        z39_ok="nao"
+    koha-z3950-responder --enable "$INSTANCIA" >/dev/null 2>&1 || true
+    koha-sip --enable "$INSTANCIA" >/dev/null 2>&1 || true
+    
+    # Fundamental para o sistema operacional reconhecer os atalhos criados acima
+    systemctl daemon-reload >/dev/null 2>&1 || true
+
+    local z39_ok="nao" sip_ok="nao"
+    
+    if systemctl enable --now "koha-z3950-responder@${INSTANCIA}" >/dev/null 2>&1 || systemctl is-active --quiet "koha-z3950-responder@${INSTANCIA}"; then
+        z39_ok="sim"
     fi
-    if ! koha-sip --enable "$INSTANCIA" >/dev/null 2>&1 || \
-       ! systemctl enable --now "koha-sip-daemon@${INSTANCIA}" >/dev/null 2>&1; then
-        sip_ok="nao"
+    
+    if systemctl enable --now "koha-sip-daemon@${INSTANCIA}" >/dev/null 2>&1 || systemctl is-active --quiet "koha-sip-daemon@${INSTANCIA}"; then
+        sip_ok="sim"
     fi
 
     if [ "$z39_ok" = "sim" ] && [ "$sip_ok" = "sim" ]; then
-        msg_ok "$(t "Z39.50 e SIP2 foram ativados.\n\nPara o SIP2 funcionar ainda é preciso criar uma conta com\npermissão de circulação e preencher:\n/etc/koha/sites/${INSTANCIA}/SIPconfig.xml" "Z39.50 and SIP2 were enabled.\n\nFor SIP2 you still need a circulation account and\nto fill in:\n/etc/koha/sites/${INSTANCIA}/SIPconfig.xml")" 12 76
+        msg_ok "$(t "Z39.50 e SIP2 foram ativados com sucesso!\n\nPara o SIP2 funcionar ainda é preciso criar uma conta com\npermissão de circulação e preencher:\n/etc/koha/sites/${INSTANCIA}/SIPconfig.xml" "Z39.50 and SIP2 were enabled successfully!\n\nFor SIP2 you still need a circulation account and\nto fill in:\n/etc/koha/sites/${INSTANCIA}/SIPconfig.xml")" 12 76
     else
         msg_erro "" "$(t "A ativação foi parcial.\n\nZ39.50: ${z39_ok}\nSIP2:    ${sip_ok}\n\nVeja os serviços com: systemctl status koha-z3950-responder@${INSTANCIA} koha-sip-daemon@${INSTANCIA}" "Activation was partial.\n\nZ39.50: ${z39_ok}\nSIP2:    ${sip_ok}\n\nCheck: systemctl status koha-z3950-responder@${INSTANCIA} koha-sip-daemon@${INSTANCIA}")" 12 78
         return 1
@@ -2680,7 +2692,7 @@ funcao_atualizar_sistema() {
                 return 1
             fi
         else
-            if ! koha-zebra --start "$INSTANCIA" >/dev/null 2>&1; then
+            if ! systemctl restart "koha-zebra-daemon@${INSTANCIA}" >/dev/null 2>&1; then
                 restaurar_timers_apt
                 msg_erro "" "$(t "O Zebra não pôde ser iniciado após a atualização." "Zebra could not be started after the update.")" 9 72
                 return 1
