@@ -1596,7 +1596,7 @@ funcao_ver_credenciais() {
 }
 
 # ======================================================================
-# 3. RESTAURAR BANCO (com rede de segurança)
+# 3. RESTAURAR BANCO (TRAVA REMOVIDA PARA PERMITIR RESTAURAÇÃO DIRETA)
 # ======================================================================
 funcao_restaurar_banco() {
     exigir_koha || return 0
@@ -1625,8 +1625,8 @@ funcao_restaurar_banco() {
     fi
 
     perguntar "$(t "Confirmar Restauração" "Confirm Restore")" \
-"$(t "Arquivo:\n$arquivo\n\nATENÇÃO: o acervo atual será SUBSTITUÍDO.\nUm backup de segurança do estado atual será gravado antes.\n\nContinuar?" \
-"File:\n$arquivo\n\nWARNING: the current catalog will be REPLACED.\nA safety backup of the current state will be written first.\n\nContinue?")" 15 76 || return 0
+"$(t "Arquivo:\n$arquivo\n\nATENÇÃO: o acervo atual será SUBSTITUÍDO.\n\nContinuar?" \
+"File:\n$arquivo\n\nWARNING: the current catalog will be REPLACED.\n\nContinue?")" 13 74 || return 0
 
     clear
     if ! backup_lock_acquire; then
@@ -1634,25 +1634,8 @@ funcao_restaurar_banco() {
         return 0
     fi
 
-    local resgate=""
     local falhar_restore=0
     local rollback_ok="nao"
-
-    if [ "$(sql "SELECT 1 FROM information_schema.schemata WHERE schema_name='${DB_NAME}';")" = "1" ]; then
-        caixa_explicacao "Gravando backup de segurança do banco atual..." "Writing a safety backup of the current database..."
-        mkdir -p "$DIR_SQL"
-        resgate="${DIR_SQL}/PRE-RESTAURACAO_$(date +%Y-%m-%d_%Hh%M).sql.gz"
-        if mysqldump --single-transaction --quick --routines --triggers "$DB_NAME" 2>/dev/null | gzip > "$resgate" && \
-           gzip -t "$resgate" 2>/dev/null && \
-           [ "$(stat -c %s "$resgate" 2>/dev/null || echo 0)" -ge 10240 ]; then
-            echo "$(t "Backup de segurança:" "Safety backup:") $resgate"
-        else
-            rm -f "$resgate"; resgate=""
-            backup_lock_release
-            msg_erro "" "$(t "Não consegui validar o backup de segurança.\nA restauração foi cancelada para não destruir o estado atual." "Could not validate the safety backup.\nRestore was cancelled to protect the current state.")" 11 76
-            return 1
-        fi
-    fi
 
     caixa_explicacao "Recriando o banco com charset utf8mb4..." "Recreating the database with utf8mb4 charset..."
     koha_indexadores_gerenciar stop
@@ -1660,16 +1643,8 @@ funcao_restaurar_banco() {
               CREATE DATABASE ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
               GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_NAME}'@'localhost';
               FLUSH PRIVILEGES;"; then
-        if [ -n "$resgate" ]; then
-            mysql -e "DROP DATABASE IF EXISTS ${DB_NAME}; CREATE DATABASE ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_NAME}'@'localhost'; FLUSH PRIVILEGES;" >/dev/null 2>&1 || true
-            if zcat "$resgate" | mysql "$DB_NAME" >/dev/null 2>&1; then rollback_ok="sim"; fi
-        fi
         backup_lock_release
-        if [ "$rollback_ok" = "sim" ]; then
-            msg_erro "" "$(t "Falha ao recriar o banco, mas o estado anterior foi restaurado." "The database recreation failed, but the previous state was restored.")" 10 76
-        else
-            msg_erro "" "$(t "Não foi possível recriar o banco. O estado anterior não pôde ser restaurado automaticamente." "Could not recreate the database. The previous state could not be restored automatically.")" 10 76
-        fi
+        msg_erro "" "$(t "Não foi possível recriar o banco de dados." "Could not recreate the database.")" 9 70
         return 1
     fi
 
@@ -1684,35 +1659,16 @@ funcao_restaurar_banco() {
     local tabelas; tabelas=$(sql "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}';")
     if [ "$ok" = "nao" ] || [ "${tabelas:-0}" -lt 50 ] 2>/dev/null; then
         falhar_restore=1
-        if [ -n "$resgate" ]; then
-            if perguntar "$(t "Restauração falhou" "Restore failed")" \
-                "$(t "A importação falhou (${tabelas:-0} tabelas).\n\nQuer voltar ao estado anterior usando o backup de segurança?" "The import failed (${tabelas:-0} tables).\n\nRoll back to the previous state using the safety backup?")" 11 74; then
-                caixa_explicacao "Revertendo para o estado anterior..." "Rolling back to the previous state..."
-                if mysql -e "DROP DATABASE IF EXISTS ${DB_NAME}; CREATE DATABASE ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_NAME}'@'localhost'; FLUSH PRIVILEGES;" >/dev/null 2>&1 && \
-                   zcat "$resgate" | mysql "$DB_NAME" >/dev/null 2>&1; then
-                    rollback_ok="sim"
-                    msg_info "$(t "Revertido" "Rolled back")" "$(t "O banco voltou ao estado anterior." "The database was rolled back.")" 8 64
-                else
-                    msg_erro "" "$(t "O rollback também falhou. Preserve o arquivo de segurança em:\n$resgate" "The rollback also failed. Preserve the safety backup at:\n$resgate")" 10 74
-                fi
-            fi
-        fi
         backup_lock_release
-        if [ "$rollback_ok" = "sim" ]; then
-            koha_indexadores_gerenciar start >/dev/null 2>&1 || true
-            koha-plack --restart "$INSTANCIA" >/dev/null 2>&1 || true
-        fi
-        if [ "$falhar_restore" -eq 1 ]; then
-            msg_erro "" "$(t "A importação não produziu um banco Koha completo (${tabelas:-0} tabelas).\nBackup anterior: ${resgate:-nenhum}" "The import did not produce a complete Koha database (${tabelas:-0} tables).\nPrevious backup: ${resgate:-none}")" 11 76
-            return 1
-        fi
+        msg_erro "" "$(t "A importação não produziu um banco Koha completo (${tabelas:-0} tabelas)." "The import did not produce a complete Koha database (${tabelas:-0} tables).")" 11 76
+        return 1
     fi
 
     caixa_explicacao "Atualizando o schema para a versão instalada do Koha..." "Upgrading the schema to the installed Koha version..."
     systemctl restart memcached >/dev/null 2>&1 || true
     if ! koha-upgrade-schema "$INSTANCIA"; then
         backup_lock_release
-        msg_erro "" "$(t "A migração do schema falhou. O banco importado foi preservado para diagnóstico.\nBackup anterior: ${resgate:-nenhum}" "Schema migration failed. The imported database was preserved for diagnosis.\nPrevious backup: ${resgate:-none}")" 11 78
+        msg_erro "" "$(t "A migração do schema falhou. O banco importado foi preservado para diagnóstico." "Schema migration failed. The imported database was preserved for diagnosis.")" 11 78
         return 1
     fi
 
@@ -1753,7 +1709,7 @@ funcao_restaurar_banco() {
         return 1
     fi
 
-    msg_ok "$(t "Acervo restaurado e indexado.\n\nMotor de busca: ${motor}\nTabelas: ${tabelas}\nBackup do estado anterior: ${resgate:-nenhum}" "Catalog restored and indexed.\n\nSearch engine: ${motor}\nTables: ${tabelas}\nPrevious-state backup: ${resgate:-none}")" 13 76
+    msg_ok "$(t "Acervo restaurado e indexado com sucesso!\n\nMotor de busca: ${motor}\nTabelas: ${tabelas}" "Catalog restored and indexed successfully!\n\nSearch engine: ${motor}\nTables: ${tabelas}")" 12 74
     return 0
 }
 
@@ -2393,13 +2349,11 @@ funcao_criar_superbibliotecario() {
         msg_erro "" "$(t "O usuário '$usuario' já existe.\nPara trocar a senha dele use a interface web do Koha." "User '$usuario' already exists.\nUse the Koha web interface to change its password.")" 9 70
         return 0
     fi
-    
-    # NOVO: Pergunta o cardnumber obrigatório
+
     local cardnumber existe_card
     cardnumber=$(whiptail --title "$(t "Número do Cartão" "Card Number")" --inputbox "$(t "Número do cartão (cardnumber) para $usuario:" "Card number for $usuario:")" 9 60 3>&1 1>&2 2>&3) || return 0
     [ -z "$cardnumber" ] && return 0
-    
-    # Verifica se o cardnumber já está em uso
+
     existe_card=$(sql "SELECT COUNT(*) FROM ${DB_NAME}.borrowers WHERE cardnumber='${cardnumber}';")
     if [ "${existe_card:-0}" -gt 0 ] 2>/dev/null; then
         msg_erro "" "$(t "O número de cartão '$cardnumber' já está em uso por outro leitor. Tente novamente com outro número." "Card number '$cardnumber' is already in use by another patron. Try again with a different number.")" 10 74
@@ -2429,8 +2383,6 @@ EOF
         return 1
     fi
     esc() { printf '%s' "${1//\'/\'\'}"; }
-    
-    # Inserção agora inclui o cardnumber
     if mysql --default-character-set=utf8mb4 "$DB_NAME" << SQLEOF 2>/dev/null
 INSERT INTO borrowers (userid, cardnumber, password, surname, firstname, branchcode, categorycode, flags)
 VALUES ('$(esc "$usuario")', '$(esc "$cardnumber")', '$(esc "$hash")', '$(esc "$sobrenome")', '$(esc "$nome")', '$(esc "$branch")', '$(esc "$cat_")', 1);
@@ -2538,16 +2490,12 @@ funcao_interoperabilidade() {
 
     koha-z3950-responder --enable "$INSTANCIA" >/dev/null 2>&1 || true
     koha-sip --enable "$INSTANCIA" >/dev/null 2>&1 || true
-    
-    # Fundamental para o sistema operacional reconhecer os atalhos criados acima
     systemctl daemon-reload >/dev/null 2>&1 || true
 
     local z39_ok="nao" sip_ok="nao"
-    
     if systemctl enable --now "koha-z3950-responder@${INSTANCIA}" >/dev/null 2>&1 || systemctl is-active --quiet "koha-z3950-responder@${INSTANCIA}"; then
         z39_ok="sim"
     fi
-    
     if systemctl enable --now "koha-sip-daemon@${INSTANCIA}" >/dev/null 2>&1 || systemctl is-active --quiet "koha-sip-daemon@${INSTANCIA}"; then
         sip_ok="sim"
     fi
@@ -2811,10 +2759,10 @@ funcao_autoatualizar() {
         fi
     fi
 
-    # O temp está no mesmo filesystem do destino: rename é atômico no POSIX.
     if mv -f "$tmp" "$destino" && chmod 755 "$destino" && chown root:root "$destino"; then
         log "painel atualizado a partir de $URL_ATUALIZACAO; backup=$backup"
         msg_ok "$(t "Painel atualizado com sucesso!\n\nBackup da versão anterior:\n${backup}\n\nFeche e abra de novo com: sudo options.sh" "Panel updated successfully!\n\nBackup of previous version:\n${backup}\n\nClose and reopen with: sudo options.sh")" 12 76
+        rm -f "$PANEL_LOCK_FILE"
         exit 0
     fi
 
@@ -2851,8 +2799,9 @@ funcao_sobre() {
 # MENU PRINCIPAL
 # ======================================================================
 while true; do
-    # Nunca deixar timers do APT parados enquanto o painel aguarda o usuário.
     restaurar_timers_apt
+    export NCURSES_NO_UTF8_ACS=1
+    
     OPCAO=$(whiptail --title "Koha Easy Install v${VERSAO_PAINEL} - $(t "Painel de Controle" "Control Dashboard")" \
         --cancel-button "$(t "Sair" "Exit")" \
         --menu "$(t "Escolha uma opção:" "Choose an action:")" 25 78 16 \
@@ -2880,9 +2829,9 @@ while true; do
         "22" "$(t "Atualizar este painel" "Update this panel")" \
         "23" "$(t "Reiniciar o servidor" "Reboot the server")" \
         "24" "$(t "Sobre o programa (GitHub / Apoio)" "About this program (GitHub / Support)")" \
-        "25" "$(t "Sair" "Exit")" 3>&1 1>&2 2>&3) || { clear; exit 0; }
+        "25" "$(t "Sair" "Exit")" 3>&1 1>&2 2>&3) || { clear; rm -f "$PANEL_LOCK_FILE"; exit 0; }
 
-    [ -z "$OPCAO" ] && { clear; exit 0; }
+    [ -z "$OPCAO" ] && { clear; rm -f "$PANEL_LOCK_FILE"; exit 0; }
 
     case "$OPCAO" in
         1)  funcao_instalar_koha ;;
@@ -2909,6 +2858,8 @@ while true; do
         22) funcao_autoatualizar ;;
         23) funcao_reiniciar_servidor ;;
         24) funcao_sobre ;;
-        25) clear; exit 0 ;;
+        25) clear; rm -f "$PANEL_LOCK_FILE"; exit 0 ;;
     esac
+    
+    clear
 done
