@@ -2045,8 +2045,8 @@ SQLEOF
 # ======================================================================
 funcao_configurar_cloudflare() {
     msg_info "Cloudflare Tunnel" \
-"$(t "Publica o Koha na internet sem abrir portas no roteador.\n\n1. Entre em one.dash.cloudflare.com (Zero Trust)\n2. Networks > Tunnels > Create a tunnel\n3. Escolha Debian 64-bit e copie o comando gerado\n\nNa próxima tela cole o comando inteiro ou só o token." \
-"Publishes Koha on the internet without opening router ports.\n\n1. Go to one.dash.cloudflare.com (Zero Trust)\n2. Networks > Tunnels > Create a tunnel\n3. Pick Debian 64-bit and copy the generated command\n\nOn the next screen paste the whole command or just the token.")" 16 76
+"$(t "Publica o Koha na internet sem abrir portas no roteador.\n\n1. Acesse: one.dash.cloudflare.com (Zero Trust)\n2. Networks > Tunnels > Create a tunnel > Escolha 'Debian 64-bit'\n\n3. ATENÇÃO NA TELA DA CLOUDFLARE:\n   - Ignore o primeiro bloco de comandos (instalação).\n   - Copie o comando do 2º bloco ('sudo cloudflared service install...')\n     ou do 3º bloco ('cloudflared tunnel run...').\n\nNa próxima tela, cole o comando copiado (ou apenas a chave 'ey...')." \
+"Publishes Koha on the internet without opening router ports.\n\n1. Go to: one.dash.cloudflare.com (Zero Trust)\n2. Networks > Tunnels > Create a tunnel > Choose 'Debian 64-bit'\n\n3. ATTENTION ON CLOUDFLARE SCREEN:\n   - Ignore the 1st command block (installation commands).\n   - Copy the command from the 2nd block ('sudo cloudflared service install...')\n     or the 3rd block ('cloudflared tunnel run...').\n\nOn the next screen, paste the copied command (or just the 'ey...' token).")" 18 78
 
     local entrada token
     entrada=$(whiptail --title "Token Cloudflare" --inputbox "$(t "Cole aqui:" "Paste here:")" 10 76 3>&1 1>&2 2>&3) || return 0
