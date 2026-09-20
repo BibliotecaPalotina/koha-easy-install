@@ -1026,7 +1026,7 @@ escrever_banner() {
               //================================================\\\\
              //         .-----------------------------.          \\\\
             //          |   K O H A   L I B R A R Y   |           \\\\
-           //      .----'-----------------------------'----.       \\\\
+          //      .----'-----------------------------'----.       \\\\
         _//_======[     PUBLIC CATALOG & AUTOMATION SUITE   ]======_\\\\_
        |____|____________________________________________________|_____|
         |--|  PAINEL DE CONTROLE / CONTROL DASHBOARD:             |--|
@@ -1039,8 +1039,8 @@ escrever_banner() {
         |  |  - Usuário/User:     $(printf "%-31s" "$user") |  |
         |  |  - Senha/Pass:       cat /root/credenciais_koha.txt  |  |
         |  |======================================================|  |
-       /===/========================================================\\==\\
-      /___/__________________________________________________________\\__\\
+       /===/=======================================================\\==\\
+      /___/_________________________________________________________\\__\\
 
 
 EOF
@@ -2240,7 +2240,7 @@ funcao_atualizar_sistema() {
 # ======================================================================
 funcao_alternar_plugins() {
     exigir_koha || return 0
-    local ativo="nao"
+    local ativo="nao" plugdir="/var/lib/koha/${INSTANCIA}/plugins"
     grep -q "<enable_plugins>1</enable_plugins>" "$KOHA_CONF" 2>/dev/null && ativo="sim"
 
     if [ "$ativo" = "sim" ]; then
@@ -2251,11 +2251,18 @@ funcao_alternar_plugins() {
         ativo="nao"
     else
         perguntar "$(t "Plugins" "Plugins")" "$(t "Status atual: DESATIVADOS.\n\nAtivar os plugins do Koha?\n(Só instale plugins de origem confiável: eles rodam com os\nmesmos privilégios do Koha.)" "Current status: DISABLED.\n\nEnable Koha plugins?\n(Only install plugins from trusted sources: they run with the\nsame privileges as Koha.)")" 12 74 || return 0
+
+        mkdir -p "$plugdir"
+        chown -R "${INSTANCIA}-koha:${INSTANCIA}-koha" "$plugdir" 2>/dev/null
+
+        # ESSENCIAL: sem <pluginsdir>, o <enable_plugins>1</enable_plugins>
+        # sozinho não ativa nada — o Koha exige as duas tags juntas.
+        xml_editar remover pluginsdir
+        xml_editar inserir pluginsdir "  <pluginsdir>${plugdir}</pluginsdir>\n"
         xml_editar remover enable_plugins
         xml_editar inserir enable_plugins "  <enable_plugins>1</enable_plugins>\n"
+
         mysql -e "UPDATE ${DB_NAME}.systempreferences SET value='1' WHERE variable='UseKohaPlugins';" >/dev/null 2>&1
-        mkdir -p "/var/lib/koha/${INSTANCIA}/plugins"
-        chown -R "${INSTANCIA}-koha:${INSTANCIA}-koha" "/var/lib/koha/${INSTANCIA}/plugins" 2>/dev/null
         ativo="sim"
     fi
 
@@ -2265,9 +2272,12 @@ funcao_alternar_plugins() {
     fi
     systemctl restart memcached koha-common >/dev/null 2>&1
     koha-plack --restart "$INSTANCIA" >/dev/null 2>&1
-    [ "$ativo" = "sim" ] \
-        && msg_ok "$(t "Plugins ATIVADOS." "Plugins ENABLED.")" 8 60 \
-        || msg_ok "$(t "Plugins DESATIVADOS." "Plugins DISABLED.")" 8 60
+
+    if [ "$ativo" = "sim" ]; then
+        msg_ok "$(t "Plugins ATIVADOS.\n\nPasta: ${plugdir}\n\nAcesse: Mais > Gerenciar Plugins para enviar um .kpz." "Plugins ENABLED.\n\nFolder: ${plugdir}\n\nGo to: More > Manage Plugins to upload a .kpz.")" 11 72
+    else
+        msg_ok "$(t "Plugins DESATIVADOS." "Plugins DISABLED.")" 8 60
+    fi
 }
 
 # ======================================================================
