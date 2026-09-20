@@ -2254,11 +2254,12 @@ funcao_alternar_plugins() {
 
         mkdir -p "$plugdir"
         chown -R "${INSTANCIA}-koha:${INSTANCIA}-koha" "$plugdir" 2>/dev/null
+        chmod 755 "$plugdir" 2>/dev/null
 
-        # ESSENCIAL: sem <pluginsdir>, o <enable_plugins>1</enable_plugins>
-        # sozinho não ativa nada — o Koha exige as duas tags juntas.
+        # Correção crucial: a tag do Koha é <plugins_dir> (com underline)
+        xml_editar remover plugins_dir
         xml_editar remover pluginsdir
-        xml_editar inserir pluginsdir "  <pluginsdir>${plugdir}</pluginsdir>\n"
+        xml_editar inserir plugins_dir "  <plugins_dir>${plugdir}</plugins_dir>\n"
         xml_editar remover enable_plugins
         xml_editar inserir enable_plugins "  <enable_plugins>1</enable_plugins>\n"
 
@@ -2272,9 +2273,10 @@ funcao_alternar_plugins() {
     fi
     systemctl restart memcached koha-common >/dev/null 2>&1
     koha-plack --restart "$INSTANCIA" >/dev/null 2>&1
+    systemctl reload apache2 >/dev/null 2>&1
 
     if [ "$ativo" = "sim" ]; then
-        msg_ok "$(t "Plugins ATIVADOS.\n\nPasta: ${plugdir}\n\nAcesse: Mais > Gerenciar Plugins para enviar um .kpz." "Plugins ENABLED.\n\nFolder: ${plugdir}\n\nGo to: More > Manage Plugins to upload a .kpz.")" 11 72
+        msg_ok "$(t "Plugins ATIVADOS.\n\nPasta: ${plugdir}\n\nAcesse: Ferramentas > Koha plugins (ou Mais > Gerenciar Plugins)." "Plugins ENABLED.\n\nFolder: ${plugdir}\n\nGo to: Tools > Koha plugins (or More > Manage Plugins).")" 11 74
     else
         msg_ok "$(t "Plugins DESATIVADOS." "Plugins DISABLED.")" 8 60
     fi
@@ -2334,6 +2336,7 @@ funcao_autoatualizar() {
     caixa_explicacao "Baixando a nova versão..." "Downloading the new version..."
     local tmp; tmp="$(mktemp /tmp/koha-options-update.XXXXXX)"
     
+    # Valida download e cabeçalho HTTP
     if ! curl -fsSL --retry 3 --max-time 60 "$URL_ATUALIZACAO" -o "$tmp"; then
         rm -f "$tmp"
         msg_erro "" "$(t "Não foi possível baixar. O painel atual continua funcionando." "Download failed. The current panel keeps working.")" 9 72
