@@ -51,32 +51,24 @@ t() { if [ "$SYS_LANG" = "pt" ]; then printf '%b' "$1"; else printf '%b' "$2"; f
 # ======================================================================
 # TRAVAS DE EXECUÇÃO / EXECUTION LOCKS (PID BASED)
 # ======================================================================
-PANEL_LOCK_FILE="/var/run/koha_easy_install.pid"
-if [ -f "$PANEL_LOCK_FILE" ]; then
-    LOCK_PID=$(cat "$PANEL_LOCK_FILE" 2>/dev/null | tr -dc '0-9')
-    if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
-        echo ""
-        echo "$(t "ERRO: o Koha Easy Install & Tools já está em execução (PID: $LOCK_PID)." "ERROR: Koha Easy Install & Tools is already running (PID: $LOCK_PID).")"
-        echo ""
-        exit 1
-    fi
+PANEL_LOCK_FILE="/var/lock/koha_easy_install.lock"
+exec 8>"$PANEL_LOCK_FILE"
+chmod 600 "$PANEL_LOCK_FILE" 2>/dev/null || true
+if ! flock -n 8; then
+    echo ""
+    echo "$(t "ERRO: o Koha Easy Install & Tools já está em execução." "ERROR: Koha Easy Install & Tools is already running.")"
+    echo ""
+    exit 1
 fi
-echo $$ > "$PANEL_LOCK_FILE"
 
-BACKUP_LOCK_FILE="/var/run/koha_backup.pid"
+BACKUP_LOCK_FILE="/var/lock/koha_backup.lock"
 backup_lock_acquire() {
-    if [ -f "$BACKUP_LOCK_FILE" ]; then
-        local b_pid
-        b_pid=$(cat "$BACKUP_LOCK_FILE" 2>/dev/null | tr -dc '0-9')
-        if [ -n "$b_pid" ] && kill -0 "$b_pid" 2>/dev/null; then
-            return 1
-        fi
-    fi
-    echo $$ > "$BACKUP_LOCK_FILE"
-    return 0
+    exec 9>"$BACKUP_LOCK_FILE"
+    chmod 600 "$BACKUP_LOCK_FILE" 2>/dev/null || true
+    flock -n 9
 }
 backup_lock_release() {
-    rm -f "$BACKUP_LOCK_FILE" 2>/dev/null || true
+    flock -u 9 2>/dev/null || true
 }
 
 # ======================================================================
@@ -105,16 +97,33 @@ log "===== painel iniciado (v$PANEL_VERSION, usuario=$REAL_USER) ====="
 # ======================================================================
 # DEPENDÊNCIAS MÍNIMAS DO PRÓPRIO PAINEL / PANEL DEPENDENCIES
 # ======================================================================
+# Evita corrida com apt-daily durante a instalação das dependências do painel.
+systemctl stop apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1 || true
+if command -v fuser >/dev/null 2>&1; then
+    initial_wait=0
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+          fuser /var/lib/dpkg/lock >/dev/null 2>&1 || \
+          fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
+        sleep 2
+        initial_wait=$((initial_wait + 2))
+        if [ "$initial_wait" -ge 120 ]; then
+            systemctl start apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1 || true
+            echo "$(t "O APT/DPKG continua ocupado após 2 minutos. Abortando com segurança." "APT/DPKG is still busy after 2 minutes. Aborting safely.")"
+            exit 1
+        fi
+    done
+fi
 for dep in whiptail curl python3 unzip; do
     if ! command -v "$dep" >/dev/null 2>&1; then
         echo "$(t "Instalando dependência do painel: $dep" "Installing panel dependency: $dep")"
         DEBIAN_FRONTEND=noninteractive apt-get install -y "$dep" >/dev/null 2>&1 || {
             echo "$(t "Não foi possível instalar '$dep'. Abortando." "Could not install '$dep'. Aborting.")"
-            rm -f "$PANEL_LOCK_FILE"
+            systemctl start apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1 || true
             exit 1
         }
     fi
 done
+systemctl start apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1 || true
 
 # ======================================================================
 # LIMPEZA AO SAIR / CLEANUP ON EXIT
@@ -125,9 +134,10 @@ restore_apt_timers() {
     systemctl start apt-daily.timer apt-daily-upgrade.timer unattended-upgrades >/dev/null 2>&1
     APT_TIMERS_STOPPED="no"
 }
-on_exit() { 
+on_exit() {
     restore_apt_timers
-    rm -f "$PANEL_LOCK_FILE"
+    flock -u 8 2>/dev/null || true
+    rm -f "$PANEL_LOCK_FILE" 2>/dev/null || true
     log "===== painel encerrado ====="
 }
 trap on_exit EXIT
@@ -241,21 +251,23 @@ wait_for_apt_locks() {
 
 apt_update_indices() {
     local attempt=1 max=3
+    : > /tmp/koha_apt_update.log
     while [ "$attempt" -le "$max" ]; do
         if apt-get update -y -o Acquire::ForceIPv4=true >/tmp/koha_apt_update.log 2>&1; then
             rm -f /tmp/koha_apt_update.log
             return 0
         fi
+        log "APT update falhou (tentativa $attempt/$max)."
         sleep 2
         if apt-get update -y --fix-missing -o Acquire::ForceIPv4=true >>/tmp/koha_apt_update.log 2>&1; then
             rm -f /tmp/koha_apt_update.log
             return 0
         fi
-        log "APT update reportou erro ou aviso (tentativa $attempt). Ignorando se não for crítico..."
         sleep 2
         attempt=$((attempt + 1))
     done
-    return 0
+    log "APT update FALHOU após $max tentativas. Log: /tmp/koha_apt_update.log"
+    return 1
 }
 
 apt_install() {
@@ -276,6 +288,61 @@ apt_install() {
     log "APT FALHOU: ${packages[*]}"
     msg_error "" "$(t "Falha ao instalar após $max tentativas:\n${packages[*]}\n\nVerifique a internet e o espaço em disco." "Failed to install after $max attempts:\n${packages[*]}\n\nCheck your internet connection and disk space.")" 12 74
     return 1
+}
+
+set_shell_config_value() {
+    local file="$1" key="$2" value="$3"
+    [ -n "$file" ] && [ -n "$key" ] || return 1
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 1
+    case "$value" in *$'\n'*|*$'\r'*) return 1;; esac
+    mkdir -p "$(dirname "$file")" || return 1
+    python3 - "$file" "$key" "$value" << 'PYEOF'
+import os, re, sys, tempfile
+path, key, value = sys.argv[1], sys.argv[2], sys.argv[3]
+if '\x00' in value or '\n' in value or '\r' in value:
+    raise SystemExit(2)
+escaped = value.replace('\\','\\\\').replace('"','\\"').replace('$','\\$').replace('`','\\`')
+line = f'{key}="{escaped}"\n'
+try:
+    with open(path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+except FileNotFoundError:
+    lines = []
+pat = re.compile(r'^\s*' + re.escape(key) + r'=')
+found = False
+out = []
+for item in lines:
+    if pat.match(item):
+        if not found:
+            out.append(line); found = True
+    else:
+        out.append(item)
+if not found:
+    out.append(line)
+st = os.stat(path) if os.path.exists(path) else None
+fd, tmp = tempfile.mkstemp(prefix='.' + os.path.basename(path) + '.', dir=os.path.dirname(path) or '.')
+try:
+    with os.fdopen(fd, 'w', encoding='utf-8', newline='') as f:
+        f.writelines(out)
+        f.flush(); os.fsync(f.fileno())
+    os.chmod(tmp, 0o600)
+    if st is not None:
+        try: os.chown(tmp, st.st_uid, st.st_gid)
+        except PermissionError: pass
+    os.replace(tmp, path)
+except Exception:
+    try: os.unlink(tmp)
+    except FileNotFoundError: pass
+    raise
+PYEOF
+}
+
+validate_port_number() {
+    [[ "${1:-}" =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] 2>/dev/null && [ "$1" -le 65535 ] 2>/dev/null
+}
+
+shell_single_quote() {
+    printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\"'\"'/g")"
 }
 
 # ======================================================================
@@ -423,6 +490,12 @@ validate_mariadb() {
 }
 
 get_search_engine() { run_sql "SELECT value FROM ${DB_NAME}.systempreferences WHERE variable='SearchEngine' LIMIT 1;"; }
+set_search_engine() {
+    local desired="$1" actual
+    mysql -e "UPDATE ${DB_NAME}.systempreferences SET value='${desired}' WHERE variable='SearchEngine';" >/dev/null 2>&1 || return 1
+    actual=$(get_search_engine)
+    [ "$actual" = "$desired" ]
+}
 
 validate_koha_instance() {
     local e
@@ -515,12 +588,18 @@ validate_backups() {
             v_warn "Backup SQL: $(t "nenhum arquivo local ainda" "no local file yet")."
         fi
     fi
-    if [ -f "$BACKUP_CONF" ] && grep -q '^RCLONE_REMOTE="[^"]\+"' "$BACKUP_CONF" 2>/dev/null; then
+    local remote="" scp_host="" scp_port=""
+    if [ -f "$BACKUP_CONF" ]; then remote=$(bash -c '. "$1" 2>/dev/null; printf "%s" "$RCLONE_REMOTE"' _ "$BACKUP_CONF" 2>/dev/null || true); fi
+    if [ -n "$remote" ]; then
         v_ok "Nuvem: $(t "remote do rclone configurado" "rclone remote configured")."
     else
         v_warn "Nuvem: $(t "backup remoto não configurado (opção 11)" "remote backup not configured (option 11)")."
     fi
-    if [ -f "$SCP_BACKUP_CONF" ] && grep -q '^SCP_HOST="[^"]\+"' "$SCP_BACKUP_CONF" 2>/dev/null; then
+    if [ -f "$SCP_BACKUP_CONF" ]; then
+        scp_host=$(bash -c '. "$1" 2>/dev/null; printf "%s" "$SCP_HOST"' _ "$SCP_BACKUP_CONF" 2>/dev/null || true)
+        scp_port=$(bash -c '. "$1" 2>/dev/null; printf "%s" "$SCP_PORT"' _ "$SCP_BACKUP_CONF" 2>/dev/null || true)
+    fi
+    if [ -n "$scp_host" ] && validate_port_number "${scp_port:-22}"; then
         v_ok "SCP: $(t "backup via SCP automático configurado" "automatic SCP backup configured")."
     else
         v_warn "SCP: $(t "backup via SCP automático não configurado (opção 12)" "automatic SCP backup not configured (option 12)")."
@@ -585,6 +664,8 @@ validate_pre_installation() {
     local free_disk p
     v_reset "pré-instalação"
     [ "$EUID" -eq 0 ] && v_ok "Root OK." || v_fail "Root: $(t "privilégios insuficientes" "insufficient privileges")."
+    local arch; arch=$(dpkg --print-architecture 2>/dev/null || echo "?")
+    case "$arch" in amd64|arm64) v_ok "Arquitetura: $arch." ;; *) v_warn "Arquitetura: $arch (compatibilidade específica não garantida)." ;; esac
 
     if [ -r /etc/os-release ] && grep -qiE '^(ID|ID_LIKE)=.*(debian|ubuntu)' /etc/os-release; then
         v_ok "SO: $(t "base Debian/Ubuntu" "Debian/Ubuntu based") ($(. /etc/os-release; echo "$PRETTY_NAME"))."
@@ -765,18 +846,12 @@ INST="${INSTANCE}"
 DB="${DB_NAME}"
 UNIT="koha-es-indexer@\${INST}"
 MARKER="/run/koha-easy-install/es-rebuild.in-progress"
-LOCK_FILE="/var/run/koha_es_watchdog.pid"
+LOCK_FILE="/var/lock/koha_es_watchdog.lock"
 
 mkdir -p "\$(dirname "\$MARKER")" 2>/dev/null || exit 0
-
-if [ -f "\$LOCK_FILE" ]; then
-    L_PID=\$(cat "\$LOCK_FILE" 2>/dev/null | tr -dc '0-9')
-    if [ -n "\$L_PID" ] && kill -0 "\$L_PID" 2>/dev/null; then
-        exit 0
-    fi
-fi
-echo \$$ > "\$LOCK_FILE"
-trap 'rm -f "\$LOCK_FILE"' EXIT
+exec 9>"\$LOCK_FILE"
+flock -n 9 || exit 0
+chmod 600 "\$LOCK_FILE" 2>/dev/null || true
 
 if [ -e "\$MARKER" ]; then
     REBUILD_PID=""
@@ -924,7 +999,7 @@ force_stop_koha_zebra() {
 
 clear_orphan_jobs() {
     local cut_time="$1"
-    mysql -e "UPDATE ${DB_NAME}.background_jobs SET status='cancelled' WHERE type='update_elastic_index' AND status='new' AND enqueued_on < '${cut_time}';" >/dev/null 2>&1
+    mysql -e "UPDATE ${DB_NAME}.background_jobs SET status='cancelled' WHERE type='update_elastic_index' AND status IN ('new','started') AND enqueued_on < '${cut_time}';" >/dev/null 2>&1
 }
 
 ES_REBUILD_LOCK_FILE="/var/lock/koha_es_rebuild.lock"
@@ -959,6 +1034,39 @@ rebuild_koha_elasticsearch() {
             "$(t "Outro processo já está reconstruindo o índice Elasticsearch. Aguarde a conclusão." "Another process is already rebuilding the Elasticsearch index. Wait for it to finish.")" 9 72
     fi
     return "$rc"
+}
+
+ensure_elasticsearch_repository() {
+    local arch candidate
+    arch=$(dpkg --print-architecture 2>/dev/null || true)
+    case "$arch" in amd64|arm64) ;;
+        *)
+            msg_error "" "$(t "A arquitetura '$arch' não é suportada por esta opção do Elasticsearch. O Zebra continua disponível." "Architecture '$arch' is not supported by this Elasticsearch option. Zebra remains available.")" 10 78
+            return 1
+            ;;
+    esac
+    mkdir -p /usr/share/keyrings || return 1
+    if [ ! -s /usr/share/keyrings/elasticsearch-keyring.gpg ]; then
+        if ! curl -fsSL --retry 3 --max-time 60 https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --dearmor --yes -o /usr/share/keyrings/elasticsearch-keyring.gpg 2>/dev/null; then
+            rm -f /usr/share/keyrings/elasticsearch-keyring.gpg
+            msg_error "" "$(t "Não foi possível obter a chave do repositório do Elasticsearch." "Could not obtain the Elasticsearch repository key.")" 9 74
+            return 1
+        fi
+        chmod 644 /usr/share/keyrings/elasticsearch-keyring.gpg
+    fi
+    printf '%s\n' "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/7.x/apt stable main" > /etc/apt/sources.list.d/elastic-7.x.list
+    if ! apt_update_indices; then
+        rm -f /etc/apt/sources.list.d/elastic-7.x.list
+        msg_error "" "$(t "O repositório APT do Elasticsearch não pôde ser atualizado nesta máquina/arquitetura. O Zebra continua disponível." "The Elasticsearch APT repository could not be updated on this machine/architecture. Zebra remains available.")" 10 78
+        return 1
+    fi
+    candidate=$(apt-cache policy elasticsearch 2>/dev/null | awk '/Candidate:/ {print $2; exit}')
+    if [ -z "$candidate" ] || [ "$candidate" = "(none)" ]; then
+        rm -f /etc/apt/sources.list.d/elastic-7.x.list
+        msg_error "" "$(t "Nenhum pacote Elasticsearch 7 disponível no APT para esta arquitetura. O Zebra continua disponível." "No Elasticsearch 7 package is available from APT for this architecture. Zebra remains available.")" 10 78
+        return 1
+    fi
+    return 0
 }
 
 validate_elasticsearch() {
@@ -1000,9 +1108,11 @@ validate_elasticsearch() {
         v_fail "Indexador: koha-es-indexer $(t "PARADO - registros novos não entram na busca" "STOPPED - new records will not reach search")."
     fi
 
-    [ -f /etc/systemd/system/koha-es-indexer@.service ] \
-        && v_ok "Indexador: $(t "serviço systemd instalado (reinício automático)" "systemd unit installed (auto-restart)")." \
-        || v_warn "Indexador: $(t "sem serviço systemd dedicado" "no dedicated systemd unit")."
+    if systemctl cat "koha-es-indexer@${INSTANCE}" >/dev/null 2>&1; then
+        v_ok "Indexador: $(t "serviço systemd instalado (reinício automático)" "systemd unit installed (auto-restart)")."
+    else
+        v_warn "Indexador: $(t "sem serviço systemd dedicado" "no dedicated systemd unit")."
+    fi
 
     ss -lnt 2>/dev/null | grep -q ':61613' \
         && v_ok "Mensageria: RabbitMQ/STOMP (61613) OK." \
@@ -1059,11 +1169,7 @@ EOF
 set_scp_config() {
     local key="$1" val="$2"
     write_scp_backup_config
-    if grep -qE "^${key}=" "$SCP_BACKUP_CONF" 2>/dev/null; then
-        sed -i -E "s|^${key}=.*|${key}=\"${val}\"|" "$SCP_BACKUP_CONF"
-    else
-        echo "${key}=\"${val}\"" >> "$SCP_BACKUP_CONF"
-    fi
+    set_shell_config_value "$SCP_BACKUP_CONF" "$key" "$val"
 }
 
 write_backup_scripts() {
@@ -1117,7 +1223,7 @@ log_backup "OK: \$FILE (\$SIZE bytes)"
 
 RCLONE_REMOTE="\$(printf '%s' "\$RCLONE_REMOTE" | xargs)"
 if [ -n "\$RCLONE_REMOTE" ] && [ -f /root/.config/rclone/rclone.conf ]; then
-    if ! rclone listremotes --config /root/.config/rclone/rclone.conf 2>/dev/null | grep -qx "\${RCLONE_REMOTE}:"; then
+    if ! rclone listremotes --config /root/.config/rclone/rclone.conf 2>/dev/null | grep -Fxq "\${RCLONE_REMOTE}:"; then
         log_backup "AVISO: RCLONE_REMOTE='\${RCLONE_REMOTE}' não existe no rclone.conf; upload pulado"
     elif /usr/bin/rclone --config /root/.config/rclone/rclone.conf copy "\$FILE" "\${RCLONE_REMOTE}:\${RCLONE_SQL_FOLDER}/" >>"\$LOG" 2>&1; then
         log_backup "Nuvem OK: \${RCLONE_REMOTE}:\${RCLONE_SQL_FOLDER}/"
@@ -1205,7 +1311,7 @@ log_backup "OK: \$PACKAGE (\$(stat -c %s "\$PACKAGE" 2>/dev/null) bytes)"
 
 RCLONE_REMOTE="\$(printf '%s' "\$RCLONE_REMOTE" | xargs)"
 if [ -n "\$RCLONE_REMOTE" ] && [ -f /root/.config/rclone/rclone.conf ]; then
-    if ! rclone listremotes --config /root/.config/rclone/rclone.conf 2>/dev/null | grep -qx "\${RCLONE_REMOTE}:"; then
+    if ! rclone listremotes --config /root/.config/rclone/rclone.conf 2>/dev/null | grep -Fxq "\${RCLONE_REMOTE}:"; then
         log_backup "AVISO: RCLONE_REMOTE='\${RCLONE_REMOTE}' não existe no rclone.conf; upload pulado"
     elif /usr/bin/rclone --config /root/.config/rclone/rclone.conf copy "\$PACKAGE" "\${RCLONE_REMOTE}:\${RCLONE_MARC_FOLDER}/" >>"\$LOG" 2>&1; then
         log_backup "Nuvem OK: \${RCLONE_REMOTE}:\${RCLONE_MARC_FOLDER}/"
@@ -1220,6 +1326,11 @@ EOF
 
     chmod 700 /root/backup_sql.sh /root/backup_marc.sh
     chown root:root /root/backup_sql.sh /root/backup_marc.sh
+    if ! bash -n /root/backup_sql.sh >/dev/null 2>&1 || ! bash -n /root/backup_marc.sh >/dev/null 2>&1; then
+        log "FALHA: script de backup gerado com sintaxe inválida."
+        return 1
+    fi
+    return 0
 }
 
 write_cron_tasks() {
@@ -1333,8 +1444,8 @@ function_install_koha() {
     wait_for_apt_locks || return 1
 
     display_explanation "Configurando idioma e codificação UTF-8..." "Configuring locales and UTF-8..."
-    apt_update_indices
-    apt_install locales || return 1
+    if ! apt_update_indices; then restore_apt_timers; return 1; fi
+    apt_install locales || { restore_apt_timers; return 1; }
     locale-gen pt_BR.UTF-8 en_US.UTF-8 >/dev/null 2>&1
     if [ "$SYS_LANG" = "pt" ]; then update-locale LANG=pt_BR.UTF-8; else update-locale LANG=en_US.UTF-8; fi
 
@@ -1362,7 +1473,7 @@ function_install_koha() {
 
     wait_for_apt_locks || return 1
     display_explanation "Atualizando o sistema..." "Upgrading the system..."
-    apt_update_indices
+    if ! apt_update_indices; then restore_apt_timers; return 1; fi
     if ! DEBIAN_FRONTEND=noninteractive apt-get upgrade "${APT_OPTS[@]}"; then
         restore_apt_timers
         msg_error "" "$(t "A atualização do sistema falhou. O Koha não será alterado nesta etapa." "System upgrade failed. Koha will not be changed at this stage.")" 10 74
@@ -1375,7 +1486,7 @@ function_install_koha() {
                  python3 libxml2-utils unzip pv glabels || return 1
     systemctl enable --now avahi-daemon fail2ban memcached >/dev/null 2>&1
 
-    display_explanation "Adicionando os repositórios do Koha e do Elasticsearch..." "Adding Koha and Elasticsearch repositories..."
+    display_explanation "Adicionando o repositório do Koha..." "Adding the Koha repository..."
     mkdir -p /usr/share/keyrings
     if ! curl -fsSL --retry 3 --max-time 60 https://debian.koha-community.org/koha/gpg.asc \
         | gpg --dearmor --yes -o /usr/share/keyrings/koha-keyring.gpg 2>/dev/null; then
@@ -1384,15 +1495,11 @@ function_install_koha() {
     fi
     echo "deb [signed-by=/usr/share/keyrings/koha-keyring.gpg] https://debian.koha-community.org/koha stable main" > /etc/apt/sources.list.d/koha.list
 
-    if curl -fsSL --retry 3 --max-time 60 https://artifacts.elastic.co/GPG-KEY-elasticsearch \
-        | gpg --dearmor --yes -o /usr/share/keyrings/elasticsearch-keyring.gpg 2>/dev/null; then
-        echo "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/7.x/apt stable main" > /etc/apt/sources.list.d/elastic-7.x.list
-    else
-        rm -f /etc/apt/sources.list.d/elastic-7.x.list
-        echo "$(t "[AVISO] Repositório do Elasticsearch indisponível; seguindo só com o Zebra." "[WARN] Elasticsearch repository unavailable; continuing with Zebra only.")"
+    if ! apt_update_indices; then
+        restore_apt_timers
+        msg_error "" "$(t "Não foi possível atualizar os índices APT do Koha. A instalação foi interrompida." "Could not update the Koha APT indexes. Installation aborted.")" 10 74
+        return 1
     fi
-
-    apt_update_indices
     display_explanation "Instalando MariaDB e Koha (esta é a etapa mais demorada)..." "Installing MariaDB and Koha (longest step)..."
     apt_install mariadb-server koha-common || return 1
     systemctl enable --now mariadb >/dev/null 2>&1
@@ -1482,7 +1589,7 @@ function_install_koha() {
     local db_pass ip
     db_pass=$(get_database_password)
     ip=$(get_server_ip)
-    write_backup_scripts
+    if ! write_backup_scripts; then restore_apt_timers; return 1; fi
     write_cron_tasks
 
     cat > /root/credenciais_koha.txt << EOF
@@ -1539,7 +1646,7 @@ EOF
     else
         msg_info "$(t "Reinicialização Pendente" "Pending Reboot")" \
 "$(t "Tudo certo! Você optou por reiniciar mais tarde.\n\nLembre-se: se o catálogo parecer lento, reinicie o servidor através da opção 25 do painel antes de realizar cadastros pesados." \
-"All set! You chose to reboot later.\n\nRemember: if the catalog feels sluggish, restart the server via option 25 in the panel before heavy indexing.")" 11 74
+"All set! You chose to reboot later.\n\nRemember: if the catalog feels sluggish, restart the server via option 29 in the panel before heavy indexing.")" 11 74
     fi
 }
 
@@ -1680,7 +1787,7 @@ function_restore_database() {
     display_explanation "Sincronizando o motor de busca..." "Synchronizing the search engine..."
     local engine="Zebra"
     if dpkg -s koha-elasticsearch >/dev/null 2>&1 && is_koha_es_active_in_xml; then engine="Elasticsearch"; fi
-    if ! mysql -e "UPDATE ${DB_NAME}.systempreferences SET value='${engine}' WHERE variable='SearchEngine';" >/dev/null 2>&1; then
+    if ! set_search_engine "$engine"; then
         backup_lock_release
         msg_error "" "$(t "Não consegui definir o motor de busca após a restauração." "Could not set the search engine after restore.")" 9 72
         return 1
@@ -1723,15 +1830,15 @@ function_restore_database() {
 # ======================================================================
 function_manual_backup() {
     require_database || return 0
+    msg_info "$(t "Destino do Backup" "Backup Destination")" \
+"$(t "Escolha onde salvar o arquivo.\n\n  Pendrive/USB: normalmente em /media ou /mnt\n  Para baixar depois: scp root@$(get_server_ip):CAMINHO ." "Choose where to save the file.\n\n  USB drive: usually under /media or /mnt\n  To download later: scp root@$(get_server_ip):PATH .")" 12 76
+    local target_dir
+    target_dir=$(select_directory "$REAL_HOME") || return 0
+    [ -z "$target_dir" ] && return 0
     if ! backup_lock_acquire; then
         msg_info "$(t "Backup em andamento" "Backup in progress")" "$(t "Outro backup ou restauração já está em andamento. Tente novamente depois." "Another backup or restore is already running. Try again later.")" 9 72
         return 0
     fi
-    msg_info "$(t "Destino do Backup" "Backup Destination")" \
-"$(t "Escolha onde salvar o arquivo.\n\n  Pendrive/USB: normalmente em /media ou /mnt\n  Para baixar depois: scp root@$(get_server_ip):CAMINHO ." "Choose where to save the file.\n\n  USB drive: usually under /media or /mnt\n  To download later: scp root@$(get_server_ip):PATH .")" 12 76
-    local target_dir
-    target_dir=$(select_directory "$REAL_HOME") || { backup_lock_release; return 0; }
-    [ -z "$target_dir" ] && { backup_lock_release; return 0; }
     local target_file="${target_dir%/}/${DB_NAME}_manual_$(date +%Y-%m-%d_%Hh%M).sql.gz"
     clear
     display_explanation "Gerando o backup..." "Generating the backup..."
@@ -1759,6 +1866,10 @@ function_send_manual_scp_backup() {
         if prompt_yes_no "$(t "Usar destino salvo?" "Use saved destination?")" \
             "$(t "Já existe um destino configurado:\n${SCP_USER}@${SCP_HOST}:${SCP_FOLDER}\n\nUsar esse destino agora?" "There is already a configured destination:\n${SCP_USER}@${SCP_HOST}:${SCP_FOLDER}\n\nUse this destination now?")" 11 74; then
             host="$SCP_HOST"; user="$SCP_USER"; port="$SCP_PORT"; folder="$SCP_FOLDER"; key="$SCP_KEY"
+            if [ -n "$key" ] && [ ! -r "$key" ]; then
+                msg_error "" "$(t "A chave privada configurada não foi encontrada: $key" "The configured private key was not found: $key")" 9 74
+                return 1
+            fi
             use_saved="yes"
         fi
     fi
@@ -1780,13 +1891,22 @@ function_send_manual_scp_backup() {
         key=""
     fi
 
+    if ! validate_port_number "$port"; then
+        msg_error "" "$(t "Porta SSH inválida. Use um número entre 1 e 65535." "Invalid SSH port. Use a number between 1 and 65535.")" 9 72
+        return 1
+    fi
     clear
+    if ! backup_lock_acquire; then
+        msg_error "" "$(t "Outro backup ou restauração está em andamento. Tente novamente depois." "Another backup or restore is already running. Try again later.")" 9 72
+        return 1
+    fi
     display_explanation "Gerando o backup..." "Generating the backup..."
     local target="${DIR_SQL}/${DB_NAME}_manual_$(date +%Y-%m-%d_%Hh%M).sql.gz"
     mkdir -p "$DIR_SQL"
     if ! (mysqldump --single-transaction --quick --routines --triggers \
           --default-character-set=utf8mb4 "$DB_NAME" | gzip > "$target" && gzip -t "$target" 2>/dev/null); then
         rm -f "$target"
+        backup_lock_release
         msg_error "" "$(t "Falha ao gerar o backup. Verifique o espaço em disco." "Failed to generate the backup. Check the free disk space.")" 9 70
         return 1
     fi
@@ -1798,8 +1918,10 @@ function_send_manual_scp_backup() {
 
     if scp "${opts[@]}" "$target" "${user}@${host}:${folder%/}/" 2>&1 | tee -a "$RUN_LOG"; then
         log "backup enviado via SCP manual: $target -> ${user}@${host}:${folder}"
+        backup_lock_release
         msg_ok "$(t "Backup gerado e enviado com sucesso!\n\nArquivo: $(basename "$target")\nDestino: ${user}@${host}:${folder}" "Backup generated and sent successfully!\n\nFile: $(basename "$target")\nDestination: ${user}@${host}:${folder}")" 11 76
     else
+        backup_lock_release
         msg_error "" "$(t "O backup foi gerado localmente (${target}), mas o envio por SCP falhou.\nSe você não usou o destino salvo, e a chave não estiver autorizada,\no SCP vai pedir senha (digite-a quando aparecer no terminal).\n\nLog: $RUN_LOG" "The backup was generated locally (${target}), but the SCP transfer\nfailed. If you didn't use the saved destination and the key isn't\nauthorized, SCP will prompt for a password (type it when it appears).\n\nLog: $RUN_LOG")" 13 78
         return 1
     fi
@@ -1823,14 +1945,20 @@ function_test_backup() {
     prompt_yes_no "$(t "Testar Backup" "Test Backup")" \
 "$(t "Um backup só vale se restaurar. Este teste importa o arquivo\nmais recente em um banco temporário e confere o conteúdo.\nO acervo em produção NÃO é tocado.\n\nArquivo: $(basename "$newest")\nData: $(date -r "$newest" '+%d/%m/%Y %H:%M')\n\nExecutar o teste agora?" "A backup is only worth it if it restores. This test imports the newest\nfile into a temporary database and checks it.\nProduction data is NOT touched.\n\nFile: $(basename "$newest")\nDate: $(date -r "$newest" '+%Y-%m-%d %H:%M')\n\nRun the test now?")" 17 76 || return 0
     clear
+    if ! backup_lock_acquire; then
+        msg_error "" "$(t "Outro backup ou restauração está em andamento. Teste cancelado." "Another backup or restore is already running. Test cancelled.")" 9 72
+        return 1
+    fi
     local test_db="koha_teste_restauracao"
     display_explanation "Importando em banco temporário..." "Importing into a temporary database..."
     if ! mysql -e "DROP DATABASE IF EXISTS ${test_db}; CREATE DATABASE ${test_db} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" >/dev/null 2>&1; then
+        backup_lock_release
         msg_error "" "$(t "Não foi possível criar o banco temporário de teste." "Could not create the temporary test database.")" 9 72
         return 1
     fi
     if ! zcat "$newest" | mysql "$test_db"; then
         mysql -e "DROP DATABASE IF EXISTS ${test_db};" >/dev/null 2>&1 || true
+        backup_lock_release
         msg_error "" "$(t "O backup NÃO restaurou. Verifique o arquivo com urgência." "The backup DID NOT restore. Check the file urgently.")" 9 72
         return 1
     fi
@@ -1840,7 +1968,8 @@ function_test_backup() {
     usu=$(run_sql "SELECT COUNT(*) FROM ${test_db}.borrowers;")
     mysql -e "DROP DATABASE IF EXISTS ${test_db};" >/dev/null 2>&1 || true
     log "teste de backup: $newest tabelas=$tab biblios=$bib"
-    if [ "${tab:-0}" -gt 50 ] 2>/dev/null && [ "${bib:-0}" -ge 0 ] 2>/dev/null; then
+    backup_lock_release
+    if [[ "$tab" =~ ^[0-9]+$ ]] && [[ "$bib" =~ ^[0-9]+$ ]] && [[ "$usu" =~ ^[0-9]+$ ]] && [ "$tab" -gt 50 ]; then
         msg_ok "$(t "BACKUP ÍNTEGRO E RESTAURÁVEL.\n\nArquivo: $(basename "$newest")\nTabelas: ${tab}\nRegistros bibliográficos: ${bib}\nUsuários: ${usu}" "BACKUP IS INTACT AND RESTORABLE.\n\nFile: $(basename "$newest")\nTables: ${tab}\nBibliographic records: ${bib}\nPatrons: ${usu}")" 13 74
     else
         msg_error "" "$(t "O backup importou, mas tem só ${tab} tabelas. Suspeito." "The backup imported but has only ${tab} tables. Suspicious.")" 9 72
@@ -1906,7 +2035,7 @@ function_toggle_search_engine() {
             backup_lock_release
             return 1
         fi
-        if ! mysql -e "UPDATE ${DB_NAME}.systempreferences SET value='Zebra' WHERE variable='SearchEngine';" >/dev/null 2>&1; then
+        if ! set_search_engine "Zebra"; then
             set_xml_elasticsearch inserir >/dev/null 2>&1 || true
             manage_koha_indexers start >/dev/null 2>&1 || true
             systemctl enable --now elasticsearch >/dev/null 2>&1 || true
@@ -1962,16 +2091,23 @@ function_toggle_search_engine() {
     rm -f "$CRON_ZEBRA"; systemctl restart cron >/dev/null 2>&1 || true
     systemctl disable --now "koha-zebra-daemon@${INSTANCE}" >/dev/null 2>&1 || true
 
-    if ! dpkg -s koha-elasticsearch >/dev/null 2>&1; then
-        display_explanation "Instalando o Elasticsearch 7..." "Installing Elasticsearch 7..."
-        apt_update_indices
-        if ! apt_install elasticsearch koha-elasticsearch; then
+    if ! dpkg -s elasticsearch >/dev/null 2>&1 || ! dpkg -s koha-elasticsearch >/dev/null 2>&1; then
+        display_explanation "Verificando o repositório e instalando o Elasticsearch 7..." "Checking repository and installing Elasticsearch 7..."
+        if ! wait_for_apt_locks; then
             write_cron_zebra
             systemctl enable --now "koha-zebra-daemon@${INSTANCE}" >/dev/null 2>&1 || true
             backup_lock_release
-            msg_error "" "$(t "Falha ao instalar o Elasticsearch. O Zebra foi restaurado." "Elasticsearch installation failed. Zebra was restored.")" 10 72
             return 1
         fi
+        if ! ensure_elasticsearch_repository || ! apt_install elasticsearch koha-elasticsearch; then
+            restore_apt_timers
+            write_cron_zebra
+            systemctl enable --now "koha-zebra-daemon@${INSTANCE}" >/dev/null 2>&1 || true
+            backup_lock_release
+            msg_error "" "$(t "Falha ao instalar ou localizar o Elasticsearch 7. O Zebra foi restaurado." "Elasticsearch 7 could not be installed or found. Zebra was restored.")" 10 74
+            return 1
+        fi
+        restore_apt_timers
     fi
 
     display_explanation "Ajustando memória e configuração do Elasticsearch..." "Tuning Elasticsearch memory and configuration..."
@@ -2035,7 +2171,7 @@ function_toggle_search_engine() {
         msg_error "" "$(t "Não consegui ativar o bloco do Elasticsearch no koha-conf.xml. O Zebra foi restaurado." "Could not enable the Elasticsearch block in koha-conf.xml. Zebra was restored.")" 11 78
         return 1
     fi
-    if ! mysql -e "UPDATE ${DB_NAME}.systempreferences SET value='Elasticsearch' WHERE variable='SearchEngine';" >/dev/null 2>&1; then
+    if ! set_search_engine "Elasticsearch"; then
         set_xml_elasticsearch remover >/dev/null 2>&1 || true
         write_cron_zebra; systemctl enable --now "koha-zebra-daemon@${INSTANCE}" >/dev/null 2>&1 || true
         systemctl disable --now elasticsearch >/dev/null 2>&1 || true
@@ -2116,17 +2252,44 @@ $(t "Índice / banco" "Index / database")       : ${docs:-?} / ${bibs:-?}
 $(t "Fila crescendo + índice menor que o banco = indexador parado." "Growing queue + smaller index = indexer is down.")" 18 76
         prompt_yes_no "$(t "Reparar" "Repair")" "$(t "Reinstalar o serviço do indexador, limpar o cache e religar tudo?" "Reinstall the indexer service, flush the cache and restart everything?")" 10 74 || return 0
         clear
+        if ! backup_lock_acquire; then
+            msg_error "" "$(t "Outro backup ou reindexação está em andamento. Reparo cancelado." "Another backup or reindex is already running. Repair cancelled.")" 9 74
+            return 1
+        fi
         display_explanation "Reparando os serviços de indexação..." "Repairing the indexing services..."
-        systemctl restart elasticsearch >/dev/null 2>&1
-        prepare_koha_broker
-        systemctl restart memcached koha-common >/dev/null 2>&1
-        manage_koha_indexers start
-        koha-plack --restart "$INSTANCE" >/dev/null 2>&1
+        if ! systemctl restart elasticsearch >/dev/null 2>&1; then
+            backup_lock_release
+            msg_error "" "$(t "O Elasticsearch não reiniciou. O reparo foi interrompido." "Elasticsearch did not restart. Repair aborted.")" 9 72
+            return 1
+        fi
+        local es_wait="no"
+        for _ in $(seq 1 30); do
+            curl -sS --max-time 2 http://127.0.0.1:9200/ >/dev/null 2>&1 && { es_wait="yes"; break; }
+            sleep 1
+        done
+        if [ "$es_wait" != "yes" ]; then
+            backup_lock_release
+            msg_error "" "$(t "A API do Elasticsearch não respondeu após o reinício." "Elasticsearch API did not respond after restart.")" 9 72
+            return 1
+        fi
+        prepare_koha_broker || true
+        systemctl restart memcached koha-common >/dev/null 2>&1 || true
+        if ! manage_koha_indexers start; then
+            backup_lock_release
+            msg_error "" "$(t "O indexador não pôde ser iniciado." "The indexer could not be started.")" 9 70
+            return 1
+        fi
+        koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
         if prompt_yes_no "$(t "Reindexar" "Reindex")" "$(t "Reconstruir o índice inteiro do zero?\nEm acervos grandes pode levar vários minutos." "Rebuild the whole index from scratch?\nOn large catalogs this can take several minutes.")" 10 74; then
             clear
             local cut_time; cut_time=$(date '+%Y-%m-%d %H:%M:%S')
-            rebuild_koha_elasticsearch "$cut_time"
+            if ! rebuild_koha_elasticsearch "$cut_time"; then
+                backup_lock_release
+                msg_error "" "$(t "A reconstrução do índice falhou. O diagnóstico abaixo mostra o estado atual." "Index rebuild failed. The diagnostics below show the current state.")" 10 76
+                return 1
+            fi
         fi
+        backup_lock_release
         v_reset "reparo da indexação"
         validate_elasticsearch "Elasticsearch"
         if is_koha_indexer_running; then
@@ -2233,36 +2396,25 @@ function_size_server() {
 # 11. BACKUP EM NUVEM (RCLONE) / CLOUD BACKUP (RCLONE)
 # ======================================================================
 validate_and_register_rclone() {
-    local name="$1" err
-    [ -z "$name" ] && return 1
-    if ! rclone listremotes 2>/dev/null | grep -qx "${name}:"; then
-        msg_error "" "$(t "Não existe nenhuma conexão chamada '$name' no rclone.\n\nConexões existentes:\n$(rclone listremotes 2>/dev/null)" "There is no rclone remote called '$name'.\n\nExisting remotes:\n$(rclone listremotes 2>/dev/null)")" 14 74
+    local name="$1" actual=""
+    [ -n "$name" ] || { msg_error "" "$(t "Nome do remote não pode ser vazio." "Remote name cannot be empty.")" 9 64; return 1; }
+    command -v rclone >/dev/null 2>&1 || { msg_error "" "$(t "Rclone não está instalado." "Rclone is not installed.")" 9 64; return 1; }
+    if ! rclone listremotes --config /root/.config/rclone/rclone.conf 2>/dev/null | grep -qx "${name}:"; then
+        msg_error "" "$(t "O remote '$name' não existe no rclone. Configure-o primeiro." "Remote '$name' does not exist in rclone. Configure it first.")" 9 74
         return 1
     fi
-    if ! err=$(rclone mkdir "${name}:Backup_SQL_Koha" 2>&1); then
-        msg_error "" "$(t "A conexão '$name' existe, mas o teste de escrita falhou.\n\nDetalhe:\n$err" "Remote '$name' exists but the write test failed.\n\nDetail:\n$err")" 16 78
-        return 1
-    fi
-    rclone mkdir "${name}:Backup_MARC_Koha" >/dev/null 2>&1
     write_backup_config
-    if grep -qE "^RCLONE_REMOTE=" "$BACKUP_CONF" 2>/dev/null; then
-        sed -i -E "s|^RCLONE_REMOTE=.*|RCLONE_REMOTE=\"${name}\"|" "$BACKUP_CONF"
-    else
-        echo "RCLONE_REMOTE=\"${name}\"" >> "$BACKUP_CONF"
-    fi
-    if ! grep -qE "^RCLONE_REMOTE=\"${name}\"$" "$BACKUP_CONF" 2>/dev/null; then
-        msg_error "" "$(t "A conexão foi validada, mas NÃO consegui salvar '${name}' em ${BACKUP_CONF}.\nVerifique as permissões do arquivo." "The remote was validated, but I could NOT save '${name}' in ${BACKUP_CONF}.\nCheck the file permissions.")" 11 76
+    if ! set_shell_config_value "$BACKUP_CONF" RCLONE_REMOTE "$name"; then
+        msg_error "" "$(t "Não foi possível salvar o remote de forma segura." "Could not save the remote safely.")" 9 70
         return 1
     fi
-    chmod 600 "$BACKUP_CONF"
-    log "rclone remote configurado: $name"
-    display_explanation "Testando o envio real para a nuvem..." "Testing the real cloud upload..."
-    bash /root/backup_sql.sh >/dev/null 2>&1
-    if rclone lsf "${name}:Backup_SQL_Koha" 2>/dev/null | grep -q '\.sql\.gz$'; then
-        msg_ok "$(t "Nuvem ativada e testada com sucesso.\n\nRemoto: ${name}\nPasta SQL: Backup_SQL_Koha (confirmada com arquivo dentro)" "Cloud enabled and tested successfully.\n\nRemote: ${name}\nSQL folder: Backup_SQL_Koha (confirmed with a file inside)")" 11 76
-    else
-        msg_info "$(t "Nuvem configurada" "Cloud configured")" "$(t "A configuração foi salva, mas não encontrei o arquivo de teste em ${name}:Backup_SQL_Koha.\n\nVeja o log: ${LOG_DIR}/backup_sql.log" "Configuration saved, but I could not find the test file at ${name}:Backup_SQL_Koha.\n\nCheck the log: ${LOG_DIR}/backup_sql.log")" 11 76
+    actual=$(bash -c '. "$1"; printf "%s" "$RCLONE_REMOTE"' _ "$BACKUP_CONF" 2>/dev/null || true)
+    if [ "$actual" != "$name" ]; then
+        msg_error "" "$(t "O remote não foi salvo corretamente." "The remote was not saved correctly.")" 9 70
+        return 1
     fi
+    log "rclone configurado: ${name}"
+    msg_ok "$(t "Remote '$name' validado e salvo.\n\nOs próximos backups usarão este remote." "Remote '$name' validated and saved.\n\nFuture backups will use this remote.")" 10 72
     return 0
 }
 
@@ -2366,8 +2518,12 @@ function_configure_automatic_scp_backup() {
     mkdir -p /root/.ssh && chmod 700 /root/.ssh
     if [ ! -f "$key" ]; then
         display_explanation "Gerando chave SSH dedicada para o backup..." "Generating a dedicated SSH key for backups..."
-        ssh-keygen -t ed25519 -f "$key" -N "" -C "koha-backup@$(hostname)" >/dev/null 2>&1
+        if ! ssh-keygen -t ed25519 -f "$key" -N "" -C "koha-backup@$(hostname)" >/dev/null 2>&1; then
+            msg_error "" "$(t "Não foi possível gerar a chave SSH dedicada para backup." "Could not generate the dedicated backup SSH key.")" 9 74
+            return 1
+        fi
     fi
+    [ -s "${key}.pub" ] || { msg_error "" "$(t "A chave pública de backup não existe." "The backup public key does not exist.")" 9 70; return 1; }
 
     clear
     echo "======================================================================"
@@ -2383,17 +2539,19 @@ function_configure_automatic_scp_backup() {
     fi
 
     display_explanation "Testando a conexão sem senha..." "Testing passwordless connection..."
+    local remote_folder_q; remote_folder_q=$(shell_single_quote "$folder")
     if ! ssh -p "$port" -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
-            "${user}@${host}" "mkdir -p '${folder}' && echo OK" 2>>"$RUN_LOG" | grep -q OK; then
+            "${user}@${host}" "mkdir -p -- ${remote_folder_q} && echo OK" 2>>"$RUN_LOG" | grep -q OK; then
         msg_error "" "$(t "A conexão sem senha falhou. Verifique se a chave foi mesmo autorizada\nno destino e se a porta/usuário estão corretos.\n\nLog: $RUN_LOG" "Passwordless connection failed. Check that the key was really\nauthorized on the destination and that port/user are correct.\n\nLog: $RUN_LOG")" 12 76
         return 1
     fi
 
-    set_scp_config "SCP_HOST" "$host"
-    set_scp_config "SCP_USER" "$user"
-    set_scp_config "SCP_PORT" "$port"
-    set_scp_config "SCP_FOLDER" "$folder"
-    set_scp_config "SCP_KEY" "$key"
+    if ! set_scp_config "SCP_HOST" "$host" || ! set_scp_config "SCP_USER" "$user" || \
+       ! set_scp_config "SCP_PORT" "$port" || ! set_scp_config "SCP_FOLDER" "$folder" || \
+       ! set_scp_config "SCP_KEY" "$key"; then
+        msg_error "" "$(t "Não foi possível salvar a configuração SCP de forma segura." "Could not save SCP configuration safely.")" 9 74
+        return 1
+    fi
     chmod 600 "$SCP_BACKUP_CONF"
 
     log "backup automatico via SCP configurado: ${user}@${host}:${folder}"
@@ -2571,7 +2729,10 @@ function_configure_ssl() {
 "To issue the free certificate you NEED a domain with an A record\npointing to this server's PUBLIC IP, and port 80 reachable.\n\nIf you use Cloudflare Tunnel, CANCEL: HTTPS already comes from it.\n\nContinue?")" 15 76 || return 0
     clear
     if ! wait_for_apt_locks; then return 1; fi
-    apt_update_indices
+    if ! apt_update_indices; then
+        restore_apt_timers
+        return 1
+    fi
     if ! apt_install certbot python3-certbot-apache; then
         restore_apt_timers
         return 1
@@ -2724,7 +2885,10 @@ function_update_system() {
 "System and Koha packages will be updated and database\nmigrations applied.\n\nRecommended: make a backup first.\n\nContinue?")" 13 74 || return 0
     clear
     if ! wait_for_apt_locks; then return 1; fi
-    apt_update_indices
+    if ! apt_update_indices; then
+        restore_apt_timers
+        return 1
+    fi
     if ! DEBIAN_FRONTEND=noninteractive apt-get upgrade "${APT_OPTS[@]}"; then
         restore_apt_timers
         msg_error "" "$(t "A atualização dos pacotes falhou. As migrações do Koha não serão executadas." "Package upgrade failed. Koha migrations will not run.")" 10 76
@@ -2827,8 +2991,8 @@ $(t "MÁQUINA" "MACHINE")
 
 $(t "BACKUP" "BACKUP")
   $(t "Último SQL" "Latest SQL")    : $(find "$DIR_SQL" -name '*.sql.gz' -printf '%TY-%Tm-%Td %TH:%TM\n' 2>/dev/null | sort -r | head -n1 || echo '-')
-  $(t "Nuvem" "Cloud")         : $(grep -o 'RCLONE_REMOTE="[^"]*"' "$BACKUP_CONF" 2>/dev/null | cut -d'"' -f2 | grep . || echo "$(t "não configurada" "not configured")")
-  $(t "SCP Auto" "SCP Auto")      : $(grep -o 'SCP_HOST="[^"]*"' "$SCP_BACKUP_CONF" 2>/dev/null | cut -d'"' -f2 | grep . || echo "$(t "não configurado" "not configured")")" 30 78 2>/dev/null || true
+  $(t "Nuvem" "Cloud")         : $(bash -c '. "$1" 2>/dev/null; printf "%s" "${RCLONE_REMOTE:-}"' _ "$BACKUP_CONF" 2>/dev/null | grep . || echo "$(t "não configurada" "not configured")")
+  $(t "SCP Auto" "SCP Auto")      : $(bash -c '. "$1" 2>/dev/null; printf "%s" "${SCP_HOST:-}"' _ "$SCP_BACKUP_CONF" 2>/dev/null | grep . || echo "$(t "não configurado" "not configured")")" 30 78 2>/dev/null || true
 }
 
 # ======================================================================
@@ -2837,7 +3001,12 @@ $(t "BACKUP" "BACKUP")
 function_run_mc() {
     if ! command -v mc >/dev/null 2>&1; then
         whiptail --title "$(t "Instalando" "Installing")" --infobox "$(t "Aguarde, instalando o Midnight Commander (mc)..." "Please wait, installing Midnight Commander (mc)...")" 8 60
-        apt-get update -qq && apt-get install -y mc -qq
+        if ! wait_for_apt_locks || ! apt_update_indices || ! apt_install mc; then
+            restore_apt_timers
+            msg_error "" "$(t "Não foi possível instalar o Midnight Commander." "Could not install Midnight Commander.")" 9 70
+            return 1
+        fi
+        restore_apt_timers
     fi
     # Abre a interface de 2 painéis
     mc
@@ -2849,7 +3018,12 @@ function_run_mc() {
 function_run_links() {
     if ! command -v links >/dev/null 2>&1; then
         whiptail --title "$(t "Instalando" "Installing")" --infobox "$(t "Aguarde, instalando o navegador de terminal (links)..." "Please wait, installing terminal web browser (links)...")" 8 60
-        apt-get update -qq && apt-get install -y links -qq
+        if ! wait_for_apt_locks || ! apt_update_indices || ! apt_install links; then
+            restore_apt_timers
+            msg_error "" "$(t "Não foi possível instalar o navegador Links." "Could not install the Links browser.")" 9 70
+            return 1
+        fi
+        restore_apt_timers
     fi
     local opc
     opc=$(whiptail --title "$(t "Navegador de Terminal (Links)" "Terminal Web Browser (Links)")" \
@@ -2871,7 +3045,12 @@ function_run_links() {
 function_run_monitor() {
     if ! command -v htop >/dev/null 2>&1 || ! command -v nethogs >/dev/null 2>&1; then
         whiptail --title "$(t "Instalando" "Installing")" --infobox "$(t "Aguarde, instalando ferramentas de telemetria (htop e nethogs)..." "Please wait, installing telemetry tools (htop and nethogs)...")" 8 70
-        apt-get update -qq && apt-get install -y htop nethogs -qq
+        if ! wait_for_apt_locks || ! apt_update_indices || ! apt_install htop nethogs; then
+            restore_apt_timers
+            msg_error "" "$(t "Não foi possível instalar htop/nethogs." "Could not install htop/nethogs.")" 9 70
+            return 1
+        fi
+        restore_apt_timers
     fi
     local opc
     opc=$(whiptail --title "$(t "Monitoramento de Recursos" "Resource Monitoring")" \
@@ -2884,8 +3063,8 @@ function_run_monitor() {
         htop
     elif [ "$opc" = "2" ]; then
         local iface
-        iface=$(ip route | awk '/default/ {print $5}')
-        nethogs "$iface"
+        iface=$(ip route | awk '/default/ {print $5; exit}')
+        if [ -n "$iface" ]; then nethogs "$iface"; else nethogs; fi
     fi
 }
 
@@ -2936,7 +3115,10 @@ function_autoupdate() {
     
 # Validação de integridade atômica do script baixado
     if [ "$size" -lt 10240 ] || ! head -n1 "$tmp" | grep -q '^#!.*bash' || \
-       ! grep -q 'KOHA EASY INSTALL & TOOLS' "$tmp" || ! grep -q '"31"' "$tmp"; then
+       ! grep -q 'KOHA EASY INSTALL & TOOLS' "$tmp" || \
+       ! grep -q '^function_install_koha()' "$tmp" || \
+       ! grep -q '^function_autoupdate()' "$tmp" || \
+       ! grep -q '"31".*Sair' "$tmp"; then
         rm -f "$tmp"
         msg_error "" "$(t "O arquivo baixado está incompleto, não parece ser o painel correto ou está inválido ($size bytes). Atualização cancelada." "The downloaded file is incomplete, not the expected panel, or invalid ($size bytes). Update cancelled.")" 11 78
         return 1
@@ -2960,7 +3142,6 @@ function_autoupdate() {
     if mv -f "$tmp" "$target" && chmod 755 "$target" && chown root:root "$target"; then
         log "painel atualizado a partir de $UPDATE_URL; backup=$backup"
         msg_ok "$(t "Painel atualizado com sucesso!\n\nBackup da versão anterior:\n${backup}\n\nFeche e abra de novo com: sudo options.sh" "Panel updated successfully!\n\nBackup of previous version:\n${backup}\n\nClose and reopen with: sudo options.sh")" 12 76
-        rm -f "$PANEL_LOCK_FILE"
         exit 0
     fi
 
@@ -3032,9 +3213,9 @@ while true; do
         "28" "$(t "Atualizar este painel" "Update this panel")" \
         "29" "$(t "Reiniciar o servidor" "Reboot the server")" \
         "30" "$(t "Sobre o programa (GitHub / Apoio)" "About this program (GitHub / Support)")" \
-        "31" "$(t "Sair" "Exit")" 3>&1 1>&2 2>&3) || { clear; rm -f "$PANEL_LOCK_FILE"; exit 0; }
+        "31" "$(t "Sair" "Exit")" 3>&1 1>&2 2>&3) || { clear; exit 0; }
 
-    [ -z "$OPTION" ] && { clear; rm -f "$PANEL_LOCK_FILE"; exit 0; }
+    [ -z "$OPTION" ] && { clear; exit 0; }
 
     case "$OPTION" in
         1)  function_install_koha ;;
@@ -3067,7 +3248,7 @@ while true; do
         28) function_autoupdate ;;
         29) function_reboot_server ;;
         30) function_about ;;
-        31) clear; rm -f "$PANEL_LOCK_FILE"; exit 0 ;;
+        31) clear; exit 0 ;;
     esac
     
     clear
