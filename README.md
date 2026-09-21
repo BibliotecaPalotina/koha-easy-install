@@ -1,6 +1,5 @@
-<a name="english"></a>
 <div align="right">
-  <strong>English</strong> | <a href="#portugues">Português (Brasil)</a>
+  <strong>English</strong> | <a href="README.pt-BR.md">Português (Brasil)</a>
 </div>
 
 # 📚 Koha Easy Install - Advanced Management Suite (v3.0)
