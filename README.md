@@ -22,5 +22,5 @@ Run this single, atomic command as root or with `sudo` to safely download the in
 **Copy and paste the entire block below into your terminal:**
 
 ```bash
-sudo curl -fsSL [https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer](https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer) -o /usr/local/bin/options.sh && sudo chmod +x /usr/local/bin/options.sh && sudo options.sh
+sudo curl -fsSL "https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer" -o /usr/local/bin/options.sh && sudo chmod +x /usr/local/bin/options.sh && sudo options.sh
 ```
