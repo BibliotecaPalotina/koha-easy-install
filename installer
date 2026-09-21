@@ -593,7 +593,7 @@ validate_backups() {
     if [ -n "$remote" ]; then
         v_ok "Nuvem: $(t "remote do rclone configurado" "rclone remote configured")."
     else
-        v_warn "Nuvem: $(t "backup remoto não configurado (opção 11)" "remote backup not configured (option 11)")."
+        v_warn "Nuvem: $(t "backup remoto não configurado (Central de Backups)" "remote backup not configured (Backups Center)")."
     fi
     if [ -f "$SCP_BACKUP_CONF" ]; then
         scp_host=$(bash -c '. "$1" 2>/dev/null; printf "%s" "$SCP_HOST"' _ "$SCP_BACKUP_CONF" 2>/dev/null || true)
@@ -602,7 +602,7 @@ validate_backups() {
     if [ -n "$scp_host" ] && validate_port_number "${scp_port:-22}"; then
         v_ok "SCP: $(t "backup via SCP automático configurado" "automatic SCP backup configured")."
     else
-        v_warn "SCP: $(t "backup via SCP automático não configurado (opção 12)" "automatic SCP backup not configured (option 12)")."
+        v_warn "SCP: $(t "backup via SCP automático não configurado (Central de Backups)" "automatic SCP backup not configured (Backups Center)")."
     fi
 }
 
@@ -1352,10 +1352,7 @@ MAILTO=""
 
 30 0 * * * root /usr/bin/journalctl --vacuum-time=14d >/dev/null 2>&1
 0 1 5 * * root /usr/bin/mysqlcheck --check --databases ${DB_NAME} >/dev/null 2>&1
-0 5 * * * root /usr/sbin/koha-plack --restart ${INSTANCE} >/dev/null 2>&1
-0 23 * * * root /bin/bash /root/backup_sql.sh >/dev/null 2>&1
-0 3 * * 0 root /bin/bash /root/backup_marc.sh >/dev/null 2>&1
-30 1 * * * root /usr/sbin/koha-shell ${INSTANCE} -c "/usr/share/koha/bin/cronjobs/cleanup_database.pl --sessions --sessdays 2 --zebraqueue 10" >/dev/null 2>&1
+0 5 * * * root /usr/sbin/koha-plack --restart ${INSTANCE} >/dev/null 2>&1 0 23 * * * root /bin/bash /root/backup_sql.sh >/dev/null 2>&1 0 3 * * 0 root /bin/bash /root/backup_marc.sh >/dev/null 2>&1 30 1 * * * root /usr/sbin/koha-shell${INSTANCE} -c "/usr/share/koha/bin/cronjobs/cleanup_database.pl --sessions --sessdays 2 --zebraqueue 10" >/dev/null 2>&1
 EOF
 
     if [ -n "$email_block" ]; then
@@ -1406,18 +1403,18 @@ write_banner() {
                _________________________________________________
               //================================================\\\\
              //         .-----------------------------.          \\\\
-            //          |   K O H A   L I B R A R Y   |           \\\\
-          //      .----'-----------------------------'----.       \\\\
+            //          |   K O H A   L I B R A R Y   |            \\\\
+          //      .----'-----------------------------'----.        \\\\
         _//_======[     PUBLIC CATALOG & AUTOMATION SUITE   ]======_\\\\_
        |____|____________________________________________________|_____|
         |--|  PAINEL DE CONTROLE / CONTROL DASHBOARD:             |--|
         |--|  sudo options.sh                                     |--|
         |  |  ==================================================  |  |
         |  |  ENDEREÇOS / URLS:                                   |  |
-        |  |  - Staff (Intranet): $(printf "%-31s" "$url_staff") |  |
-        |  |  - OPAC (Public):    $(printf "%-31s" "$url_opac") |  |
+        |  |  - Staff (Intranet): $(printf "\%-31s" "$url_staff") |  |
+        |  |  - OPAC (Public):    $(printf "\%-31s" "$url_opac") |  |
         |  |  --------------------------------------------------  |  |
-        |  |  - Usuário/User:     $(printf "%-31s" "$user") |  |
+        |  |  - Usuário/User:     $(printf "\%-31s" "$user") |  |
         |  |  - Senha/Pass:       cat /root/credenciais_koha.txt  |  |
         |  |======================================================|  |
        /===/=======================================================\\==\\
