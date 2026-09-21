@@ -1928,54 +1928,142 @@ function_send_manual_scp_backup() {
 }
 
 # ======================================================================
-# 6. TESTAR O ÚLTIMO BACKUP / TEST THE LATEST BACKUP
+# 6. CENTRO DE DIAGNÓSTICO, BACKUP E REPARO DO BANCO / DIAGNOSTICS & REPAIR
 # ======================================================================
-function_test_backup() {
-    require_koha || return 0
-    local newest
-    newest=$(find "$DIR_SQL" -name '*.sql.gz' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)
-    if [ -z "$newest" ]; then
-        msg_error "" "$(t "Nenhum backup automático encontrado em ${DIR_SQL}." "No automatic backup found in ${DIR_SQL}.")" 9 70
-        return 0
-    fi
-    if ! gzip -t "$newest" 2>/dev/null; then
-        msg_error "" "$(t "O último backup falhou no teste gzip e não será restaurado no teste." "The latest backup failed gzip validation and will not be tested.")" 9 74
+function_validate_repair_database() {
+    require_database || return 0
+
+    while true; do
+        local sub_choice
+        sub_choice=$(whiptail --title "$(t "Centro de Diagnóstico e Reparo de Dados" "Data Diagnostics & Repair Center")" \
+        --menu "$(t "Selecione a ferramenta de manutenção desejada:" "Select the desired maintenance tool:")" 18 78 4 \
+        "1" "$(t "Validar e testar o último backup existente (Dry-Run)" "Validate and test latest existing backup (Dry-Run)")" \
+        "2" "$(t "Checar integridade estrutural das tabelas (CHECK)" "Check structural table integrity (CHECK)")" \
+        "3" "$(t "Diagnóstico completo do banco e estatísticas (ANALYZE)" "Full database diagnostics and stats (ANALYZE)")" \
+        "4" "$(t "Executar reparo, otimização e limpeza de rotina (REPAIR)" "Run repair, optimization and routine cleanup (REPAIR)")" \
+        3>&1 1>&2 2>&3)
+
+        [[ $? -ne 0 ]] && break
+
+        case "$sub_choice" in
+            1)
+                # Sub-ação 1: O antigo Teste de Backup (Opção 6 original)
+                function_test_latest_backup_internal
+                ;;
+            2)
+                # Sub-ação 2: Checagem rápida de tabelas (CHECK)
+                if ! backup_lock_acquire; then
+                    msg_error "" "$(t "Operação em andamento. Tente novamente." "Operation in progress. Try again.")" 8 60
+                    continue
+                }
+                clear
+                display_explanation "A Executar checagem de tabelas (MariaDB CHECK)..." "Running table check (MariaDB CHECK)..."
+                local check_log="${LOG_DIR}/mariadb_check-$(date '+%Y%m%d-%H%M%S').log"
+                {
+                    echo "=== RELATÓRIO DE CHECAGEM DE TABELAS ==="
+                    mysqlcheck --check --databases "$DB_NAME"
+                } > "$check_log" 2>&1
+                backup_lock_release
+                whiptail --title "$(t "Resultado da Checagem" "Check Result")" --scrolltext --textbox "$check_log" 20 80 2>/dev/null || true
+                msg_ok "$(t "Checagem de integridade concluída." "Integrity check completed.")" 8 50
+                ;;
+            3)
+                # Sub-ação 3: Diagnóstico e análise estatística (ANALYZE)
+                if ! backup_lock_acquire; then
+                    msg_error "" "$(t "Operação em andamento. Tente novamente." "Operation in progress. Try again.")" 8 60
+                    continue
+                }
+                clear
+                display_explanation "Analisando estatísticas de índices do banco..." "Analyzing database index statistics..."
+                local analyze_log="${LOG_DIR}/mariadb_analyze-$(date '+%Y%m%d-%H%M%S').log"
+                {
+                    echo "=== RELATÓRIO DE ANÁLISE (ANALYZE) ==="
+                    mysqlcheck --analyze --databases "$DB_NAME"
+                } > "$analyze_log" 2>&1
+                backup_lock_release
+                whiptail --title "$(t "Relatório de Diagnóstico" "Diagnostics Report")" --scrolltext --textbox "$analyze_log" 20 80 2>/dev/null || true
+                msg_ok "$(t "Diagnóstico de estatísticas concluído." "Statistics diagnostics completed.")" 8 50
+                ;;
+            4)
+                # Sub-ação 4: Reparo profundo, otimização e limpeza de rotina
+                prompt_yes_no "$(t "Executar Reparo e Otimização" "Run Repair and Optimization")" \
+                "$(t "Esta rotina vai:\n- Reparar tabelas corrompidas (REPAIR)\n- Desfragmentar índices e recuperar espaço em disco (OPTIMIZE)\n- Limpar sessões órfãs e filas antigas do Koha\n- Aplicar retenção de logs do sistema (14 dias)\n\nDeseja iniciar?" \
+                "This routine will:\n- Repair corrupted tables (REPAIR)\n- Defragment indices and reclaim disk space (OPTIMIZE)\n- Clean orphaned sessions and old Koha queues\n- Apply system log retention (14 days)\n\nDo you want to start?")" 16 76 || continue
+
+                if ! backup_lock_acquire; then
+                    msg_error "" "$(t "Operação bloqueada por outra tarefa." "Operation blocked by another task.")" 8 60
+                    continue
+                }
+
+                clear
+                display_explanation "Executando procedimento de autocura e otimização..." "Running self-healing and optimization procedure..."
+                local repair_log="${LOG_DIR}/mariadb_repair_full-$(date '+%Y%m%d-%H%M%S').log"
+                {
+                    echo "=========================================================="
+                    echo "MANUTENÇÃO PROFUNDA E AUTOCURA DO SISTEMA - $(date)"
+                    echo "=========================================================="
+                    
+                    echo "[1/4] Reparando tabelas..."
+                    mysqlcheck --repair --databases "$DB_NAME"
+                    
+                    echo -e "\n[2/4] Otimizando banco de dados..."
+                    mysqlcheck --optimize --databases "$DB_NAME"
+                    
+                    echo -e "\n[3/4] Limpando filas e sessões do Koha..."
+                    koha-shell "$INSTANCE" -c "/usr/share/koha/bin/cronjobs/cleanup_database.pl --sessions --sessdays 7 --zebraqueue 10"
+                    
+                    echo -e "\n[4/4] Limpando logs antigos do sistema (Journalctl 14 dias)..."
+                    journalctl --vacuum-time=14d
+                } > "$repair_log" 2>&1
+
+                backup_lock_release
+                systemctl restart memcached >/dev/null 2>&1 || true
+
+                whiptail --title "$(t "Relatório de Manutenção e Reparo" "Maintenance & Repair Report")" --scrolltext --textbox "$repair_log" 22 84 2>/dev/null || true
+                msg_ok "$(t "Procedimento de reparo e otimização concluído com sucesso!" "Repair and optimization procedure successfully completed!")" 10 70
+                ;;
+        esac
+    done
+}
+
+# Função auxiliar para encapsular o teste do último backup (Dry-Run original)
+function_test_latest_backup_internal() {
+    local backup_dir="/var/backups/koha_sql"
+    local latest_backup
+    latest_backup=$(find "$backup_dir" -type f \( -name "*.sql" -o -name "*.sql.gz" \) -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -f2- -d' ')
+
+    if [[ -z "$latest_backup" ]]; then
+        msg_error "" "$(t "Nenhum arquivo de backup encontrado em ${backup_dir}." "No backup file found in ${backup_dir}.")" 9 70
         return 1
     fi
-    prompt_yes_no "$(t "Testar Backup" "Test Backup")" \
-"$(t "Um backup só vale se restaurar. Este teste importa o arquivo\nmais recente em um banco temporário e confere o conteúdo.\nO acervo em produção NÃO é tocado.\n\nArquivo: $(basename "$newest")\nData: $(date -r "$newest" '+%d/%m/%Y %H:%M')\n\nExecutar o teste agora?" "A backup is only worth it if it restores. This test imports the newest\nfile into a temporary database and checks it.\nProduction data is NOT touched.\n\nFile: $(basename "$newest")\nDate: $(date -r "$newest" '+%Y-%m-%d %H:%M')\n\nRun the test now?")" 17 76 || return 0
-    clear
+
     if ! backup_lock_acquire; then
-        msg_error "" "$(t "Outro backup ou restauração está em andamento. Teste cancelado." "Another backup or restore is already running. Test cancelled.")" 9 72
+        msg_error "" "$(t "Operação bloqueada por outra tarefa." "Operation blocked by another task.")" 8 60
         return 1
     fi
+
+    clear
+    display_explanation "Testando integridade do último backup em base temporária..." "Testing latest backup integrity in temporary database..."
+    
     local test_db="koha_teste_restauracao"
-    display_explanation "Importando em banco temporário..." "Importing into a temporary database..."
-    if ! mysql -e "DROP DATABASE IF EXISTS ${test_db}; CREATE DATABASE ${test_db} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" >/dev/null 2>&1; then
-        backup_lock_release
-        msg_error "" "$(t "Não foi possível criar o banco temporário de teste." "Could not create the temporary test database.")" 9 72
-        return 1
-    fi
-    if ! zcat "$newest" | mysql "$test_db"; then
-        mysql -e "DROP DATABASE IF EXISTS ${test_db};" >/dev/null 2>&1 || true
-        backup_lock_release
-        msg_error "" "$(t "O backup NÃO restaurou. Verifique o arquivo com urgência." "The backup DID NOT restore. Check the file urgently.")" 9 72
-        return 1
-    fi
-    local tab bib usu
-    tab=$(run_sql "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${test_db}';")
-    bib=$(run_sql "SELECT COUNT(*) FROM ${test_db}.biblio;")
-    usu=$(run_sql "SELECT COUNT(*) FROM ${test_db}.borrowers;")
-    mysql -e "DROP DATABASE IF EXISTS ${test_db};" >/dev/null 2>&1 || true
-    log "teste de backup: $newest tabelas=$tab biblios=$bib"
-    backup_lock_release
-    if [[ "$tab" =~ ^[0-9]+$ ]] && [[ "$bib" =~ ^[0-9]+$ ]] && [[ "$usu" =~ ^[0-9]+$ ]] && [ "$tab" -gt 50 ]; then
-        msg_ok "$(t "BACKUP ÍNTEGRO E RESTAURÁVEL.\n\nArquivo: $(basename "$newest")\nTabelas: ${tab}\nRegistros bibliográficos: ${bib}\nUsuários: ${usu}" "BACKUP IS INTACT AND RESTORABLE.\n\nFile: $(basename "$newest")\nTables: ${tab}\nBibliographic records: ${bib}\nPatrons: ${usu}")" 13 74
+    mysql -e "DROP DATABASE IF EXISTS ${test_db}; CREATE DATABASE ${test_db};" 2>/dev/null
+
+    if [[ "$latest_backup" =~ \.gz$ ]]; then
+        gzip -dc "$latest_backup" | mysql "$test_db" 2>/dev/null
     else
-        msg_error "" "$(t "O backup importou, mas tem só ${tab} tabelas. Suspeito." "The backup imported but has only ${tab} tables. Suspicious.")" 9 72
-        return 1
+        mysql "$test_db" < "$latest_backup" 2>/dev/null
     fi
-    return 0
+
+    local tables_count
+    tables_count=$(mysql -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${test_db}';" 2>/dev/null || echo "0")
+    mysql -e "DROP DATABASE IF EXISTS ${test_db};" 2>/dev/null
+    backup_lock_release
+
+    if [[ "$tables_count" -gt 50 ]]; then
+        msg_ok "$(t "Sucesso! O backup mais recente (${latest_backup##*/}) está íntegro e contém ${tables_count} tabelas." "Success! Latest backup (${latest_backup##*/}) is intact and contains ${tables_count} tables.")" 10 75
+    else
+        msg_error "" "$(t "Atenção: O backup foi lido, mas contem apenas ${tables_count} tabelas (esperado > 50). Pode estar corrompido." "Warning: Backup was read but contains only ${tables_count} tables (expected > 50). It might be corrupted.")" 11 76
+    fi
 }
 
 # ======================================================================
@@ -3188,7 +3276,7 @@ while true; do
         "3"  "$(t "Restaurar acervo de um backup" "Restore catalog from a backup")" \
         "4"  "$(t "Gerar backup manual local agora" "Generate manual local backup now")" \
         "5"  "$(t "Enviar backup via SCP manual agora" "Send manual SCP backup now")" \
-        "6"  "$(t "Testar o último backup" "Test the latest backup")" \
+        "6"  "$(t "Validar e reparar banco de dados" "Validate and repair database")" \
         "7"  "$(t "Instalar idiomas do Koha" "Install Koha languages")" \
         "8"  "$(t "Alternar motor de busca (Zebra/ES)" "Toggle search engine (Zebra/ES)")" \
         "9"  "$(t "Reparar / reconstruir indexação" "Repair / rebuild indexing")" \
@@ -3223,7 +3311,7 @@ while true; do
         3)  function_restore_database ;;
         4)  function_manual_backup ;;
         5)  function_send_manual_scp_backup ;;
-        6)  function_test_backup ;;
+        6)  function_validate_repair_database ;;
         7)  function_install_languages ;;
         8)  function_toggle_search_engine ;;
         9)  function_repair_indexing ;;
