@@ -2,7 +2,7 @@
   <a href="README.md">English</a> | <strong>Português (Brasil)</strong>
 </div>
 
-# 📚 Koha Easy Install - Suíte Avançada de Gestão (v3.0)
+# 📚 Koha Easy Install & Tools - Suíte Avançada de Gestão (v3.0)
 
 [![Koha ILS](https://img.shields.io/badge/Koha-ILS-2563eb?style=flat-square&logo=koha)](https://koha-community.org/)
 [![Ubuntu Supported](https://img.shields.io/badge/Ubuntu-22.04%20%7C%2024.04%20%7C%2026.04-E95420?style=flat-square&logo=ubuntu)](#)
