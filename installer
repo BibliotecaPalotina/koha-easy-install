@@ -42,7 +42,7 @@ REAL_HOME="$(getent passwd "$REAL_USER" 2>/dev/null | cut -d: -f6)"
 # ======================================================================
 case "${LANG:-}${LC_ALL:-}" in
     pt*|*pt_BR*) SYS_LANG="pt" ;;
-    *)           SYS_LANG="en" ;;
+    *)          SYS_LANG="en" ;;
 esac
 
 t() { if [ "$SYS_LANG" = "pt" ]; then printf '%b' "$1"; else printf '%b' "$2"; fi; }
@@ -94,9 +94,8 @@ log() { printf '%s | %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$RUN_LOG" 2>/
 log "===== painel iniciado (v$PANEL_VERSION, usuario=$REAL_USER) ====="
 
 # ======================================================================
-# DEPENDÊNCIAS MÍNIMAS DO PRÓPRIO PAINEL / PANEL DEPENDENCIES
+# DEPENDÊNCIAS MÍNIMAS DO PRÓPRIO PAINEL (COM DIALOG)
 # ======================================================================
-# Evita corrida com apt-daily durante a instalação das dependências do painel.
 systemctl stop apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1 || true
 if command -v fuser >/dev/null 2>&1; then
     initial_wait=0
@@ -112,7 +111,7 @@ if command -v fuser >/dev/null 2>&1; then
         fi
     done
 fi
-for dep in whiptail curl python3 unzip psmisc; do
+for dep in dialog curl python3 unzip psmisc; do
     if ! command -v "$dep" >/dev/null 2>&1; then
         echo "$(t "Instalando dependência do painel: $dep" "Installing panel dependency: $dep")"
         DEBIAN_FRONTEND=noninteractive apt-get install -y "$dep" >/dev/null 2>&1 || {
@@ -3465,105 +3464,3 @@ sub_menu_public_web() {
         esac
     done
 }
-
-sub_menu_maintenance() {
-    while true; do
-        local choice
-        choice=$(whiptail --title "$(t "Central de Manutenção, Reparo e Segurança" "Maintenance, Repair and Security Center")" \
-            --cancel-button "$(t "Voltar" "Back")" \
-            --menu "$(t "Escolha uma ação:" "Choose an action:")" 24 82 15 \
-            "1"  "$(t "Validar e reparar banco de dados" "Validate and repair database")" \
-            "2"  "$(t "Dimensionar o servidor (memória RAM)" "Server sizing (RAM memory)")" \
-            "3"  "$(t "Tarefas agendadas (horários dos crons)" "Scheduled tasks (cron times)")" \
-            "4"  "$(t "Configurar e-mails e avisos SMTP" "Set up SMTP emails and notices")" \
-            "5"  "$(t "Criar usuário superbibliotecário" "Create a super librarian user")" \
-            "6"  "$(t "Ativar interoperabilidade SIP2 e Z39.50" "Enable SIP2 and Z39.50 interoperability")" \
-            "7"  "$(t "Ajustar relógio e fuso horário" "Adjust clock and timezone")" \
-            "8"  "$(t "Central de segurança (Firewall e Senhas)" "Security center (Firewall and Passwords)")" \
-            "9"  "$(t "Validar saúde do sistema completo" "Full system health validation")" \
-            "10" "$(t "Ver status detalhado dos serviços" "View detailed services status")" \
-            "11" "$(t "Explorador de Arquivos (Midnight Commander)" "File Explorer (Midnight Commander)")" \
-            "12" "$(t "Navegador Web de Terminal (Links)" "Terminal Web Browser (Links)")" \
-            "13" "$(t "Monitoramento de Recursos (Htop/Nethogs)" "Resource Monitoring (Htop/Nethogs)")" \
-            "14" "$(t "Auditoria de Logs em Tempo Real" "Real-Time Log Auditing")" \
-            "15" "$(t "Reiniciar o servidor com segurança" "Safely reboot the server")" \
-            3>&1 1>&2 2>&3)
-        [[ $? -ne 0 ]] && break
-        case "$choice" in
-            1)  function_validate_repair_database ;;
-            2)  function_size_server ;;
-            3)  function_manage_crons ;;
-            4)  function_configure_emails ;;
-            5)  function_create_superlibrarian ;;
-            6)  function_interoperability ;;
-            7)  function_configure_clock ;;
-            8)  function_security_center ;;
-            9)  function_validate_system ;;
-            10) function_detailed_status ;;
-            11) function_run_mc ;;
-            12) function_run_links ;;
-            13) function_run_monitor ;;
-            14) function_view_logs ;;
-            15) function_reboot_server ;;
-        esac
-    done
-}
-
-sub_menu_updates() {
-    while true; do
-        local choice
-        choice=$(whiptail --title "$(t "Central de Atualizações" "Updates Center")" \
-            --cancel-button "$(t "Voltar" "Back")" \
-            --menu "$(t "Escolha uma ação:" "Choose an action:")" 14 76 2 \
-            "1" "$(t "Atualizar sistema Koha e banco de dados" "Update Koha system and database")" \
-            "2" "$(t "Atualizar este painel de controle" "Update this control panel")" \
-            3>&1 1>&2 2>&3)
-        [[ $? -ne 0 ]] && break
-        case "$choice" in
-            1) function_update_system ;;
-            2) function_autoupdate ;;
-        esac
-    done
-}
-
-# ======================================================================
-# MENU PRINCIPAL (COMPATIBILIDADE NATIVA WHIPTAIL)
-# ======================================================================
-while true; do
-    restore_apt_timers
-    export NCURSES_NO_UTF8_ACS=1
-    
-    OPTION=$(whiptail --title "Koha Easy Install & Tools v${PANEL_VERSION} - $(t "Painel de Controle" "Control Dashboard")" \
-        --cancel-button "$(t "Sair" "Exit")" \
-        --menu "$(t "Escolha uma área de atuação:" "Choose an action area:")" 22 78 11 \
-        "1"  "$(t "Instalação do servidor Koha" "Install Koha server")" \
-        "2"  "$(t "Ver credenciais de primeiro acesso" "View access credentials")" \
-        "3"  "$(t "Restauração de banco de dados" "Restore catalog database")" \
-        "4"  "$(t "Central de backups e envio remoto" "Backups & remote transfer center")" \
-        "5"  "$(t "Motor de busca e indexação (Zebra/ES)" "Search engine & indexing settings")" \
-        "6"  "$(t "Publicação do sistema na internet" "System web publication")" \
-        "7"  "$(t "Central de manutenção e segurança" "Maintenance & security center")" \
-        "8"  "$(t "Configurações de idiomas" "Language pack settings")" \
-        "9"  "$(t "Central de atualizações" "System updates center")" \
-        "10" "$(t "Sobre o programa" "About this program")" \
-        "11" "$(t "Sair" "Exit")" \
-        3>&1 1>&2 2>&3) || { clear; exit 0; }
-
-    [ -z "$OPTION" ] && { clear; exit 0; }
-
-    case "$OPTION" in
-        1)  function_install_koha ;;
-        2)  function_view_credentials ;;
-        3)  function_restore_database ;;
-        4)  sub_menu_backups ;;
-        5)  sub_menu_search_engine ;;
-        6)  sub_menu_public_web ;;
-        7)  sub_menu_maintenance ;;
-        8)  function_install_languages ;;
-        9)  sub_menu_updates ;;
-        10) function_about ;;
-        11) clear; exit 0 ;;
-    esac
-    
-    clear
-done
