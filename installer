@@ -21,15 +21,22 @@ UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-insta
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
     echo ""
     echo "+---------------------------------------------------------------+"
-    echo "| Privilegios de administrador (root) necessarios.              |"
+    echo "| Privilégios de administrador (root) necessários.              |"
     echo "| Root privileges required. Please enter your password:         |"
     echo "+---------------------------------------------------------------+"
     echo ""
+
     if [ -f "$0" ]; then
+        # Execução tradicional: o arquivo existe no disco
         exec sudo -E bash "$0" "$@"
+    else
+        # Execução via pipe (ex: curl ... | bash) onde $0 não é um arquivo
+        echo "ERRO/ERROR: Para executar diretamente via curl/web, use o sudo no início:"
+        echo ""
+        echo "  curl -fsSL \"$UPDATE_URL\" | sudo bash"
+        echo ""
+        exit 1
     fi
-    echo "ERRO/ERROR: rode como root / run as root: sudo bash $0"
-    exit 1
 fi
 
 REAL_USER="${SUDO_USER:-${USER:-root}}"
