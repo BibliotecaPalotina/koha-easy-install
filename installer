@@ -3217,23 +3217,13 @@ SQLEOF
 }
 
 # ======================================================================
-# 16. CLOUDFLARE TUNNEL / CLOUDFLARE TUNNEL
+# 16. CLOUDFLARE TUNNEL / CLOUDFLARE TUNNEL (modo local automatizado)
 # ======================================================================
 function_configure_cloudflare() {
     msg_info "$(t "Passo 1: Domínio e Nameservers" "Step 1: Domain & Nameservers")" \
-"$(t "COMO ASSOCIAR SEU DOMÍNIO À CLOUDFLARE:\n\n1. OBTENHA UM DOMÍNIO GRATUITO:\n   - Digital Plat (rápido/automático): https://domain.digitalplat.org/\n   - nic.eu.org (manual, demora de 14 a 45 dias): https://nic.eu.org\n   - Ou solicite à TI um CNAME oficial (ex: catalogo.palotina.pr.gov.br)\n\n2. ADICIONE NA CLOUDFLARE (dash.cloudflare.com):\n   - Clique em 'Add a site/domain', digite o domínio e selecione Free.\n   - A Cloudflare exibirá DOIS Nameservers (ex: vera.ns.cloudflare.com\n     e rob.ns.cloudflare.com). Copie os dois.\n\n3. ATUALIZE ONDE REGISTROU O DOMÍNIO:\n   - No Digital Plat ou nic.eu.org, vá em DNS / Nameservers.\n   - Substitua os servidores existentes pelos DOIS da Cloudflare.\n   - Na Cloudflare, clique em 'Check nameservers' até o status ficar Ativo." \
-"HOW TO LINK YOUR DOMAIN TO CLOUDFLARE:\n\n1. GET A FREE DOMAIN:\n   - Digital Plat (fast/automated): https://domain.digitalplat.org/\n   - nic.eu.org (manual, takes 14 to 45 days): https://nic.eu.org\n   - Or ask local IT for an official CNAME (e.g. catalog.city.gov.br)\n\n2. ADD TO CLOUDFLARE (dash.cloudflare.com):\n   - Click 'Add a site/domain', type your domain and select Free.\n   - Cloudflare provides TWO Nameservers (e.g. vera.ns.cloudflare.com\n     and rob.ns.cloudflare.com). Copy both.\n\n3. UPDATE AT YOUR DOMAIN REGISTRAR:\n   - In Digital Plat or nic.eu.org, go to DNS / Nameservers settings.\n   - Replace existing servers with the TWO from Cloudflare.\n   - In Cloudflare, click 'Check nameservers' until status is Active.")" 22 78
-    msg_info "Cloudflare Tunnel" \
-"$(t "Publica o Koha na internet sem abrir portas no roteador.\n\n1. Acesse: one.dash.cloudflare.com (Zero Trust)\n2. Networks > Tunnels > Create a tunnel > Escolha 'Debian 64-bit (amd64/arm64 quando disponível)'\n\n3. ATENÇÃO NA TELA DA CLOUDFLARE:\n   - Ignore o primeiro bloco de comandos (instalação).\n   - Copie o comando do 2º bloco ('sudo cloudflared service install...')\n     ou do 3º bloco ('cloudflared tunnel run...').\n\nNa próxima tela, cole o comando copiado (ou apenas a chave 'ey...')." \
-"Publishes Koha on the internet without opening router ports.\n\n1. Go to: one.dash.cloudflare.com (Zero Trust)\n2. Networks > Tunnels > Create a tunnel > Choose 'Debian 64-bit'\n\n3. ATTENTION ON CLOUDFLARE SCREEN:\n   - Ignore the 1st command block (installation commands).\n   - Copy the command from the 2nd block ('sudo cloudflared service install...')\n     or the 3rd block ('cloudflared tunnel run...').\n\nOn the next screen, paste the copied command (or just the 'ey...' token).")" 18 78
-    local input token
-    input=$(dialog --title "Token Cloudflare" --inputbox "$(t "Cole aqui:" "Paste here:")" 10 76 3>&1 1>&2 2>&3) || return 0
-    [ -z "$input" ] && return 0
-    token=$(printf '%s' "$input" | grep -oE 'ey[A-Za-z0-9_-]{40,}' | head -n1)
-    if [ -z "$token" ]; then
-        msg_error "" "$(t "Não encontrei um token válido (deve começar com 'ey')." "No valid token found (it must start with 'ey').")" 9 70
-        return 0
-    fi
+"$(t "COMO ASSOCIAR SEU DOMÍNIO À CLOUDFLARE:\n\n1. OBTENHA UM DOMÍNIO GRATUITO:\n   - Digital Plat (rápido/automático): https://domain.digitalplat.org/\n   - nic.eu.org (manual, demora de 14 a 45 dias): https://nic.eu.org\n   - Ou solicite à TI um CNAME oficial (ex: catalogo.palotina.pr.gov.br)\n\n2. ADICIONE NA CLOUDFLARE (dash.cloudflare.com):\n   - Clique em 'Add a site/domain', digite o domínio e selecione Free.\n   - A Cloudflare exibirá DOIS Nameservers. Copie os dois.\n\n3. ATUALIZE ONDE REGISTROU O DOMÍNIO:\n   - No Digital Plat ou nic.eu.org, vá em DNS / Nameservers.\n   - Substitua os servidores existentes pelos DOIS da Cloudflare.\n   - Na Cloudflare, clique em 'Check nameservers' até o status ficar Ativo.\n\nEsta parte não dá pra automatizar (depende do seu registrador),\nmas o resto do processo a partir daqui é todo automático." \
+"HOW TO LINK YOUR DOMAIN TO CLOUDFLARE:\n\n1. GET A FREE DOMAIN:\n   - Digital Plat (fast/automated): https://domain.digitalplat.org/\n   - nic.eu.org (manual, takes 14 to 45 days): https://nic.eu.org\n   - Or ask local IT for an official CNAME (e.g. catalog.city.gov.br)\n\n2. ADD TO CLOUDFLARE (dash.cloudflare.com):\n   - Click 'Add a site/domain', type your domain and select Free.\n   - Cloudflare provides TWO Nameservers. Copy both.\n\n3. UPDATE AT YOUR DOMAIN REGISTRAR:\n   - Replace existing servers with the TWO from Cloudflare.\n   - In Cloudflare, click 'Check nameservers' until status is Active.\n\nThis part can't be automated (depends on your registrar), but\neverything from here on is fully automatic.")" 22 78
+
     clear
     display_explanation "Instalando o cloudflared..." "Installing cloudflared..."
     if ! command -v cloudflared >/dev/null 2>&1; then
@@ -3257,18 +3247,87 @@ function_configure_cloudflare() {
         fi
         restore_apt_timers
     fi
-    cloudflared service uninstall >/dev/null 2>&1
-    if cloudflared service install "$token"; then
-        systemctl enable --now cloudflared >/dev/null 2>&1
-        sleep 3
-        if systemctl is-active --quiet cloudflared; then
-            msg_ok "$(t "TÚNEL ATIVO! PASSO FINAL NO ZERO TRUST:\n\n1. No túnel, vá em 'Public Hostnames' > 'Add a public hostname'.\n\n   IMPORTANTE: Use sempre 'localhost' (ou 127.0.0.1).\n   NUNCA use o IP da rede local (ex: 192.168.x.x), pois se o IP do\n   servidor mudar via DHCP, o túnel vai quebrar!\n\n   PARA O CATÁLOGO PÚBLICO (OPAC):\n   - Subdomain: catalogo   | Domain: selecione o seu domínio\n   - Type: HTTP            | URL: localhost:80 (ou 127.0.0.1:80)\n\n   PARA A ADMINISTRAÇÃO (STAFF):\n   - Subdomain: admin      | Domain: selecione o seu domínio\n   - Type: HTTP            | URL: localhost:8080 (ou 127.0.0.1:8080)\n\n2. GOOGLE SEARCH CONSOLE:\n   - Adicione via 'Prefixo do URL': https://catalogo.seudominio\n   - Pegue a 'Tag HTML' (<meta ...>) e cole em:\n     Koha Staff > Administração > Preferências > opacheader\n   - Envie o sitemap: sitemap.xml" \
-"TUNNEL ACTIVE! FINAL STEP IN ZERO TRUST:\n\n1. In your tunnel, go to 'Public Hostnames' > 'Add a public hostname'.\n\n   IMPORTANT: Always use 'localhost' (or 127.0.0.1).\n   NEVER use local LAN IP (e.g. 192.168.x.x). If DHCP changes the\n   server IP, the tunnel will immediately break!\n\n   FOR OPAC (PUBLIC CATALOG):\n   - Subdomain: catalog    | Domain: select your domain\n   - Type: HTTP            | URL: localhost:80 (or 127.0.0.1:80)\n\n   FOR STAFF (ADMIN):\n   - Subdomain: admin      | Domain: select your domain\n   - Type: HTTP            | URL: localhost:8080 (or 127.0.0.1:8080)\n\n2. GOOGLE SEARCH CONSOLE:\n   - Add property via 'URL prefix': https://catalog.yourdomain\n   - Copy 'HTML Tag' (<meta ...>) and paste into:\n     Koha Staff > Administration > Preferences > opacheader\n   - Submit sitemap: sitemap.xml")" 26 80
-        else
-            msg_error "" "$(t "O serviço não ficou ativo. Veja: journalctl -u cloudflared -n 30" "The service is not active. Check: journalctl -u cloudflared -n 30")" 9 74
+
+    # ------------------------------------------------------------------
+    # Autorização (uma vez só) - clica um link, autoriza, pronto.
+    # Não precisa de token, não precisa mexer em porta nenhuma.
+    # ------------------------------------------------------------------
+    if [ ! -f "$HOME/.cloudflared/cert.pem" ] && [ ! -f "/root/.cloudflared/cert.pem" ]; then
+        msg_info "Cloudflare Tunnel" \
+"$(t "AUTORIZAÇÃO (só na primeira vez):\n\nVai aparecer um link abaixo. Copie e abra em qualquer navegador,\nescolha o domínio que você já ativou na Cloudflare e clique Authorize.\n\nNão precisa colar código nenhum de volta - o servidor detecta\nsozinho quando você autorizar." "AUTHORIZATION (first time only):\n\nA link will appear below. Copy it into any browser, select the\ndomain you already activated in Cloudflare, and click Authorize.\n\nNo need to paste anything back - the server detects it automatically.")" 12 76
+        clear
+        cloudflared tunnel login
+        echo ""
+    fi
+
+    if [ ! -f "$HOME/.cloudflared/cert.pem" ] && [ ! -f "/root/.cloudflared/cert.pem" ]; then
+        msg_error "" "$(t "Autorização não concluída. Tente novamente." "Authorization not completed. Try again.")" 8 66
+        return 1
+    fi
+
+    # ------------------------------------------------------------------
+    # Nome do túnel (reaproveita se já existir de uma configuração anterior)
+    # ------------------------------------------------------------------
+    local tunnel_name="koha-library"
+    if ! cloudflared tunnel list 2>/dev/null | grep -q "$tunnel_name"; then
+        display_explanation "Criando o túnel '$tunnel_name'..." "Creating tunnel '$tunnel_name'..."
+        if ! cloudflared tunnel create "$tunnel_name"; then
+            msg_error "" "$(t "Falha ao criar o túnel." "Failed to create the tunnel.")" 8 66
+            return 1
         fi
+    fi
+
+    local tunnel_id
+    tunnel_id=$(cloudflared tunnel list 2>/dev/null | awk -v n="$tunnel_name" '$0 ~ n {print $1; exit}')
+    if [ -z "$tunnel_id" ]; then
+        msg_error "" "$(t "Não consegui identificar o ID do túnel criado." "Could not identify the created tunnel's ID.")" 8 66
+        return 1
+    fi
+
+    local cred_file
+    cred_file=$(find "$HOME/.cloudflared" /root/.cloudflared -name "${tunnel_id}.json" 2>/dev/null | head -n1)
+
+    # ------------------------------------------------------------------
+    # Pergunta os subdomínios (com padrão já sugerido)
+    # ------------------------------------------------------------------
+    local dominio opac_sub staff_sub
+    dominio=$(dialog --title "$(t "Seu Domínio" "Your Domain")" --inputbox "$(t "Digite o domínio que você já ativou na Cloudflare (ex: bibliotecapalotina.org):" "Enter the domain you already activated in Cloudflare (e.g. bibliotecapalotina.org):")" 10 74 3>&1 1>&2 2>&3) || return 0
+    [ -z "$dominio" ] && return 0
+
+    opac_sub=$(dialog --title "OPAC" --inputbox "$(t "Subdomínio do Catálogo Público:" "Public Catalog subdomain:")" 10 60 "catalogo" 3>&1 1>&2 2>&3) || return 0
+    staff_sub=$(dialog --title "Staff" --inputbox "$(t "Subdomínio da Administração:" "Administration subdomain:")" 10 60 "admin" 3>&1 1>&2 2>&3) || return 0
+
+    # ------------------------------------------------------------------
+    # Cria o config.yml local com as duas rotas
+    # ------------------------------------------------------------------
+    mkdir -p /etc/cloudflared
+    cat > /etc/cloudflared/config.yml <<EOF
+tunnel: ${tunnel_id}
+credentials-file: ${cred_file}
+
+ingress:
+  - hostname: ${opac_sub}.${dominio}
+    service: http://localhost:80
+  - hostname: ${staff_sub}.${dominio}
+    service: http://localhost:8080
+  - service: http_status:404
+EOF
+
+    display_explanation "Registrando os subdomínios no DNS..." "Registering subdomains in DNS..."
+    cloudflared tunnel route dns "$tunnel_name" "${opac_sub}.${dominio}" || true
+    cloudflared tunnel route dns "$tunnel_name" "${staff_sub}.${dominio}" || true
+
+    display_explanation "Instalando o túnel como serviço..." "Installing tunnel as a service..."
+    cloudflared service uninstall >/dev/null 2>&1 || true
+    cp /etc/cloudflared/config.yml /etc/cloudflared/config.yml.bak 2>/dev/null || true
+    cloudflared --config /etc/cloudflared/config.yml service install
+    systemctl enable --now cloudflared >/dev/null 2>&1
+    sleep 3
+
+    if systemctl is-active --quiet cloudflared; then
+        msg_ok "$(t "TÚNEL ATIVO E ROTAS CRIADAS AUTOMATICAMENTE!\n\nCatálogo (OPAC): https://${opac_sub}.${dominio}\nAdministração:   https://${staff_sub}.${dominio}\n\nPode levar alguns minutos até o DNS propagar." "TUNNEL ACTIVE AND ROUTES CREATED AUTOMATICALLY!\n\nCatalog (OPAC): https://${opac_sub}.${dominio}\nAdministration: https://${staff_sub}.${dominio}\n\nMay take a few minutes for DNS to propagate.")" 12 78
     else
-        msg_error "" "$(t "Falha ao instalar o serviço do túnel." "Failed to install the tunnel service.")" 8 66
+        msg_error "" "$(t "O serviço não ficou ativo. Veja: journalctl -u cloudflared -n 30" "The service is not active. Check: journalctl -u cloudflared -n 30")" 9 74
     fi
 }
 
@@ -3732,13 +3791,46 @@ function_about() {
 # ======================================================================
 # 31. TAILSCALE FUNNEL / TAILSCALE FUNNEL CONFIGURATION
 # ======================================================================
+
+# Função auxiliar: descobre o hostname e monta/mostra os links ativos
+mostrar_links_tailscale() {
+    local ts_hostname opac_ativo=false staff_ativo=false funnel_status texto
+
+    ts_hostname=$(tailscale status --json 2>/dev/null | grep -oP '"DNSName":\s*"\K[^"]+' | head -n 1 | sed 's/\.$//')
+
+    if [ -z "$ts_hostname" ]; then
+        msg_error "" "$(t "Não foi possível detectar o endereço do Tailscale. O servidor está autenticado?" "Could not detect the Tailscale address. Is the server authenticated?")" 9 70
+        return 1
+    fi
+
+    funnel_status=$(tailscale funnel status 2>&1)
+    echo "$funnel_status" | grep -q '127\.0\.0\.1:80\b' && opac_ativo=true
+    echo "$funnel_status" | grep -q '127\.0\.0\.1:8080\b' && staff_ativo=true
+
+    texto=$(t "SEU DOMÍNIO TAILSCALE:\nhttps://${ts_hostname}\n\n" "YOUR TAILSCALE DOMAIN:\nhttps://${ts_hostname}\n\n")
+
+    if [ "$opac_ativo" = true ]; then
+        texto+=$(t "✅ Catálogo (OPAC):  https://${ts_hostname}\n" "✅ Catalog (OPAC):   https://${ts_hostname}\n")
+    else
+        texto+=$(t "⬜ Catálogo (OPAC):  não publicado\n" "⬜ Catalog (OPAC):   not published\n")
+    fi
+
+    if [ "$staff_ativo" = true ]; then
+        texto+=$(t "✅ Administração:    https://${ts_hostname}:8443\n" "✅ Administration:   https://${ts_hostname}:8443\n")
+    else
+        texto+=$(t "⬜ Administração:    não publicada\n" "⬜ Administration:   not published\n")
+    fi
+
+    dialog --title "$(t "Links Publicados" "Published Links")" --msgbox "$texto" 14 76
+}
+
 function_configure_tailscale() {
     msg_info "Tailscale Funnel" \
-        $(t "O Tailscale Funnel publica o Koha na internet instantaneamente\nfornecendo um domínio HTTPS automático, sem precisar de Cloudflare.\n\nRequisitos:\n1. Criar uma conta no Tailscale (tailscale.com)\n2. Ativar o 'Funnel' no painel admin (Access Controls)\n\nVamos verificar a conexão do servidor agora." "Tailscale Funnel publishes Koha to the internet instantly\nproviding an automatic HTTPS domain, without needing Cloudflare.\n\nRequirements:\n1. Create a Tailscale account (tailscale.com)\n2. Enable 'Funnel' in the admin panel (Access Controls)\n\nWe will check the server connection now.") 18 76
-    
+        "$(t "O Tailscale Funnel publica o Koha na internet automaticamente,\ncom domínio e HTTPS prontos, sem precisar de Cloudflare nem domínio próprio." "Tailscale Funnel publishes Koha to the internet automatically,\nwith domain and HTTPS ready, no Cloudflare or custom domain needed.")" 12 76
+
     clear
     display_explanation "Verificando instalação do Tailscale..." "Checking Tailscale installation..."
-    
+
     if ! command -v tailscale >/dev/null 2>&1; then
         display_explanation "Instalando o Tailscale via curl..." "Installing Tailscale via curl..."
         if ! curl -fsSL https://tailscale.com/install.sh | sh; then
@@ -3759,45 +3851,77 @@ function_configure_tailscale() {
         return 1
     fi
 
-    # Submenu interativo para o usuário escolher o que publicar com um clique
+    # Mostra o subdomínio JÁ na tela assim que autentica, antes mesmo de
+    # publicar qualquer coisa - a pessoa ve para onde vai desde o inicio.
+    local ts_hostname
+    ts_hostname=$(tailscale status --json 2>/dev/null | grep -oP '"DNSName":\s*"\K[^"]+' | head -n 1 | sed 's/\.$//')
+    if [ -n "$ts_hostname" ]; then
+        msg_ok "$(t "Servidor conectado!\n\nSeu domínio será:\nhttps://${ts_hostname}" "Server connected!\n\nYour domain will be:\nhttps://${ts_hostname}")" 11 70
+    fi
+
     while true; do
         local choice
         choice=$(dialog --title "$(t "Gerenciador do Tailscale Funnel" "Tailscale Funnel Manager")" \
             --cancel-button "$(t "Voltar" "Back")" \
-            --menu "$(t "Servidor conectado! O que você deseja publicar na internet?" "Server connected! What do you want to publish on the internet?")" 16 76 3 \
-            "1" "$(t "Publicar Catálogo Público (OPAC - Porta 80)" "Publish Public Catalog (OPAC - Port 80)")" \
-            "2" "$(t "Publicar Administração (Staff - Porta 8080)" "Publish Administration (Staff - Port 8080)")" \
-            "3" "$(t "Desativar/Parar todos os Funnels ativos" "Stop all active Funnels")" \
+            --menu "$(t "O que deseja fazer?" "What do you want to do?")" 18 76 5 \
+            "1" "$(t "★ Publicar tudo automaticamente (OPAC + Staff)" "★ Publish everything automatically (OPAC + Staff)")" \
+            "2" "$(t "Publicar só o Catálogo Público (OPAC)" "Publish only Public Catalog (OPAC)")" \
+            "3" "$(t "Publicar só a Administração (Staff)" "Publish only Administration (Staff)")" \
+            "4" "$(t "Ver os links publicados agora" "View currently published links")" \
+            "5" "$(t "Desativar/Parar todos os Funnels ativos" "Stop all active Funnels")" \
             3>&1 1>&2 2>&3)
         [[ $? -ne 0 ]] && break
 
         case "$choice" in
             1)
                 clear
+                display_explanation "Publicando Catálogo (OPAC, porta 80)..." "Publishing Catalog (OPAC, port 80)..."
+                local opac_ok=false staff_ok=false
+                tailscale funnel --bg 80 >/dev/null 2>&1 && opac_ok=true
+
+                if prompt_yes_no \
+                    "$(t "Publicar Staff também?" "Publish Staff too?")" \
+                    "$(t "ATENÇÃO: isso publica a administração do Koha na internet.\nSó continue se realmente precisa acessá-la remotamente.\n\nPublicar?" "WARNING: this publishes the Koha admin panel to the internet.\nOnly continue if you really need remote access to it.\n\nPublish?")" \
+                    12 74; then
+                    display_explanation "Publicando Administração (Staff, porta 8080)..." "Publishing Administration (Staff, port 8080)..."
+                    tailscale funnel --bg --https=8443 8080 >/dev/null 2>&1 && staff_ok=true
+                fi
+
+                if [ "$opac_ok" = true ]; then
+                    mostrar_links_tailscale
+                else
+                    msg_error "" "$(t "Falha ao publicar o OPAC. Verifique se o Funnel está habilitado no painel admin da sua conta Tailscale (Access Controls)." "Failed to publish OPAC. Check whether Funnel is enabled in your Tailscale admin panel (Access Controls).")" 12 76
+                fi
+                ;;
+            2)
+                clear
                 display_explanation "Ativando o Funnel para o Catálogo (Porta 80)..." "Enabling Funnel for Catalog (Port 80)..."
                 if tailscale funnel --bg 80; then
-                    msg_ok "$(t "Catálogo público publicado com sucesso via Tailscale Funnel!" "Public catalog successfully published via Tailscale Funnel!")" 9 70
+                    mostrar_links_tailscale
                 else
                     msg_error "" "$(t "Falha ao iniciar o Funnel na porta 80. Verifique se o recurso está ativado no painel admin da sua conta Tailscale." "Failed to start Funnel on port 80. Check if the feature is enabled in your Tailscale admin panel.")" 11 76
                 fi
                 ;;
-            2)
+            3)
                 if ! prompt_yes_no \
                     "$(t "Publicar Staff na internet" "Publish Staff to the Internet")" \
-                    "$(t "ATENÇÃO:\n\nIsso publica a interface administrativa do Koha pela internet.\n\nUse somente se você entende o risco e realmente precisa dessa exposição.\n\nContinuar?" \
-                        "WARNING:\n\nThis publishes the Koha staff administration interface to the Internet.\n\nOnly continue if you understand the risk and really need this exposure.\n\nContinue?")" \
+                    "$(t "ATENÇÃO:\n\nIsso publica a interface administrativa do Koha pela internet.\n\nUse somente se você entende o risco e realmente precisa dessa exposição.\n\nContinuar?" "WARNING:\n\nThis publishes the Koha staff administration interface to the Internet.\n\nOnly continue if you understand the risk and really need this exposure.\n\nContinue?")" \
                     15 78; then
                     continue
                 fi
                 clear
                 display_explanation "Ativando o Funnel para a Administração (Porta 8080)..." "Enabling Funnel for Administration (Port 8080)..."
-                if tailscale funnel --bg 8080; then
-                    msg_ok "$(t "Administração (Staff) publicada com sucesso via Tailscale Funnel!" "Administration (Staff) successfully published via Tailscale Funnel!")" 9 70
+                if tailscale funnel --bg --https=8443 8080; then
+                    mostrar_links_tailscale
                 else
                     msg_error "" "$(t "Falha ao iniciar o Funnel na porta 8080. Verifique se o recurso está ativado no painel admin." "Failed to start Funnel on port 8080. Check if the feature is enabled in the admin panel.")" 11 76
                 fi
                 ;;
-            3)
+            4)
+                clear
+                mostrar_links_tailscale
+                ;;
+            5)
                 clear
                 display_explanation "Desativando os Funnels ativos..." "Stopping active Funnels..."
                 tailscale funnel off >/dev/null 2>&1 || true
