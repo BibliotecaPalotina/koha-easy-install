@@ -1,19 +1,29 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # ======================================================================
-# KOHA EASY INSTALL & TOOLS - ADVANCED MANAGEMENT SUITE
-# Suíte de implantação, manutenção, tuning e backups do Koha ILS.
-# Deployment, maintenance, tuning and backup suite for Koha ILS.
-# ----------------------------------------------------------------------
-# Arquivo único e autossuficiente. Atualização pela opção "Atualizar
-# este painel" (baixa, valida a sintaxe e só então substitui).
-# Single, self-sufficient file. Updates via "Update this panel" option.
+# KOHA EASY INSTALL & TOOLS
+# Author: Paulo Fernando Baldi Filho
 # ======================================================================
 
-set -o pipefail
-umask 022
-
-PANEL_VERSION="3.0"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
+
+# ======================================================================
+# CORREÇÃO DE PIPE (CURL | BASH) E REEXECUÇÃO SEGURA
+# ======================================================================
+# Se o script estiver sendo executado via pipe (stdin não é um terminal),
+# comandos como `read` ou `dialog` falharão ao tentar ler o teclado, engolindo
+# partes do próprio script. Esta rotina força o download para o disco.
+if [ ! -t 0 ]; then
+    echo "[AVISO] Execução via pipe detectada. Baixando instalador para o disco local..."
+    TMP_SCRIPT="/tmp/koha_installer_temp.sh"
+    curl -fsSL "$UPDATE_URL" -o "$TMP_SCRIPT" || {
+        echo "ERRO: Falha ao baixar o instalador."
+        exit 1
+    }
+    chmod +x "$TMP_SCRIPT"
+    # Reexecuta o arquivo local reconectando a entrada padrão ao terminal físico
+    exec bash "$TMP_SCRIPT" "$@" < /dev/tty
+    exit 0
+fi
 
 # ======================================================================
 # ELEVAÇÃO DE PRIVILÉGIOS / PRIVILEGE ESCALATION
@@ -29,10 +39,7 @@ if [ "${EUID:-$(id -u)}" -ne 0 ]; then
     if [ -f "$0" ]; then
         exec sudo -E bash "$0" "$@"
     else
-        echo "ERRO/ERROR: Para executar diretamente via curl/web, chame com sudo:"
-        echo ""
-        echo "  curl -fsSL \"https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer\" | sudo bash"
-        echo ""
+        echo "ERRO/ERROR: Não foi possível determinar o arquivo de origem para elevação."
         exit 1
     fi
 fi
