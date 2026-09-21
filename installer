@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ======================================================================
-# KOHA EASY INSTALL - ADVANCED MANAGEMENT SUITE
+# KOHA EASY INSTALL & TOOLS - ADVANCED MANAGEMENT SUITE
 # Suíte de implantação, manutenção, tuning e backups do Koha ILS.
 # Deployment, maintenance, tuning and backup suite for Koha ILS.
 # ----------------------------------------------------------------------
@@ -56,7 +56,7 @@ if [ -f "$PANEL_LOCK_FILE" ]; then
     LOCK_PID=$(cat "$PANEL_LOCK_FILE" 2>/dev/null | tr -dc '0-9')
     if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
         echo ""
-        echo "$(t "ERRO: o Koha Easy Install já está em execução (PID: $LOCK_PID)." "ERROR: Koha Easy Install is already running (PID: $LOCK_PID).")"
+        echo "$(t "ERRO: o Koha Easy Install & Tools já está em execução (PID: $LOCK_PID)." "ERROR: Koha Easy Install & Tools is already running (PID: $LOCK_PID).")"
         echo ""
         exit 1
     fi
@@ -350,7 +350,7 @@ v_reset() {
     VALIDATION_LOG="${LOG_DIR}/validacao-$(date '+%Y%m%d-%H%M%S').log"
     {
         echo "======================================================================"
-        echo "KOHA EASY INSTALL - RELATORIO DE VALIDACAO / VALIDATION REPORT"
+        echo "KOHA EASY INSTALL & Tools - RELATORIO DE VALIDACAO / VALIDATION REPORT"
         echo "Contexto/Context: ${1:-geral}"
         echo "Data/Date: $(date '+%Y-%m-%d %H:%M:%S %Z')"
         echo "Host: $(hostname)   Painel: v${PANEL_VERSION}"
@@ -1072,7 +1072,7 @@ write_backup_scripts() {
 
     cat > /root/backup_sql.sh << EOF
 #!/bin/bash
-# Backup do banco do Koha. Gerado pelo Koha Easy Install.
+# Backup do banco do Koha. Gerado pelo Koha Easy Install & Tools.
 set -o pipefail
 umask 077
 CONF="${BACKUP_CONF}"
@@ -1230,7 +1230,7 @@ write_cron_tasks() {
 
     cat > "$CRON_TASKS" << EOF
 # ======================================================================
-# KOHA EASY INSTALL - TAREFAS AUTOMATICAS / SCHEDULED TASKS
+# KOHA EASY INSTALL & TOOLS - TAREFAS AUTOMATICAS / SCHEDULED TASKS
 # ======================================================================
 # COMO AJUSTAR A HORA / HOW TO CHANGE TIME
 # Colunas: MINUTO HORA DIA_DO_MES MES DIA_DA_SEMANA(0=domingo) usuario comando
@@ -2934,9 +2934,9 @@ function_autoupdate() {
     fi
     local size; size=$(stat -c %s "$tmp" 2>/dev/null || echo 0)
     
-    # MUDANÇA AQUI: Alterado de "30" para "31" para refletir o novo tamanho do menu
+# Validação de integridade atômica do script baixado
     if [ "$size" -lt 10240 ] || ! head -n1 "$tmp" | grep -q '^#!.*bash' || \
-       ! grep -q 'KOHA EASY INSTALL' "$tmp" || ! grep -q '"31"' "$tmp"; then
+       ! grep -q 'KOHA EASY INSTALL & TOOLS' "$tmp" || ! grep -q '"31"' "$tmp"; then
         rm -f "$tmp"
         msg_error "" "$(t "O arquivo baixado está incompleto, não parece ser o painel correto ou está inválido ($size bytes). Atualização cancelada." "The downloaded file is incomplete, not the expected panel, or invalid ($size bytes). Update cancelled.")" 11 78
         return 1
@@ -2989,8 +2989,8 @@ function_reboot_server() {
 # ======================================================================
 function_about() {
     whiptail --title "$(t "Sobre / About" "Sobre / About")" --msgbox \
-"$(t "Koha Easy Install v${PANEL_VERSION}\n\nEste projeto nasceu da vivência real de quem já enfrentou os inúmeros desafios e barreiras técnicas na gestão de acervos. Foi pensado especialmente para bibliotecas que não possuem recursos financeiros para sistemas proprietários ou suporte técnico especializado, democratizando o acesso a uma tecnologia robusta, gratuita e verdadeiramente acessível.\n\nO objetivo é estender a mão a outras instituições e profissionais que passam pelas mesmas dificuldades.\n\nSe esta iniciativa te ajudou:\n⭐ Deixe sua estrela no repositório do GitHub!\n📢 Compartilhe com amigos e colegas que precisam.\n\nRepositório: github.com/BibliotecaPalotina/koha-easy-install\n\nCriado com dedicação por Paulo F. Baldi FH.\nAuxiliar de Biblioteca - Biblioteca Pública Municipal Castro Alves\nPalotina, Paraná, Brasil" \
-"Koha Easy Install v${PANEL_VERSION}\n\nThis project was born from real-life experience facing technical barriers in collection management. It was specifically designed for libraries lacking financial resources for proprietary systems or specialized technical support, democratizing access to robust, free, and truly accessible technology.\n\nThe goal is to help other institutions facing the same struggles.\n\nIf this initiative helped you:\n⭐ Star the repository on GitHub!\n📢 Share it with friends and colleagues.\n\nRepository: github.com/BibliotecaPalotina/koha-easy-install\n\nCreated with dedication by Paulo F. Baldi FH.\nLibrary Assistant - Castro Alves Public Library\nPalotina, Paraná, Brazil")" 22 76 2>/dev/null || true
+"$(t "Koha Easy Install & Tools v${PANEL_VERSION}\n\nEste projeto nasceu da vivência real de quem já enfrentou os inúmeros desafios e barreiras técnicas na gestão de acervos. Foi pensado especialmente para bibliotecas que não possuem recursos financeiros para sistemas proprietários ou suporte técnico especializado, democratizando o acesso a uma tecnologia robusta, gratuita e verdadeiramente acessível.\n\nO objetivo é estender a mão a outras instituições e profissionais que passam pelas mesmas dificuldades.\n\nSe esta iniciativa te ajudou:\n⭐ Deixe sua estrela no repositório do GitHub!\n📢 Compartilhe com amigos e colegas que precisam.\n\nRepositório: github.com/BibliotecaPalotina/koha-easy-install\n\nCriado com dedicação por Paulo F. Baldi FH.\nAuxiliar de Biblioteca - Biblioteca Pública Municipal Castro Alves\nPalotina, Paraná, Brasil" \
+"Koha Easy Install & Tools v${PANEL_VERSION}\n\nThis project was born from real-life experience facing technical barriers in collection management. It was specifically designed for libraries lacking financial resources for proprietary systems or specialized technical support, democratizing access to robust, free, and truly accessible technology.\n\nThe goal is to help other institutions facing the same struggles.\n\nIf this initiative helped you:\n⭐ Star the repository on GitHub!\n📢 Share it with friends and colleagues.\n\nRepository: github.com/BibliotecaPalotina/koha-easy-install\n\nCreated with dedication by Paulo F. Baldi FH.\nLibrary Assistant - Castro Alves Public Library\nPalotina, Paraná, Brazil")" 22 76 2>/dev/null || true
 }
 # ======================================================================
 # MENU PRINCIPAL / MAIN MENU
@@ -2999,7 +2999,7 @@ while true; do
     restore_apt_timers
     export NCURSES_NO_UTF8_ACS=1
     
-    OPTION=$(whiptail --title "Koha Easy Install v${PANEL_VERSION} - $(t "Painel de Controle" "Control Dashboard")" \
+    OPTION=$(whiptail --title "Koha Easy Install & Tools v${PANEL_VERSION} - $(t "Painel de Controle" "Control Dashboard")" \
         --cancel-button "$(t "Sair" "Exit")" \
         --menu "$(t "Escolha uma opção:" "Choose an action:")" 25 82 16 \
         "1"  "$(t "Instalar o servidor Koha" "Install the Koha server")" \
