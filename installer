@@ -160,6 +160,24 @@ msg_error() { log "ERRO: $2"; whiptail --title "$(t "Erro" "Error")" --msgbox "$
 msg_ok()    { whiptail --title "$(t "Sucesso" "Success")" --msgbox "$1" "${2:-10}" "${3:-74}" 2>/dev/null || true; }
 prompt_yes_no() { whiptail --title "$1" --yesno "$2" "${3:-12}" "${4:-74}" 2>/dev/null; }
 
+# ---- COLE AQUI A NOVA FUNÇÃO DE APOIO A ERROS VISUAIS ----
+run_with_dialog() {
+    local title="$1"
+    local desc="$2"
+    shift 2
+    local log_temp="/tmp/koha_action_err.log"
+
+    if ! "$@" > "$log_temp" 2>&1; then
+        local err_msg
+        err_msg=$(tail -n 15 "$log_temp")
+        msg_error "$title" "$(t "Falha em: $desc\n\nDetalhes:\n$err_msg" "Failed during: $desc\n\nDetails:\n$err_msg")" 18 78
+        rm -f "$log_temp"
+        return 1
+    fi
+    rm -f "$log_temp"
+    return 0
+}
+
 pause_terminal() {
     echo ""
     echo "$(t "Pressione [ENTER] para voltar ao painel..." "Press [ENTER] to return to the panel...")"
@@ -1765,8 +1783,8 @@ function_restore_database() {
     require_koha || return 0
 
     msg_info "$(t "Origem do Arquivo" "File Source")" \
-"$(t "COMO ENVIAR O BACKUP PARA O SERVIDOR:\n\nOPÇÃO 1 — Windows (Arrastar e Soltar):\n1. No Bloco de Notas, cole o código abaixo e salve na Área de Trabalho como 'Enviar_Backup.bat':\n   @echo off\n   chcp 65001 >nul\n   scp \"%~1\" ${REAL_USER}@$(get_server_ip):${REAL_HOME}/\n   pause\n2. Depois, basta ARRASTAR o arquivo .sql em cima desse ícone.\n\nOPÇÃO 2 — Linux, macOS ou Terminal Direto:\n   scp \"caminho_do_arquivo.sql\" ${REAL_USER}@$(get_server_ip):${REAL_HOME}/\n\nOPÇÃO 3 — Pendrive/USB: conecte no servidor e verifique em /media ou /mnt\n\n(Na próxima tela, navegue até a pasta e selecione o arquivo importado.)" \
-"HOW TO SEND THE BACKUP TO THE SERVER:\n\nOPTION 1 — Windows (Drag and Drop):\n1. In Notepad, paste the code below and save on Desktop as 'Enviar_Backup.bat':\n   @echo off\n   chcp 65001 >nul\n   scp \"%~1\" ${REAL_USER}@$(get_server_ip):${REAL_HOME}/\n   pause\n2. Then, just DRAG the .sql file onto that icon.\n\nOPTION 2 — Linux, macOS or Direct Terminal:\n   scp \"path_to_file.sql\" ${REAL_USER}@$(get_server_ip):${REAL_HOME}/\n\nOPTION 3 — USB drive: plug into server and check /media or /mnt\n\n(On the next screen, browse to the folder and select the file.)")" 28 82
+"$(t "COMO ENVIAR O BACKUP PARA O SERVIDOR:\n\nOPÇÃO 1 — Windows (Arrastar e Soltar):\n1. No Bloco de Notas, cole o código abaixo e salve na Área de Trabalho como 'Enviar_Backup.bat':\n    @echo off\n    chcp 65001 >nul\n    scp \"%~1\" ${REAL_USER}@$(get_server_ip):${REAL_HOME}/\n    pause\n2. Depois, basta ARRASTAR o arquivo .sql em cima desse ícone.\n\nOPÇÃO 2 — Linux, macOS ou Terminal Direto:\n    scp \"caminho_do_arquivo.sql\" ${REAL_USER}@$(get_server_ip):${REAL_HOME}/\n\nOPÇÃO 3 — Pendrive/USB: conecte no servidor e verifique em /media ou /mnt\n\n(Na próxima tela, navegue até a pasta e selecione o arquivo importado.)" \
+"HOW TO SEND THE BACKUP TO THE SERVER:\n\nOPTION 1 — Windows (Drag and Drop):\n1. In Notepad, paste the code below and save on Desktop as 'Enviar_Backup.bat':\n    @echo off\n    chcp 65001 >nul\n    scp \"%~1\" ${REAL_USER}@$(get_server_ip):${REAL_HOME}/\n    pause\n2. Then, just DRAG the .sql file onto that icon.\n\nOPTION 2 — Linux, macOS or Direct Terminal:\n    scp \"path_to_file.sql\" ${REAL_USER}@$(get_server_ip):${REAL_HOME}/\n\nOPTION 3 — USB drive: plug into server and check /media or /mnt\n\n(On the next screen, browse to the folder and select the file.)")" 28 82
 
     local file
     file=$(select_file "$REAL_HOME") || return 0
@@ -1835,9 +1853,13 @@ function_restore_database() {
     display_explanation "Importando o acervo (pode demorar vários minutos)..." "Importing the catalog (may take several minutes)..."
     local ok="yes"
     if [[ "$file" == *.gz ]]; then
-        if ! zcat "$file" | mysql --default-character-set=utf8mb4 "$DB_NAME"; then ok="no"; fi
+        if ! run_with_dialog "Erro na Importação" "descompactação e importação do backup compactado" bash -c "zcat '$file' | mysql --default-character-set=utf8mb4 '$DB_NAME'"; then
+            ok="no"
+        fi
     else
-        if ! mysql --default-character-set=utf8mb4 "$DB_NAME" < "$file"; then ok="no"; fi
+        if ! run_with_dialog "Erro na Importação" "importação do arquivo SQL para o banco" mysql --default-character-set=utf8mb4 "$DB_NAME" < "$file"; then
+            ok="no"
+        fi
     fi
 
     local tables; tables=$(run_sql "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}';")
@@ -3159,16 +3181,14 @@ function_update_system() {
         restore_apt_timers
         return 1
     fi
-    if ! DEBIAN_FRONTEND=noninteractive apt-get upgrade "${APT_OPTS[@]}"; then
+    if ! run_with_dialog "Erro na Atualização" "atualização dos pacotes do sistema (apt-get upgrade)" DEBIAN_FRONTEND=noninteractive apt-get upgrade "${APT_OPTS[@]}"; then
         restore_apt_timers
-        msg_error "" "$(t "A atualização dos pacotes falhou. As migrações do Koha não serão executadas." "Package upgrade failed. Koha migrations will not run.")" 10 76
         return 1
     fi
     if is_koha_installed; then
         display_explanation "Aplicando migrações do banco..." "Applying database migrations..."
-        if ! koha-upgrade-schema "$INSTANCE"; then
+        if ! run_with_dialog "Erro de Migração" "atualização do schema do banco do Koha (koha-upgrade-schema)" koha-upgrade-schema "$INSTANCE"; then
             restore_apt_timers
-            msg_error "" "$(t "A migração do banco falhou. Os serviços não serão reiniciados automaticamente para evitar esconder o erro." "Database migration failed. Services will not be restarted automatically to avoid hiding the error.")" 11 78
             return 1
         fi
         if ! systemctl restart memcached apache2 koha-common >/dev/null 2>&1; then
