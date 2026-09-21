@@ -1,3 +1,4 @@
+<a name="english"></a>
 <div align="right">
   <strong>English</strong> | <a href="#portugues">Português (Brasil)</a>
 </div>
