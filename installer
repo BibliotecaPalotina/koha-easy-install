@@ -1782,9 +1782,8 @@ function_view_credentials() {
 function_restore_database() {
     require_koha || return 0
 
-    msg_info "$(t "Origem do Arquivo" "File Source")" \
-"$(t "COMO ENVIAR O BACKUP PARA O SERVIDOR:\n\nOPÇÃO 1 — Windows (Arrastar e Soltar):\n1. No Bloco de Notas, cole o código abaixo e salve na Área de Trabalho como 'Enviar_Backup.bat':\n    @echo off\n    chcp 65001 >nul\n    scp \"%~1\" ${REAL_USER}@$(get_server_ip):${REAL_HOME}/\n    pause\n2. Depois, basta ARRASTAR o arquivo .sql em cima desse ícone.\n\nOPÇÃO 2 — Linux, macOS ou Terminal Direto:\n    scp \"caminho_do_arquivo.sql\" ${REAL_USER}@$(get_server_ip):${REAL_HOME}/\n\nOPÇÃO 3 — Pendrive/USB: conecte no servidor e verifique em /media ou /mnt\n\n(Na próxima tela, navegue até a pasta e selecione o arquivo importado.)" \
-"HOW TO SEND THE BACKUP TO THE SERVER:\n\nOPTION 1 — Windows (Drag and Drop):\n1. In Notepad, paste the code below and save on Desktop as 'Enviar_Backup.bat':\n    @echo off\n    chcp 65001 >nul\n    scp \"%~1\" ${REAL_USER}@$(get_server_ip):${REAL_HOME}/\n    pause\n2. Then, just DRAG the .sql file onto that icon.\n\nOPTION 2 — Linux, macOS or Direct Terminal:\n    scp \"path_to_file.sql\" ${REAL_USER}@$(get_server_ip):${REAL_HOME}/\n\nOPTION 3 — USB drive: plug into server and check /media or /mnt\n\n(On the next screen, browse to the folder and select the file.)")" 28 82
+    msg_info "$(t "Restauração de Banco" "Database Restore")" \
+        $(t "Para enviar um backup do seu computador para este servidor, use o comando SCP no seu terminal local (Windows/Mac/Linux):\n\nscp arquivo.sql.gz ${REAL_USER}@$(get_server_ip):${REAL_HOME}/\n\n(Na próxima tela, selecione o arquivo na pasta.)" "To send a backup from your computer to this server, use the SCP command on your local terminal:\n\nscp file.sql.gz ${REAL_USER}@$(get_server_ip):${REAL_HOME}/\n\n(On the next screen, select the file in the folder.)") 14 76
 
     local file
     file=$(select_file "$REAL_HOME") || return 0
