@@ -8,6 +8,7 @@
 # este painel" (baixa, valida a sintaxe e só então substitui).
 # Single, self-sufficient file. Updates via "Update this panel" option.
 # ======================================================================
+# TESTE_SYNC_PALOTINA_OK=1
 
 set -o pipefail
 umask 022
@@ -518,6 +519,11 @@ validate_backups() {
         v_ok "Nuvem: $(t "remote do rclone configurado" "rclone remote configured")."
     else
         v_warn "Nuvem: $(t "backup remoto não configurado (opção 11)" "remote backup not configured (option 11)")."
+    fi
+    if [ -f "$SCP_BACKUP_CONF" ] && grep -q '^SCP_HOST="[^"]\+"' "$SCP_BACKUP_CONF" 2>/dev/null; then
+        v_ok "SCP: $(t "backup via SCP automático configurado" "automatic SCP backup configured")."
+    else
+        v_warn "SCP: $(t "backup via SCP automático não configurado (opção 12)" "automatic SCP backup not configured (option 12)")."
     fi
 }
 
@@ -1492,7 +1498,7 @@ function_install_koha() {
 
  Esta senha e a do banco de dados e serve para o primeiro acesso
  (Web Installer). Depois crie um superbibliotecario proprio
- (opcao 13 do painel) e guarde este arquivo em local seguro.
+ (opcao 15 do painel) e guarde este arquivo em local seguro.
 
  Configuracao : ${KOHA_CONF}
  Backups      : ${DIR_SQL} e ${DIR_MARC}
@@ -1532,8 +1538,8 @@ EOF
         reboot
     else
         msg_info "$(t "Reinicialização Pendente" "Pending Reboot")" \
-"$(t "Tudo certo! Você optou por reiniciar mais tarde.\n\nLembre-se: se o catálogo parecer lento, reinicie o servidor através da opção 23 do painel antes de realizar cadastros pesados." \
-"All set! You chose to reboot later.\n\nRemember: if the catalog feels sluggish, restart the server via option 23 in the panel before heavy indexing.")" 11 74
+"$(t "Tudo certo! Você optou por reiniciar mais tarde.\n\nLembre-se: se o catálogo parecer lento, reinicie o servidor através da opção 25 do painel antes de realizar cadastros pesados." \
+"All set! You chose to reboot later.\n\nRemember: if the catalog feels sluggish, restart the server via option 25 in the panel before heavy indexing.")" 11 74
     fi
 }
 
@@ -1758,6 +1764,10 @@ function_send_manual_scp_backup() {
     fi
 
     if [ "$use_saved" = "no" ]; then
+        msg_info "$(t "Descobrir IP e Usuário" "Find IP and User")" \
+"$(t "Execute no terminal/PowerShell da máquina de DESTINO:\n\nWindows (PowerShell):\nWrite-Host \"IP: \$((Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Get-NetIPAddress -AddressFamily IPv4).IPAddress) | Usuario: \$env:USERNAME\"\n\nLinux:\necho \"IP: \$(ip route get 1.1.1.1 2>/dev/null | awk '{print \$7; exit}') | Usuario: \$(whoami)\"\n\nmacOS:\necho \"IP: \$(ipconfig getifaddr \$(route -n get default 2>/dev/null | awk '/interface:/{print \$2}')) | Usuario: \$(whoami)\"" \
+"Run in the DESTINATION machine terminal/PowerShell:\n\nWindows (PowerShell):\nWrite-Host \"IP: \$((Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Get-NetIPAddress -AddressFamily IPv4).IPAddress) | User: \$env:USERNAME\"\n\nLinux:\necho \"IP: \$(ip route get 1.1.1.1 2>/dev/null | awk '{print \$7; exit}') | User: \$(whoami)\"\n\nmacOS:\necho \"IP: \$(ipconfig getifaddr \$(route -n get default 2>/dev/null | awk '/interface:/{print \$2}')) | User: \$(whoami)\"")" 24 90
+
         host=$(whiptail --title "$(t "Enviar Backup via SCP" "Send Backup via SCP")" \
             --inputbox "$(t "Endereço (IP ou domínio) do destino:" "Address (IP or hostname) of the destination:")" 10 70 3>&1 1>&2 2>&3) || return 0
         [ -z "$host" ] && return 0
@@ -1765,7 +1775,7 @@ function_send_manual_scp_backup() {
         [ -z "$user" ] && return 0
         port=$(whiptail --title "Porta SSH / SSH Port" --inputbox "$(t "Porta SSH:" "SSH port:")" 9 60 "22" 3>&1 1>&2 2>&3) || return 0
         [ -z "$port" ] && port="22"
-        folder=$(whiptail --title "$(t "Pasta de Destino" "Destination Folder")" --inputbox "$(t "Pasta no destino (deve existir):" "Folder on the destination (must exist):")" 10 70 "/home/${user}/" 3>&1 1>&2 2>&3) || return 0
+        folder=$(whiptail --title "$(t "Pasta de Destino" "Destination Folder")" --inputbox "$(t "Pasta no destino (deve existir):" "Folder on the destination (must exist):")" 10 70 "/home/${user}/Desktop" 3>&1 1>&2 2>&3) || return 0
         [ -z "$folder" ] && return 0
         key=""
     fi
@@ -1780,7 +1790,7 @@ function_send_manual_scp_backup() {
         msg_error "" "$(t "Falha ao gerar o backup. Verifique o espaço em disco." "Failed to generate the backup. Check the free disk space.")" 9 70
         return 1
     fi
-    ln -sf "$(basename "$target")" "${DIR_SQL}/ultimo_backup.sql.gz"
+    ln -sf "$(basename "$target")" "${DIR_SQL}/ultimo_backup.sql.gz" 2>/dev/null
 
     display_explanation "Enviando via SCP para ${user}@${host}..." "Sending via SCP to ${user}@${host}..."
     local opts=(-P "$port" -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new)
@@ -2331,6 +2341,10 @@ function_configure_rclone() {
 function_configure_automatic_scp_backup() {
     write_scp_backup_config
     local host user port folder key
+    
+    msg_info "$(t "Descobrir IP e Usuário" "Find IP and User")" \
+"$(t "Execute no terminal/PowerShell da máquina de DESTINO:\n\nWindows (PowerShell):\nWrite-Host \"IP: \$((Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Get-NetIPAddress -AddressFamily IPv4).IPAddress) | Usuario: \$env:USERNAME\"\n\nLinux:\necho \"IP: \$(ip route get 1.1.1.1 2>/dev/null | awk '{print \$7; exit}') | Usuario: \$(whoami)\"\n\nmacOS:\necho \"IP: \$(ipconfig getifaddr \$(route -n get default 2>/dev/null | awk '/interface:/{print \$2}')) | Usuario: \$(whoami)\"" \
+"Run in the DESTINATION machine terminal/PowerShell:\n\nWindows (PowerShell):\nWrite-Host \"IP: \$((Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Get-NetIPAddress -AddressFamily IPv4).IPAddress) | User: \$env:USERNAME\"\n\nLinux:\necho \"IP: \$(ip route get 1.1.1.1 2>/dev/null | awk '{print \$7; exit}') | User: \$(whoami)\"\n\nmacOS:\necho \"IP: \$(ipconfig getifaddr \$(route -n get default 2>/dev/null | awk '/interface:/{print \$2}')) | User: \$(whoami)\"")" 24 90
 
     host=$(whiptail --title "$(t "Backup Automático via SCP" "Automatic SCP Backup")" \
         --inputbox "$(t "Endereço (IP ou domínio) do servidor de destino:" "Address (IP or hostname) of the destination server:")" 10 70 3>&1 1>&2 2>&3) || return 0
