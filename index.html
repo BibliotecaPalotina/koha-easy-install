@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Manual Completo de Instalação e Configuração do Koha</title>
+  <title>Koha Easy Install - Manual Completo / Complete Guide</title>
   <style>
     :root {
       --bg-body: #0b0f19;
@@ -300,6 +300,15 @@
       font-family: inherit;
     }
   </style>
+
+  <script>
+    function setLanguage(lang) {
+      document.getElementById('content-pt').style.display = lang === 'pt' ? 'block' : 'none';
+      document.getElementById('content-en').style.display = lang === 'en' ? 'block' : 'none';
+      document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById('btn-' + lang).classList.add('active');
+    }
+  </script>
 </head>
 <body>
 
@@ -307,543 +316,1143 @@
 
   <div class="language-container">
     <span class="language-label">Select language:</span>
-    <a href="index.html" class="lang-btn active">PT-BR</a>
-    <a href="en.html" class="lang-btn">EN</a>
-    <a href="es.html" class="lang-btn">ES</a>
+    <a href="#" id="btn-pt" class="lang-btn active" onclick="setLanguage('pt'); return false;">PT-BR</a>
+    <a href="#" id="btn-en" class="lang-btn" onclick="setLanguage('en'); return false;">EN</a>
   </div>
 
-  <header>
-    <div class="badge-bar">
-      <span class="badge">Koha ILS v3.0</span>
-      <span class="badge">Production Grade</span>
-      <span class="badge">Debian &amp; Ubuntu</span>
-    </div>
-    <h1>Manual Completo de Instalação e Configuração do Koha</h1>
-    <p class="lead">Guia estruturado com foco em estabilidade operacional: preparação minuciosa do sistema operacional em 5 cenários, inicialização atômica em linha única e utilização completa das 25 funções do <strong>Koha Easy Install (Painel Interativo)</strong>.</p>
-  </header>
+  <!-- INÍCIO DO CONTEÚDO EM PORTUGUÊS -->
+  <div id="content-pt">
+    <header>
+      <div class="badge-bar">
+        <span class="badge">Koha ILS v3.0</span>
+        <span class="badge">Production Grade</span>
+        <span class="badge">Debian &amp; Ubuntu</span>
+      </div>
+      <h1>Manual Completo de Instalação e Configuração do Koha</h1>
+      <p class="lead">Guia estruturado com foco em estabilidade operacional: preparação minuciosa do sistema operacional em 5 cenários, inicialização atômica em linha única e utilização completa das 27 funções do <strong>Koha Easy Install (Painel Interativo)</strong>.</p>
+    </header>
 
-  <section>
-    <h2>1. O que é e como funciona o Koha</h2>
-    <p>O Koha é o primeiro sistema integrado de gestão de bibliotecas (ILS) de código aberto do mundo. Ele opera nativamente sobre a stack LAMP corporativa (Linux, Apache, MariaDB e Perl), funcionando como um servidor central que atende tanto as operações internas da equipe quanto a pesquisa dos leitores.</p>
-    
-    <h3>Topologia em Duas Portas Independentes</h3>
-    <p>Diferente de sistemas web convencionais que agrupam a parte pública e a administrativa em um único caminho de URL, o Koha divide suas aplicações em duas portas TCP dedicadas e isoladas no servidor web Apache:</p>
+    <section>
+      <h2>1. O que é e como funciona o Koha</h2>
+      <p>O Koha é o primeiro sistema integrado de gestão de bibliotecas (ILS) de código aberto do mundo. Ele opera nativamente sobre a stack LAMP corporativa (Linux, Apache, MariaDB e Perl), funcionando como um servidor central que atende tanto as operações internas da equipe quanto a pesquisa dos leitores.</p>
+      
+      <h3>Topologia em Duas Portas Independentes</h3>
+      <p>Diferente de sistemas web convencionais que agrupam a parte pública e a administrativa em um único caminho de URL, o Koha divide suas aplicações em duas portas TCP dedicadas e isoladas no servidor web Apache:</p>
 
-    <table>
-      <thead>
-        <tr>
-          <th>Ambiente</th>
-          <th>Porta Padrão</th>
-          <th>Usuários Alvo</th>
-          <th>Escopo e Recursos do Módulo</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><strong>Staff Client (Intranet)</strong></td>
-          <td><code>TCP 8080</code></td>
-          <td>Bibliotecários, Catalogadores e Administradores</td>
-          <td>Catalogação MARC21 bibliográfica e de autoridades, circulação de acervo (empréstimos, devoluções, renovações rápidas por código de barras), gestão de aquisições, relatórios SQL gerenciais, administração de multas, configurações globais e integração SIP2/Z39.50.</td>
-        </tr>
-        <tr>
-          <td><strong>OPAC (Public Catalog)</strong></td>
-          <td><code>TCP 80</code></td>
-          <td>Leitores, Estudantes, Pesquisadores e Comunidade</td>
-          <td>Interface de busca visual pública, navegação por facetas dinâmicas, reserva de exemplares, renovação online pelo autoatendimento do leitor, listas bibliográficas públicas e acesso a cópias digitais.</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <p>Essa separação física em portas distintas permite políticas granulares de segurança: a porta 80 (OPAC) pode ficar livremente exposta na internet para consulta pública, enquanto a porta 8080 (Staff) pode ser restrita apenas à rede interna da biblioteca ou acessada sob autenticação de túnel criptografado.</p>
-  </section>
-
-  <section>
-    <h2>2. Preparação do Sistema Operacional (5 Cenários)</h2>
-    <p>O Koha foi concebido nativamente para rodar sobre distribuições Debian ou Ubuntu. Escolha rigorosamente <strong>apenas o cenário correspondente</strong> à sua infraestrutura:</p>
-
-    <div class="card card-highlight">
-      <h3>Cenário 1: Servidor Físico Dedicado (Ubuntu Server)</h3>
-      <p>Instalação de produção nativa em máquina física (desktop ou servidor de rack) dedicada exclusivamente ao acervo.</p>
-      <ul>
-        <li><strong>Download da ISO:</strong> Obtenha a imagem oficial <em>Ubuntu Server LTS</em> no site da Canonical.</li>
-        <li><strong>Gravação de Pendrive com BalenaEtcher:</strong> Conecte um pendrive de ao menos 4 GB em seu computador pessoal. Abra o BalenaEtcher, clique em <em>Flash from file</em>, aponte a ISO do Ubuntu Server, selecione o pendrive e confirme a gravação.</li>
-        <li><strong>Parametrização da BIOS/UEFI:</strong> Conecte o cabo de rede Ethernet ao computador do servidor. Ao ligar a máquina, pressione a tecla de Setup (geralmente <kbd>F2</kbd>, <kbd>Del</kbd> ou <kbd>F12</kbd>) e configure:
-          <ul>
-            <li><strong>Secure Boot:</strong> <em>Disabled</em> (impede bloqueios de módulos de kernel).</li>
-            <li><strong>SATA Controller Mode:</strong> <em>AHCI</em>.</li>
-            <li><strong>Restore on AC Power Loss:</strong> <em>Power On</em> (o servidor liga sozinho após queda e retorno de energia).</li>
-            <li><strong>Fast Boot:</strong> <em>Disabled</em>.</li>
-            <li><strong>Halt On:</strong> <em>No Errors</em> (evita travamento de boot se não houver teclado conectado).</li>
-          </ul>
-        </li>
-        <li><strong>Instalador do Ubuntu Server:</strong>
-          <ul>
-            <li>Conecte o pendrive, dê boot por ele e configure o idioma e teclado.</li>
-            <li>Deixe a interface de rede obter IP automático via DHCP.</li>
-            <li>Em <em>Guided storage configuration</em>, marque <strong>Use an entire disk</strong>.</li>
-            <li>Defina o nome do servidor, o nome de usuário (ex: <code>administrador</code>) e uma senha forte.</li>
-            <li><strong>OBRIGATÓRIO:</strong> Na tela de pacotes adicionais, navegue até <strong>Install OpenSSH server</strong> e aperte a barra de espaço para marcar a opção com um <code>[X]</code>. Sem isso, o acesso remoto não funcionará.</li>
-          </ul>
-        </li>
-        <li>Conclua a instalação, retire o pendrive e reinicie o servidor.</li>
-      </ul>
-    </div>
-
-    <div class="card card-highlight">
-      <h3>Cenário 2: Servidor em Nuvem / VPS (Hetzner, DigitalOcean, AWS, etc.)</h3>
-      <p>Ambiente em provedores de data center de alto uptime, ideal para bibliotecas que não possuem infraestrutura local contínua.</p>
-      <ul>
-        <li>Crie sua conta no provedor desejado e acerte os dados de faturamento.</li>
-        <li>Inicie a criação de um novo servidor virtual (Droplet / Cloud Compute).</li>
-        <li><strong>Sistema Operacional:</strong> Escolha rigorosamente <em>Ubuntu 22.04 LTS</em> ou <em>Ubuntu 24.04 LTS</em> (64-bit).</li>
-        <li><strong>Dimensionamento Obrigatório de Hardware:</strong> Selecione um plano com no mínimo <strong>2 vCPUs e 4 GB de RAM</strong>. Servidores com apenas 1 GB ou 2 GB travarão nos processos de compilação de índices e esgotarão a memória do Apache/Plack.</li>
-        <li><strong>Autenticação:</strong> Defina uma senha root robusta ou insira sua chave pública SSH.</li>
-        <li>Após o provisionamento, anote o Endereço de IP Público fornecido no painel da VPS.</li>
-      </ul>
-    </div>
-
-    <div class="card card-highlight">
-      <h3>Cenário 3: Computador com Linux Gráfico (Linux Mint ou Ubuntu Desktop)</h3>
-      <p>Instalação em computador com tela e interface gráfica que funcionará como terminal de atendimento e servidor simultaneamente.</p>
-      <ul>
-        <li>Baixe o <em>Linux Mint (Cinnamon Edition)</em> ou <em>Ubuntu Desktop LTS</em>.</li>
-        <li>Grave o arquivo ISO no pendrive com o BalenaEtcher.</li>
-        <li>Inicie o computador pelo pendrive e dê duplo clique no instalador gráfico na área de trabalho.</li>
-        <li>Conclua a instalação visual em português, definindo usuário e senha de administrador.</li>
-        <li><strong>Vantagem Operacional:</strong> Não é obrigatório usar SSH. Abra o terminal nativo pressionando <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd> e execute os comandos diretamente na tela.</li>
-      </ul>
-    </div>
-
-    <div class="card card-highlight">
-      <h3>Cenário 4: Windows com Máquina Virtual (VirtualBox)</h3>
-      <p>Execução do Ubuntu Server dentro de uma máquina virtual em hospedeiro Windows.</p>
-      <ul>
-        <li><strong>Virtualização na BIOS:</strong> Reinicie o Windows, acesse a BIOS e habilite o recurso <em>Intel Virtualization Technology (VT-x)</em> ou <em>SVM Mode (AMD)</em>.</li>
-        <li>Instale a versão estável do VirtualBox e baixe a ISO do Ubuntu Server LTS.</li>
-        <li><strong>Criação da VM:</strong>
-          <ul>
-            <li>Clique em <em>Novo</em> (New). Nome: <code>Koha-Server</code>. Tipo: Linux / Ubuntu 64-bit.</li>
-            <li>Aponte a imagem ISO baixada.</li>
-            <li><strong>ATENÇÃO CRÍTICA:</strong> Marque a caixa de seleção <strong>Pular Instalação Desatendida (Skip Unattended Installation)</strong>. Se você deixar o instalador desatendido passar, o VirtualBox criará usuários genéricos e não instalará o SSH, impedindo seu acesso.</li>
-            <li>Aloque ao menos <strong>4096 MB (4 GB) de RAM</strong> e <strong>2 núcleos de CPU</strong>. Aloque no mínimo 25 GB de disco.</li>
-          </ul>
-        </li>
-        <li><strong>Configuração Obrigatória de Rede (Modo Bridge):</strong>
-          <ul>
-            <li>Nas configurações da VM, abra a aba <em>Rede (Network)</em>.</li>
-            <li>Altere <em>Conectado a:</em> de NAT para <strong>Placa em modo Bridge (Bridged Adapter)</strong>.</li>
-            <li>Selecione o nome da sua placa de rede física (cabo ou Wi-Fi). Isso faz com que a máquina virtual receba um IP próprio do roteador, ficando visível para os outros computadores da biblioteca.</li>
-          </ul>
-        </li>
-        <li>Inicie a máquina virtual e conclua o assistente manual do Ubuntu Server com OpenSSH habilitado.</li>
-      </ul>
-    </div>
-
-    <div class="card card-highlight">
-      <h3>Cenário 5: Windows 10/11 com Subsistema Linux (WSL2)</h3>
-      <p>Execução nativa de um kernel Linux gerenciado pelo Windows, dispensando máquinas virtuais pesadas.</p>
-      <ul>
-        <li>Verifique se a virtualização (VT-x/SVM) está ativa na BIOS do computador.</li>
-        <li>Abra o menu Iniciar do Windows, digite <strong>PowerShell</strong>, clique com o botão direito e selecione <strong>Executar como Administrador</strong>.</li>
-        <li>Execute o comando de implantação automática:
-          <div class="code-container">
-            <div class="code-header"><span>PowerShell (Admin)</span><button class="copy-btn" onclick="copySnippet(this)">Copiar</button></div>
-            <pre><code>wsl --install -d Ubuntu</code></pre>
-          </div>
-        </li>
-        <li>Ao término, reinicie o computador. A tela de terminal preta do Ubuntu abrirá solicitando a criação de um usuário e senha (anote esses dados).</li>
-        <li><strong>Operação Contínua:</strong> Não há necessidade de SSH. Execute os comandos diretamente na janela do Ubuntu no Windows. Mantenha essa janela aberta em segundo plano para manter os serviços do Koha operando.</li>
-      </ul>
-    </div>
-  </section>
-
-  <section>
-    <h2>3. Acesso ao Terminal e Conexão SSH</h2>
-    <div class="info-box">
-      <strong>Regra de Acesso:</strong> Se você instalou em <strong>Linux Gráfico (Cenário 3)</strong> ou <strong>WSL2 (Cenário 5)</strong>, abra o terminal na sua própria tela e pule para a Seção 4. Se você instalou em <strong>Servidor Físico (Cenário 1)</strong>, <strong>VPS (Cenário 2)</strong> ou <strong>VirtualBox (Cenário 4)</strong>, acesse o terminal via SSH a partir de outro computador.
-    </div>
-
-    <h3>Descobrindo o Endereço IP Local do Servidor</h3>
-    <p>No terminal do seu servidor Linux, digite:</p>
-    <div class="code-container">
-      <div class="code-header"><span>Terminal do Servidor</span><button class="copy-btn" onclick="copySnippet(this)">Copiar</button></div>
-      <pre><code>ip a</code></pre>
-    </div>
-    <p>Localize sua interface de rede física (ex: <code>eth0</code>, <code>enp3s0</code> ou <code>wlan0</code>). Na linha iniciada com <code>inet</code>, observe o número antes da barra (ex: em <code>inet 192.168.1.105/24</code>, o IP é <code>192.168.1.105</code>). Se estiver em uma VPS, utilize o IP público do painel da nuvem.</p>
-
-    <h3>Conexão Remota via PowerShell (Windows) ou Terminal (macOS/Linux)</h3>
-    <p>Em seu computador de trabalho, abra o PowerShell ou terminal e conecte-se:</p>
-    <div class="code-container">
-      <div class="code-header"><span>Seu Computador Local</span><button class="copy-btn" onclick="copySnippet(this)">Copiar</button></div>
-      <pre><code>ssh usuario_do_servidor@ip_do_servidor</code></pre>
-    </div>
-    <p><em>Exemplo: <code>ssh administrador@192.168.1.105</code>. Se for a primeira conexão, digite <code>yes</code> e tecle Enter. Digite a senha cadastrada (os caracteres não aparecerão na tela por segurança).</em></p>
-  </section>
-
-  <section>
-    <h2>4. Baixando e Iniciando o Painel Interativo</h2>
-    <p>Utilize o comando atômico em linha única encadeada com <code>&amp;&amp;</code>. Ele faz o download seguro do script oficial, aplica permissões de execução em disco e inicia a suíte de gerenciamento imediatamente:</p>
-
-    <div class="code-container">
-      <div class="code-header"><span>Comando Único de Inicialização</span><button class="copy-btn" onclick="copySnippet(this)">Copiar</button></div>
-      <pre><code>sudo curl -fsSL "https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer" -o /usr/local/bin/options.sh && sudo chmod +x /usr/local/bin/options.sh && sudo options.sh</code></pre>
-    </div>
-
-    <div class="info-box">
-      <strong>Próximos Acessos ao Sistema:</strong> O executável fica permanentemente registrado no diretório <code>/usr/local/bin/options.sh</code>. Para gerenciar seu servidor futuramente, você nunca mais precisará baixar nada da internet: basta digitar diretamente:
-      <br><br>
-      <code class="inline-code">sudo options.sh</code>
-    </div>
-  </section>
-
-  <section>
-    <h2>5. Guia Completo das 25 Funções do Painel</h2>
-
-    <!-- OPÇÃO 1 -->
-    <div class="card">
-      <span class="menu-badge">Opção 1</span>
-      <h3>Instalar o servidor Koha (Implantação Completa)</h3>
-      <p>Essa rotina executa a preparação integral da máquina para rodar o Koha sem intervenções manuais propensas a erro. Ela compreende:</p>
-      <ul>
-        <li><strong>Pré-validação de Requisitos:</strong> Checa privilégios root, compatibilidade de distribuição Linux, resolução de DNS com os repositórios da comunidade Koha, integridade de conexão HTTPS e checagem de portas livres (80 e 8080).</li>
-        <li><strong>Ajuste de Locales e Relógio:</strong> Configura codificação obrigatória UTF-8 (<code>pt_BR.UTF-8</code> e <code>en_US.UTF-8</code>) e sincroniza o relógio do servidor com servidores atômicos via <code>systemd-timesyncd</code> NTP.</li>
-        <li><strong>Criação de Memória Virtual (SWAP 4 GB):</strong> Cria e inicializa um arquivo de swap de 4 GB com permissões 600 em <code>/etc/fstab</code>, evitando que picos de catalogação provoquem o encerramento do processo do Apache ou MariaDB por falta de memória física (Out-Of-Memory Killer).</li>
-        <li><strong>Blindagem do Gerenciador de Pacotes:</strong> Desativa timers ocultos do Ubuntu (como o <code>unattended-upgrades</code>) que bloqueiam travas de DPKG durante a instalação e implementa repetições automáticas (retry) contra quedas de pacotes.</li>
-        <li><strong>Instalação de Dependências Essenciais:</strong> Implanta utilitários de infraestrutura, incluindo o <code>glabels</code> (imprescindível para impressão de etiquetas de código de barras e lombada em bibliotecas), <code>rclone</code>, <code>fail2ban</code>, <code>memcached</code> e bibliotecas de manipulação XML.</li>
-        <li><strong>Chaves GPG e Repositórios Oficiais:</strong> Adiciona as chaves de assinatura digital e os repositórios do <em>Koha Community</em> e do <em>Elasticsearch 7.x</em>.</li>
-        <li><strong>Isolamento da Instância 'library':</strong> Inicializa o banco de dados MariaDB, aplica os templates globais em <code>koha-sites.conf</code>, configura os sockets do Apache, gera senhas aleatórias criptografadas e ativa o servidor de aplicações Plack e o daemon Zebra.</li>
-      </ul>
-    </div>
-
-    <!-- OPÇÃO 2 -->
-    <div class="card">
-      <span class="menu-badge">Opção 2</span>
-      <h3>Ver credenciais de acesso</h3>
-      <p>Extrai de forma limpa e imediata as credenciais mestre do arquivo <code>/etc/koha/sites/library/koha-conf.xml</code>. Exibe o usuário do banco (<code>koha_library</code>), a senha gerada na instalação, e as URLs de acesso com base no IP real da máquina. O script também salva essas informações no arquivo protegido <code>/root/credenciais_koha.txt</code> com permissão restrita <code>600</code> (apenas root lê).</p>
-    </div>
-
-    <!-- OPÇÃO 3 -->
-    <div class="card">
-      <span class="menu-badge">Opção 3</span>
-      <h3>Restaurar acervo de um backup (Com Rede de Segurança)</h3>
-      <p>Restauração avançada de dumps de banco de dados (<code>.sql</code> ou <code>.sql.gz</code>) contendo todo o catálogo, histórico de empréstimos e leitores cadastrados:</p>
-      <ul>
-        <li><strong>Explorador de Arquivos Integrado:</strong> Apresenta uma interface navegável pelo terminal para localizar o arquivo em qualquer pasta (inclusive pendrives montados em <code>/media</code> ou <code>/mnt</code>).</li>
-        <li><strong>Validação Prévia de Integridade:</strong> Testa o arquivo contra corrupção com <code>gzip -t</code> e valida se os cabeçalhos contêm comandos SQL válidos antes de descarregar qualquer tabela.</li>
-        <li><strong>Backup de Segurança Automático (Rollback):</strong> Antes de deletar a base atual, o sistema gera automaticamente um dump do estado atual (<code>PRE-RESTAURACAO_data.sql.gz</code>). Caso o arquivo novo contenha erros ou menos de 50 tabelas, o script detecta a anomalia e oferece reversão imediata para o backup anterior, protegendo a biblioteca contra perda de dados.</li>
-        <li><strong>Reconstrução de Esquema e Índices:</strong> Ao término da injeção, roda o <code>koha-upgrade-schema</code> para compatibilizar bancos antigos com a versão instalada, limpa os caches Memcached e reconstrói os índices do motor de busca ativo (Zebra ou Elasticsearch).</li>
-      </ul>
-    </div>
-
-    <!-- OPÇÃO 4 -->
-    <div class="card">
-      <span class="menu-badge">Opção 4</span>
-      <h3>Gerar backup manual agora</h3>
-      <p>Permite gerar cópias de segurança instantâneas sob demanda. Abre o <em>Seletor de Diretórios</em> para você apontar o destino do arquivo (disco local ou dispositivo externo). O dump é realizado com os parâmetros <code>--single-transaction --quick --routines --triggers</code> em charset <code>utf8mb4</code>, o que garante que leitores navegando no catálogo não sintam lentidão e as tabelas não sejam travadas durante a gravação.</p>
-    </div>
-
-    <!-- OPÇÃO 5 -->
-    <div class="card">
-      <span class="menu-badge">Opção 5</span>
-      <h3>Testar o último backup (Restauração de Ensaio)</h3>
-      <p>Aplica a regra máxima de segurança de TI: <em>um backup só existe se puder ser restaurado</em>. Esta função localiza o arquivo de backup automático mais recente em <code>/var/backups/koha_sql</code>, cria um banco de dados temporário isolado (<code>koha_teste_restauracao</code>), descompacta o arquivo e faz a importação completa. Em seguida, conta as tabelas, registros bibliográficos (biblios) e usuários (borrowers). Ao final, descarta o banco de teste e exibe o relatório de conformidade. <strong>O acervo oficial em produção não sofre nenhuma alteração.</strong></p>
-    </div>
-
-    <!-- OPÇÃO 6 -->
-    <div class="card">
-      <span class="menu-badge">Opção 6</span>
-      <h3>Instalar idiomas do Koha (Pacotes Internacionais)</h3>
-      <p>Disponibiliza um catálogo completo com mais de 70 pacotes de idiomas oficiais mantidos pela comunidade internacional (incluindo Português de Portugal <code>pt-PT</code>, Espanhol <code>es-ES</code>, Inglês Britânico <code>en-GB</code>, Francês <code>fr-FR</code>, Italiano, Alemão, etc.):</p>
-      <ul>
-        <li>Baixa e compila os pacotes de tradução via <code>koha-translate --install</code>.</li>
-        <li>Reinicia o cache do Memcached e os processos Plack para registrar os novos templates.</li>
-        <li>Pergunta se você deseja ativar o idioma imediatamente nas preferências de sistema (<code>language</code> e <code>OPACLanguages</code>), disponibilizando a bandeira ou seletor de idiomas no rodapé do catálogo público e na tela de login dos bibliotecários.</li>
-      </ul>
-    </div>
-
-    <!-- OPÇÃO 7 -->
-    <div class="card">
-      <span class="menu-badge">Opção 7</span>
-      <h3>Alternar motor de busca (Zebra &harr; Elasticsearch)</h3>
-      <p>Permite alternar entre os dois motores de busca suportados pelo Koha com consistência de banco e configuração:</p>
-      <ul>
-        <li><strong>Zebra:</strong> Motor tradicional C++ embutido. Extremamente leve (consome cerca de 1,5 GB a menos de memória RAM), perfeito para servidores com 4 GB de RAM. A indexação é gerida por fila incremental periódica.</li>
-        <li><strong>Elasticsearch:</strong> Motor moderno corporativo em Java. Exige ao menos 8 GB de RAM recomendados. Oferece facetas dinâmicas em tempo real, tolerância a erros de digitação (fuzzy search) e velocidade superior em acervos de dezenas de milhares de títulos.</li>
-        <li><strong>Segurança na Transição:</strong> O script altera o XML via parser Python nativo (sem corromper tags), configura a memória JVM Heap do Elasticsearch com base na RAM da máquina, ativa os índices de biblios e autoridades, e instala um serviço systemd dedicado (<code>koha-es-indexer@library</code>) com um cron watchdog a cada 5 minutos para garantir que o indexador nunca pare.</li>
-      </ul>
-    </div>
-
-    <!-- OPÇÃO 8 -->
-    <div class="card">
-      <span class="menu-badge">Opção 8</span>
-      <h3>Reparar / reconstruir indexação</h3>
-      <p>Ferramenta de manutenção preventiva e corretiva para quando um livro novo for cadastrado mas não aparecer nas buscas do catálogo:</p>
-      <ul>
-        <li><strong>Para Elasticsearch:</strong> Diagnostica se a porta 9200 responde, verifica se o bloco XML está ativo, afere a fila de jobs pendentes e compara a quantidade de documentos no índice com o total de registros do MariaDB. Permite forçar rebuild completo (<code>koha-elasticsearch --rebuild -d library</code>) e cancelar jobs órfãos.</li>
-        <li><strong>Para Zebra:</strong> Mata processos travados do <code>zebrasrv</code>, remove travas corrompidas de arquivo (<code>.LCK</code> e <code>.pid</code>), restaura a posse dos diretórios para o usuário do Koha e reconstrói o índice do zero (<code>koha-rebuild-zebra -f -v -b -a -r library</code>).</li>
-      </ul>
-    </div>
-
-    <!-- OPÇÃO 9 -->
-    <div class="card">
-      <span class="menu-badge">Opção 9</span>
-      <h3>Dimensionar o servidor (Tuning de Memória)</h3>
-      <p>Ajusta dinamicamente a performance da biblioteca com base na memória RAM física do servidor. Aplica ajustes simultâneos em <code>PLACK_WORKERS</code> (quantos processos web respondem às requisições), <code>memcached</code> (tamanho do cache de sessões e templates) e <code>innodb_buffer_pool_size</code> (memória dedicada para manter o acervo carregado em RAM no banco de dados):</p>
       <table>
         <thead>
           <tr>
-            <th>Perfil</th>
-            <th>Capacidade da Máquina</th>
-            <th>Workers Plack</th>
-            <th>Cache Memcached</th>
-            <th>Buffer Pool InnoDB</th>
+            <th>Ambiente</th>
+            <th>Porta Padrão</th>
+            <th>Usuários Alvo</th>
+            <th>Escopo e Recursos do Módulo</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td><strong>Perfil 1</strong></td>
-            <td>Menos de 4 GB RAM</td>
-            <td>2 workers</td>
-            <td>64 MB</td>
-            <td>512 MB</td>
+            <td><strong>Staff Client (Intranet)</strong></td>
+            <td><code class="inline-code">TCP 8080</code></td>
+            <td>Bibliotecários, Catalogadores e Administradores</td>
+            <td>Catalogação MARC21 bibliográfica e de autoridades, circulação de acervo (empréstimos, devoluções, renovações rápidas por código de barras), gestão de aquisições, relatórios SQL gerenciais, administração de multas, configurações globais e integração SIP2/Z39.50.</td>
           </tr>
           <tr>
-            <td><strong>Perfil 2</strong></td>
-            <td>4 a 8 GB RAM</td>
-            <td>3 workers</td>
-            <td>128 MB</td>
-            <td>768 MB</td>
-          </tr>
-          <tr>
-            <td><strong>Perfil 3</strong></td>
-            <td>8 a 16 GB RAM</td>
-            <td>4 workers</td>
-            <td>128 MB</td>
-            <td>1 GB</td>
-          </tr>
-          <tr>
-            <td><strong>Perfil 4</strong></td>
-            <td>Mais de 16 GB RAM</td>
-            <td>6 workers</td>
-            <td>256 MB</td>
-            <td>2 GB</td>
+            <td><strong>OPAC (Public Catalog)</strong></td>
+            <td><code class="inline-code">TCP 80</code></td>
+            <td>Leitores, Estudantes, Pesquisadores e Comunidade</td>
+            <td>Interface de busca visual pública, navegação por facetas dinâmicas, reserva de exemplares, renovação online pelo autoatendimento do leitor, listas bibliográficas públicas e acesso a cópias digitais.</td>
           </tr>
         </tbody>
       </table>
-      <p><strong>Segurança de Rollback:</strong> Se você selecionar um perfil excessivamente alto e o MariaDB falhar na inicialização, o script desfaz o ajuste e restaura o arquivo original na hora, garantindo que o sistema nunca fique fora do ar.</p>
-    </div>
 
-    <!-- OPÇÃO 10 -->
-    <div class="card">
-      <span class="menu-badge">Opção 10</span>
-      <h3>Configurar backup em nuvem (Google Drive via Rclone)</h3>
-      <p>Garante que todos os backups noturnos do acervo sejam criptografados e salvos fora do servidor em nuvem segura:</p>
+      <p>Essa separação física em portas distintas permite políticas granulares de segurança: a porta 80 (OPAC) pode ficar livremente exposta na internet para consulta pública, enquanto a porta 8080 (Staff) pode ser restrita apenas à rede interna da biblioteca ou acessada sob autenticação de túnel criptografado.</p>
+    </section>
+
+    <section>
+      <h2>2. Preparação do Sistema Operacional (5 Cenários)</h2>
+      <p>O Koha foi concebido nativamente para rodar sobre distribuições Debian ou Ubuntu. Escolha rigorosamente <strong>apenas o cenário correspondente</strong> à sua infraestrutura:</p>
+
+      <div class="card card-highlight">
+        <h3>Cenário 1: Servidor Físico Dedicado (Ubuntu Server)</h3>
+        <p>Instalação de produção nativa em máquina física (desktop ou servidor de rack) dedicada exclusivamente ao acervo.</p>
+        <ul>
+          <li><strong>Download da ISO:</strong> Obtenha a imagem oficial <em>Ubuntu Server LTS</em> no site da Canonical.</li>
+          <li><strong>Gravação de Pendrive com BalenaEtcher:</strong> Conecte um pendrive de ao menos 4 GB em seu computador pessoal. Abra o BalenaEtcher, clique em <em>Flash from file</em>, aponte a ISO do Ubuntu Server, selecione o pendrive e confirme a gravação.</li>
+          <li><strong>Parametrização da BIOS/UEFI:</strong> Conecte o cabo de rede Ethernet ao computador do servidor. Ao ligar a máquina, pressione a tecla de Setup (geralmente <kbd>F2</kbd>, <kbd>Del</kbd> ou <kbd>F12</kbd>) e configure:
+            <ul>
+              <li><strong>Secure Boot:</strong> <em>Disabled</em> (impede bloqueios de módulos de kernel).</li>
+              <li><strong>SATA Controller Mode:</strong> <em>AHCI</em>.</li>
+              <li><strong>Restore on AC Power Loss:</strong> <em>Power On</em> (o servidor liga sozinho após queda e retorno de energia).</li>
+              <li><strong>Fast Boot:</strong> <em>Disabled</em>.</li>
+              <li><strong>Halt On:</strong> <em>No Errors</em> (evita travamento de boot se não houver teclado conectado).</li>
+            </ul>
+          </li>
+          <li><strong>Instalador do Ubuntu Server:</strong>
+            <ul>
+              <li>Conecte o pendrive, dê boot por ele e configure o idioma e teclado.</li>
+              <li>Deixe a interface de rede obter IP automático via DHCP.</li>
+              <li>Em <em>Guided storage configuration</em>, marque <strong>Use an entire disk</strong>.</li>
+              <li>Defina o nome do servidor, o nome de usuário (ex: <code class="inline-code">administrador</code>) e uma senha forte.</li>
+              <li><strong>OBRIGATÓRIO:</strong> Na tela de pacotes adicionais, navegue até <strong>Install OpenSSH server</strong> e aperte a barra de espaço para marcar a opção com um <code class="inline-code">[X]</code>. Sem isso, o acesso remoto não funcionará.</li>
+            </ul>
+          </li>
+          <li>Conclua a instalação, retire o pendrive e reinicie o servidor.</li>
+        </ul>
+      </div>
+
+      <div class="card card-highlight">
+        <h3>Cenário 2: Servidor em Nuvem / VPS (Hetzner, DigitalOcean, AWS, etc.)</h3>
+        <p>Ambiente em provedores de data center de alto uptime, ideal para bibliotecas que não possuem infraestrutura local contínua.</p>
+        <ul>
+          <li>Crie sua conta no provedor desejado e acerte os dados de faturamento.</li>
+          <li>Inicie a criação de um novo servidor virtual (Droplet / Cloud Compute).</li>
+          <li><strong>Sistema Operacional:</strong> Escolha rigorosamente <em>Ubuntu 22.04 LTS</em> ou <em>Ubuntu 24.04 LTS</em> (64-bit).</li>
+          <li><strong>Dimensionamento Obrigatório de Hardware:</strong> Selecione um plano com no mínimo <strong>2 vCPUs e 4 GB de RAM</strong>. Servidores com apenas 1 GB ou 2 GB travarão nos processos de compilação de índices e esgotarão a memória do Apache/Plack.</li>
+          <li><strong>Autenticação:</strong> Defina uma senha root robusta ou insira sua chave pública SSH.</li>
+          <li>Após o provisionamento, anote o Endereço de IP Público fornecido no painel da VPS.</li>
+        </ul>
+      </div>
+
+      <div class="card card-highlight">
+        <h3>Cenário 3: Computador com Linux Gráfico (Linux Mint ou Ubuntu Desktop)</h3>
+        <p>Instalação em computador com tela e interface gráfica que funcionará como terminal de atendimento e servidor simultaneamente.</p>
+        <ul>
+          <li>Baixe o <em>Linux Mint (Cinnamon Edition)</em> ou <em>Ubuntu Desktop LTS</em>.</li>
+          <li>Grave o arquivo ISO no pendrive com o BalenaEtcher.</li>
+          <li>Inicie o computador pelo pendrive e dê duplo clique no instalador gráfico na área de trabalho.</li>
+          <li>Conclua a instalação visual em português, definindo usuário e senha de administrador.</li>
+          <li><strong>Vantagem Operacional:</strong> Não é obrigatório usar SSH. Abra o terminal nativo pressionando <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd> e execute os comandos diretamente na tela.</li>
+        </ul>
+      </div>
+
+      <div class="card card-highlight">
+        <h3>Cenário 4: Windows com Máquina Virtual (VirtualBox)</h3>
+        <p>Execução do Ubuntu Server dentro de uma máquina virtual em hospedeiro Windows.</p>
+        <ul>
+          <li><strong>Virtualização na BIOS:</strong> Reinicie o Windows, acesse a BIOS e habilite o recurso <em>Intel Virtualization Technology (VT-x)</em> ou <em>SVM Mode (AMD)</em>.</li>
+          <li>Instale a versão estável do VirtualBox e baixe a ISO do Ubuntu Server LTS.</li>
+          <li><strong>Criação da VM:</strong>
+            <ul>
+              <li>Clique em <em>Novo</em> (New). Nome: <code class="inline-code">Koha-Server</code>. Tipo: Linux / Ubuntu 64-bit.</li>
+              <li>Aponte a imagem ISO baixada.</li>
+              <li><strong>ATENÇÃO CRÍTICA:</strong> Marque a caixa de seleção <strong>Pular Instalação Desatendida (Skip Unattended Installation)</strong>. Se você deixar o instalador desatendido passar, o VirtualBox criará usuários genéricos e não instalará o SSH, impedindo seu acesso.</li>
+              <li>Aloque ao menos <strong>4096 MB (4 GB) de RAM</strong> e <strong>2 núcleos de CPU</strong>. Aloque no mínimo 25 GB de disco.</li>
+            </ul>
+          </li>
+          <li><strong>Configuração Obrigatória de Rede (Modo Bridge):</strong>
+            <ul>
+              <li>Nas configurações da VM, abra a aba <em>Rede (Network)</em>.</li>
+              <li>Altere <em>Conectado a:</em> de NAT para <strong>Placa em modo Bridge (Bridged Adapter)</strong>.</li>
+              <li>Selecione o nome da sua placa de rede física (cabo ou Wi-Fi). Isso faz com que a máquina virtual receba um IP próprio do roteador, ficando visível para os outros computadores da biblioteca.</li>
+            </ul>
+          </li>
+          <li>Inicie a máquina virtual e conclua o assistente manual do Ubuntu Server com OpenSSH habilitado.</li>
+        </ul>
+      </div>
+
+      <div class="card card-highlight">
+        <h3>Cenário 5: Windows 10/11 com Subsistema Linux (WSL2)</h3>
+        <p>Execução nativa de um kernel Linux gerenciado pelo Windows, dispensando máquinas virtuais pesadas.</p>
+        <ul>
+          <li>Verifique se a virtualização (VT-x/SVM) está ativa na BIOS do computador.</li>
+          <li>Abra o menu Iniciar do Windows, digite <strong>PowerShell</strong>, clique com o botão direito e selecione <strong>Executar como Administrador</strong>.</li>
+          <li>Execute o comando de implantação automática:
+            <div class="code-container">
+              <div class="code-header"><span>PowerShell (Admin)</span><button class="copy-btn" onclick="copySnippet(this)">Copiar</button></div>
+              <pre><code>wsl --install -d Ubuntu</code></pre>
+            </div>
+          </li>
+          <li>Ao término, reinicie o computador. A tela de terminal preta do Ubuntu abrirá solicitando a criação de um usuário e senha (anote esses dados).</li>
+          <li><strong>Operação Contínua:</strong> Não há necessidade de SSH. Execute os comandos diretamente na janela do Ubuntu no Windows. Mantenha essa janela aberta em segundo plano para manter os serviços do Koha operando.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2>3. Acesso ao Terminal e Conexão SSH</h2>
+      <div class="info-box">
+        <strong>Regra de Acesso:</strong> Se você instalou em <strong>Linux Gráfico (Cenário 3)</strong> ou <strong>WSL2 (Cenário 5)</strong>, abra o terminal na sua própria tela e pule para a Seção 4. Se você instalou em <strong>Servidor Físico (Cenário 1)</strong>, <strong>VPS (Cenário 2)</strong> ou <strong>VirtualBox (Cenário 4)</strong>, acesse o terminal via SSH a partir de outro computador.
+      </div>
+
+      <h3>Descobrindo o Endereço IP Local do Servidor</h3>
+      <p>No terminal do seu servidor Linux, digite:</p>
+      <div class="code-container">
+        <div class="code-header"><span>Terminal do Servidor</span><button class="copy-btn" onclick="copySnippet(this)">Copiar</button></div>
+        <pre><code>ip a</code></pre>
+      </div>
+      <p>Localize sua interface de rede física (ex: <code class="inline-code">eth0</code>, <code class="inline-code">enp3s0</code> ou <code class="inline-code">wlan0</code>). Na linha iniciada com <code class="inline-code">inet</code>, observe o número antes da barra (ex: em <code class="inline-code">inet 192.168.1.105/24</code>, o IP é <code class="inline-code">192.168.1.105</code>). Se estiver em uma VPS, utilize o IP público do painel da nuvem.</p>
+
+      <h3>Conexão Remota via PowerShell (Windows) ou Terminal (macOS/Linux)</h3>
+      <p>Em seu computador de trabalho, abra o PowerShell ou terminal e conecte-se:</p>
+      <div class="code-container">
+        <div class="code-header"><span>Seu Computador Local</span><button class="copy-btn" onclick="copySnippet(this)">Copiar</button></div>
+        <pre><code>ssh usuario_do_servidor@ip_do_servidor</code></pre>
+      </div>
+      <p><em>Exemplo: <code class="inline-code">ssh administrador@192.168.1.105</code>. Se for a primeira conexão, digite <code class="inline-code">yes</code> e tecle Enter. Digite a senha cadastrada (os caracteres não aparecerão na tela por segurança).</em></p>
+    </section>
+
+    <section>
+      <h2>4. Baixando e Iniciando o Painel Interativo</h2>
+      <p>Utilize o comando atômico em linha única encadeada com <code class="inline-code">&amp;&amp;</code>. Ele faz o download seguro do script oficial, aplica permissões de execução em disco e inicia a suíte de gerenciamento imediatamente:</p>
+
+      <div class="code-container">
+        <div class="code-header"><span>Comando Único de Inicialização</span><button class="copy-btn" onclick="copySnippet(this)">Copiar</button></div>
+        <pre><code>sudo curl -fsSL "https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer" -o /usr/local/bin/options.sh && sudo chmod +x /usr/local/bin/options.sh && sudo options.sh</code></pre>
+      </div>
+
+      <div class="info-box">
+        <strong>Próximos Acessos ao Sistema:</strong> O executável fica permanentemente registrado no diretório <code class="inline-code">/usr/local/bin/options.sh</code>. Para gerenciar seu servidor futuramente, você nunca mais precisará baixar nada da internet: basta digitar diretamente:
+        <br><br>
+        <code class="inline-code">sudo options.sh</code>
+      </div>
+    </section>
+
+    <section>
+      <h2>5. Guia Completo das 27 Funções do Painel</h2>
+
+      <!-- OPÇÃO 1 -->
+      <div class="card">
+        <span class="menu-badge">Opção 1</span>
+        <h3>Instalar o servidor Koha (Implantação Completa)</h3>
+        <p>Essa rotina executa a preparação integral da máquina para rodar o Koha sem intervenções manuais propensas a erro. Ela compreende:</p>
+        <ul>
+          <li><strong>Pré-validação de Requisitos:</strong> Checa privilégios root, compatibilidade de distribuição Linux, resolução de DNS com os repositórios da comunidade Koha, integridade de conexão HTTPS e checagem de portas livres (80 e 8080).</li>
+          <li><strong>Ajuste de Locales e Relógio:</strong> Configura codificação obrigatória UTF-8 (<code class="inline-code">pt_BR.UTF-8</code> e <code class="inline-code">en_US.UTF-8</code>) e sincroniza o relógio do servidor com servidores atômicos via <code class="inline-code">systemd-timesyncd</code> NTP.</li>
+          <li><strong>Criação de Memória Virtual (SWAP 4 GB):</strong> Cria e inicializa um arquivo de swap de 4 GB com permissões 600 em <code class="inline-code">/etc/fstab</code>, evitando que picos de catalogação provoquem o encerramento do processo do Apache ou MariaDB por falta de memória física (Out-Of-Memory Killer).</li>
+          <li><strong>Blindagem do Gerenciador de Pacotes:</strong> Desativa timers ocultos do Ubuntu (como o <code class="inline-code">unattended-upgrades</code>) que bloqueiam travas de DPKG durante a instalação e implementa repetições automáticas (retry) contra quedas de pacotes.</li>
+          <li><strong>Instalação de Dependências Essenciais:</strong> Implanta utilitários de infraestrutura, incluindo o <code class="inline-code">glabels</code> (imprescindível para impressão de etiquetas de código de barras e lombada em bibliotecas), <code class="inline-code">rclone</code>, <code class="inline-code">fail2ban</code>, <code class="inline-code">memcached</code> e bibliotecas de manipulação XML.</li>
+          <li><strong>Chaves GPG e Repositórios Oficiais:</strong> Adiciona as chaves de assinatura digital e os repositórios do <em>Koha Community</em> e do <em>Elasticsearch 7.x</em>.</li>
+          <li><strong>Isolamento da Instância 'library':</strong> Inicializa o banco de dados MariaDB, aplica os templates globais em <code class="inline-code">koha-sites.conf</code>, configura os sockets do Apache, gera senhas aleatórias criptografadas e ativa o servidor de aplicações Plack e o daemon Zebra.</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 2 -->
+      <div class="card">
+        <span class="menu-badge">Opção 2</span>
+        <h3>Ver credenciais de acesso</h3>
+        <p>Extrai de forma limpa e imediata as credenciais mestre do arquivo <code class="inline-code">/etc/koha/sites/library/koha-conf.xml</code>. Exibe o usuário do banco (<code class="inline-code">koha_library</code>), a senha gerada na instalação, e as URLs de acesso com base no IP real da máquina. O script também salva essas informações no arquivo protegido <code class="inline-code">/root/credenciais_koha.txt</code> com permissão restrita <code class="inline-code">600</code> (apenas root lê).</p>
+      </div>
+
+      <!-- OPÇÃO 3 -->
+      <div class="card">
+        <span class="menu-badge">Opção 3</span>
+        <h3>Restaurar acervo de um backup (Com Rede de Segurança)</h3>
+        <p>Restauração avançada de dumps de banco de dados (<code class="inline-code">.sql</code> ou <code class="inline-code">.sql.gz</code>) contendo todo o catálogo, histórico de empréstimos e leitores cadastrados:</p>
+        <ul>
+          <li><strong>Explorador de Arquivos Integrado:</strong> Apresenta uma interface navegável pelo terminal para localizar o arquivo em qualquer pasta (inclusive pendrives montados em <code class="inline-code">/media</code> ou <code class="inline-code">/mnt</code>).</li>
+          <li><strong>Validação Prévia de Integridade:</strong> Testa o arquivo contra corrupção com <code class="inline-code">gzip -t</code> e valida se os cabeçalhos contêm comandos SQL válidos antes de descarregar qualquer tabela.</li>
+          <li><strong>Backup de Segurança Automático (Rollback):</strong> Antes de deletar a base atual, o sistema gera automaticamente um dump do estado atual (<code class="inline-code">PRE-RESTAURACAO_data.sql.gz</code>). Caso o arquivo novo contenha erros ou menos de 50 tabelas, o script detecta a anomalia e oferece reversão imediata para o backup anterior, protegendo a biblioteca contra perda de dados.</li>
+          <li><strong>Reconstrução de Esquema e Índices:</strong> Ao término da injeção, roda o <code class="inline-code">koha-upgrade-schema</code> para compatibilizar bancos antigos com a versão instalada, limpa os caches Memcached e reconstrói os índices do motor de busca ativo (Zebra ou Elasticsearch).</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 4 -->
+      <div class="card">
+        <span class="menu-badge">Opção 4</span>
+        <h3>Gerar backup manual local agora</h3>
+        <p>Permite gerar cópias de segurança instantâneas sob demanda. Abre o <em>Seletor de Diretórios</em> para você apontar o destino do arquivo no disco do servidor (ou num pendrive espetado e montado). O dump é realizado com parâmetros de <code class="inline-code">single-transaction</code>, garantindo que o acervo possa continuar sendo usado sem travamentos de tabela.</p>
+      </div>
+
+      <!-- OPÇÃO 5 -->
+      <div class="card">
+        <span class="menu-badge">Opção 5</span>
+        <h3>Enviar backup via SCP manual agora</h3>
+        <p>Gera um backup imediato e o envia através da rede local (via SSH/SCP) para outro computador, como o seu Windows ou Mac de trabalho. O painel fornece comandos prontos de PowerShell e Terminal para você descobrir rapidamente qual é o IP real do seu computador e o seu nome de usuário. Se você usá-la frequentemente, o painel perguntará se deseja reutilizar o destino salvo da última transferência.</p>
+      </div>
+
+      <!-- OPÇÃO 6 -->
+      <div class="card">
+        <span class="menu-badge">Opção 6</span>
+        <h3>Testar o último backup (Restauração de Ensaio)</h3>
+        <p>Aplica a regra máxima de segurança de TI: <em>um backup só existe se puder ser restaurado</em>. Esta função localiza o arquivo de backup automático mais recente em <code class="inline-code">/var/backups/koha_sql</code>, cria um banco de dados temporário isolado (<code class="inline-code">koha_teste_restauracao</code>), descompacta o arquivo e faz a importação completa. Em seguida, conta as tabelas, registros bibliográficos (biblios) e usuários (borrowers). Ao final, descarta o banco de teste e exibe o relatório de conformidade. <strong>O acervo oficial em produção não sofre nenhuma alteração.</strong></p>
+      </div>
+
+      <!-- OPÇÃO 7 -->
+      <div class="card">
+        <span class="menu-badge">Opção 7</span>
+        <h3>Instalar idiomas do Koha (Pacotes Internacionais)</h3>
+        <p>Disponibiliza um catálogo completo com mais de 70 pacotes de idiomas oficiais mantidos pela comunidade internacional (incluindo Português de Portugal <code class="inline-code">pt-PT</code>, Espanhol <code class="inline-code">es-ES</code>, Inglês Britânico <code class="inline-code">en-GB</code>, Francês <code class="inline-code">fr-FR</code>, Italiano, Alemão, etc.):</p>
+        <ul>
+          <li>Baixa e compila os pacotes de tradução via <code class="inline-code">koha-translate --install</code>.</li>
+          <li>Reinicia o cache do Memcached e os processos Plack para registrar os novos templates.</li>
+          <li>Pergunta se você deseja ativar o idioma imediatamente nas preferências de sistema (<code class="inline-code">language</code> e <code class="inline-code">OPACLanguages</code>), disponibilizando a bandeira ou seletor de idiomas no rodapé do catálogo público e na tela de login dos bibliotecários.</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 8 -->
+      <div class="card">
+        <span class="menu-badge">Opção 8</span>
+        <h3>Alternar motor de busca (Zebra &harr; Elasticsearch)</h3>
+        <p>Permite alternar entre os dois motores de busca suportados pelo Koha com consistência de banco e configuração:</p>
+        <ul>
+          <li><strong>Zebra:</strong> Motor tradicional C++ embutido. Extremamente leve (consome cerca de 1,5 GB a menos de memória RAM), perfeito para servidores com 4 GB de RAM. A indexação é gerida por fila incremental periódica.</li>
+          <li><strong>Elasticsearch:</strong> Motor moderno corporativo em Java. Exige ao menos 8 GB de RAM recomendados. Oferece facetas dinâmicas em tempo real, tolerância a erros de digitação (fuzzy search) e velocidade superior em acervos de dezenas de milhares de títulos.</li>
+          <li><strong>Segurança na Transição:</strong> O script altera o XML via parser Python nativo (sem corromper tags), configura a memória JVM Heap do Elasticsearch com base na RAM da máquina, ativa os índices de biblios e autoridades, e instala um serviço systemd dedicado (<code class="inline-code">koha-es-indexer@library</code>) com um cron watchdog a cada 5 minutos para garantir que o indexador nunca pare.</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 9 -->
+      <div class="card">
+        <span class="menu-badge">Opção 9</span>
+        <h3>Reparar / reconstruir indexação</h3>
+        <p>Ferramenta de manutenção preventiva e corretiva para quando um livro novo for cadastrado mas não aparecer nas buscas do catálogo:</p>
+        <ul>
+          <li><strong>Para Elasticsearch:</strong> Diagnostica se a porta 9200 responde, verifica se o bloco XML está ativo, afere a fila de jobs pendentes e compara a quantidade de documentos no índice com o total de registros do MariaDB. Permite forçar rebuild completo (<code class="inline-code">koha-elasticsearch --rebuild -d library</code>) e cancelar jobs órfãos.</li>
+          <li><strong>Para Zebra:</strong> Mata processos travados do <code class="inline-code">zebrasrv</code>, remove travas corrompidas de arquivo (<code class="inline-code">.LCK</code> e <code class="inline-code">.pid</code>), restaura a posse dos diretórios para o usuário do Koha e reconstrói o índice do zero (<code class="inline-code">koha-rebuild-zebra -f -v -b -a -r library</code>).</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 10 -->
+      <div class="card">
+        <span class="menu-badge">Opção 10</span>
+        <h3>Dimensionar o servidor (Tuning de Memória)</h3>
+        <p>Ajusta dinamicamente a performance da biblioteca com base na memória RAM física do servidor. Aplica ajustes simultâneos em <code class="inline-code">PLACK_WORKERS</code> (quantos processos web respondem às requisições), <code class="inline-code">memcached</code> (tamanho do cache de sessões e templates) e <code class="inline-code">innodb_buffer_pool_size</code> (memória dedicada para manter o acervo carregado em RAM no banco de dados):</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Perfil</th>
+              <th>Capacidade da Máquina</th>
+              <th>Workers Plack</th>
+              <th>Cache Memcached</th>
+              <th>Buffer Pool InnoDB</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Perfil 1</strong></td>
+              <td>Menos de 4 GB RAM</td>
+              <td>2 workers</td>
+              <td>64 MB</td>
+              <td>512 MB</td>
+            </tr>
+            <tr>
+              <td><strong>Perfil 2</strong></td>
+              <td>4 a 8 GB RAM</td>
+              <td>3 workers</td>
+              <td>128 MB</td>
+              <td>768 MB</td>
+            </tr>
+            <tr>
+              <td><strong>Perfil 3</strong></td>
+              <td>8 a 16 GB RAM</td>
+              <td>4 workers</td>
+              <td>128 MB</td>
+              <td>1 GB</td>
+            </tr>
+            <tr>
+              <td><strong>Perfil 4</strong></td>
+              <td>Mais de 16 GB RAM</td>
+              <td>6 workers</td>
+              <td>256 MB</td>
+              <td>2 GB</td>
+            </tr>
+          </tbody>
+        </table>
+        <p><strong>Segurança de Rollback:</strong> Se você selecionar um perfil excessivamente alto e o MariaDB falhar na inicialização, o script desfaz o ajuste e restaura o arquivo original na hora, garantindo que o sistema nunca fique fora do ar.</p>
+      </div>
+
+      <!-- OPÇÃO 11 -->
+      <div class="card">
+        <span class="menu-badge">Opção 11</span>
+        <h3>Configurar backup em nuvem (Google Drive via Rclone)</h3>
+        <p>Garante que todos os backups noturnos do acervo sejam criptografados e salvos fora do servidor em nuvem segura:</p>
+        <ul>
+          <li><strong>Modo Expresso (Google Drive):</strong> Abre o assistente de conexão remota. O script exibe na tela o comando de autorização OOB (<code class="inline-code">rclone authorize "drive" "..."</code>). Você copia esse comando, cola no terminal do seu computador de trabalho (onde existe navegador), faz login com a conta Google da biblioteca e recebe o token de acesso. Basta colar esse token de volta no servidor para concluir a vinculação.</li>
+          <li><strong>Modo Manual:</strong> Permite vincular OneDrive, Dropbox, Amazon S3, Google Cloud Storage, SFTP ou Nextcloud utilizando o assistente nativo do Rclone.</li>
+          <li><strong>Validação e Teste Imediato:</strong> O script testa a criação da pasta remota (<code class="inline-code">Backup_SQL_Koha</code> e <code class="inline-code">Backup_MARC_Koha</code>), vincula as variáveis em <code class="inline-code">/etc/koha-easy-install/backup.conf</code> e permite disparar um backup de teste imediatamente para você ver o arquivo subindo no seu Drive.</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 12 -->
+      <div class="card">
+        <span class="menu-badge">Opção 12</span>
+        <h3>Configurar backup automático via SCP (Rede Local)</h3>
+        <p>Se você não quer depender de armazenamento em nuvem externa (como o Google Drive), esta opção cria uma ponte de rede invisível com outro computador. O script gera uma chave de criptografia de curva elíptica dedicada (<code class="inline-code">ed25519</code>), transfere para o computador destino informando a senha uma única vez, e a partir daquele dia, o script de backup noturno fará o dump do banco de dados e copiará o arquivo silenciosamente por rede local todas as noites às 23:00, sem precisar de aprovação manual ou senha.</p>
+      </div>
+
+      <!-- OPÇÃO 13 -->
+      <div class="card">
+        <span class="menu-badge">Opção 13</span>
+        <h3>Tarefas agendadas (Horários do Cron)</h3>
+        <p>Abre o arquivo de rotinas do sistema (<code class="inline-code">/etc/cron.d/koha_tasks</code>) no editor Nano com uma cópia de segurança preventiva. Todas as colunas de agendamento são didaticamente explicadas no cabeçalho. O script possui um algoritmo corretor: se você acidentalmente apagar a linha de <code class="inline-code">PATH</code> do cron, o painel a restaura automaticamente antes de reiniciar o serviço, garantindo que o utilitário <code class="inline-code">koha-shell</code> nunca pare de rodar.</p>
+      </div>
+
+      <!-- OPÇÃO 14 -->
+      <div class="card">
+        <span class="menu-badge">Opção 14</span>
+        <h3>Configurar e-mails e avisos (SMTP)</h3>
+        <p>Instala as bibliotecas de autenticação SASL necessárias e agenda a execução diária dos disparos de avisos de atraso e notificações de empréstimo (às 08:00 e 08:05). Fornece o guia visual de como cadastrar o servidor SMTP (como Gmail, Outlook ou servidor institucional próprio) na interface web do Koha com suporte a STARTTLS e senhas de aplicativo.</p>
+      </div>
+
+      <!-- OPÇÃO 15 -->
+      <div class="card">
+        <span class="menu-badge">Opção 15</span>
+        <h3>Criar superbibliotecário (Acesso Administrativo)</h3>
+        <p>Criação segura de novos administradores globais diretamente pela linha de comando, ideal para momentos em que a senha da interface web foi esquecida ou a equipe mudou:</p>
+        <ul>
+          <li>Localiza a biblioteca principal e a categoria administrativa cadastradas no banco de dados.</li>
+          <li>Valida nomes de usuário permitindo apenas caracteres alfanuméricos seguros e aplica sanitização contra SQL Injection (duplicação de apóstrofos).</li>
+          <li>Exige o cadastro de um <strong>Número de Cartão (cardnumber)</strong> e de uma senha com no mínimo 8 caracteres e confirmação de digitação.</li>
+          <li><strong>Criptografia Segura por STDIN:</strong> O hash da senha é processado por script Perl usando a biblioteca interna do Koha (<code class="inline-code">Koha::AuthUtils::hash_password</code>). A senha trafega por entrada padrão direta, impedindo que a senha em texto puro seja visualizada no histórico do bash (<code class="inline-code">history</code>) ou nos comandos de monitoramento de processos (<code class="inline-code">ps aux</code>).</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 16 -->
+      <div class="card">
+        <span class="menu-badge">Opção 16</span>
+        <h3>Acesso externo (Cloudflare Tunnel Zero Trust)</h3>
+        <p>Permite colocar o catálogo na internet em conexões residenciais ou institucionais sem precisar de IP público estático e sem abrir portas no modem/roteador da biblioteca. Baixa e configura o conector oficial <code class="inline-code">cloudflared</code> a partir do token gerado no painel da Cloudflare e inicializa o serviço em segundo plano com reinício automático no boot.</p>
+      </div>
+
+      <!-- OPÇÃO 17 -->
+      <div class="card">
+        <span class="menu-badge">Opção 17</span>
+        <h3>Certificado SSL gratuito (Let's Encrypt / Certbot)</h3>
+        <p>Para servidores tradicionais que possuem endereço de IP público direto e porta 80 aberta. Instala o <code class="inline-code">certbot</code> e o conector Apache, orientando a emissão do certificado HTTPS com renovação automática e recarga suave do servidor web.</p>
+      </div>
+
+      <!-- OPÇÃO 18 -->
+      <div class="card">
+        <span class="menu-badge">Opção 18</span>
+        <h3>Ativar SIP2 e Z39.50</h3>
+        <p>Abre portas e inicializa os daemons de comunicação internacional do Koha:</p>
+        <ul>
+          <li><strong>Z39.50 (Porta 2100):</strong> Permite que outras bibliotecas conectem no seu catálogo para baixar registros catalogados pelo protocolo internacional.</li>
+          <li><strong>SIP2 (Porta 6001):</strong> Habilita a comunicação com totens de autoatendimento, portais antifurto e leitores RFID de devolução de livros.</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 19 -->
+      <div class="card">
+        <span class="menu-badge">Opção 19</span>
+        <h3>Relógio e fuso horário</h3>
+        <p>Menu didático que permite alterar o fuso horário oficial da máquina (com atalhos rápidos para todos os fusos brasileiros e de Portugal). Ao aplicar o novo fuso, reinicia o cron imediatamente para evitar que devoluções de livros tomem multas indevidas por discrepância de horário.</p>
+      </div>
+
+      <!-- OPÇÃO 20 -->
+      <div class="card">
+        <span class="menu-badge">Opção 20</span>
+        <h3>Central de segurança</h3>
+        <p>Auditoria e blindagem do servidor em 4 frentes:</p>
+        <ul>
+          <li><strong>Status do Fail2ban:</strong> Exibe tentativas de ataques de força bruta bloqueadas nas cadeias SSH e Apache.</li>
+          <li><strong>Firewall da Porta Staff (8080):</strong> Permite restringir a porta administrativa 8080 apenas para acessos originados do IP local (127.0.0.1) ou faixas de rede privada da biblioteca (192.168.x.x e 10.x.x.x), bloqueando qualquer tentativa de acesso público externo.</li>
+          <li><strong>Rotação da Senha do Banco:</strong> Gera uma nova senha randômica forte de 24 caracteres, atualiza a conta do MariaDB com <code class="inline-code">ALTER USER</code>, altera o <code class="inline-code">koha-conf.xml</code>, atualiza o arquivo de credenciais e reinicia o Plack, testando a resposta HTTP do sistema para validar o sucesso.</li>
+          <li><strong>Regras do Firewall UFW:</strong> Lista detalhadamente todas as portas autorizadas e bloqueadas no servidor.</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 21 -->
+      <div class="card">
+        <span class="menu-badge">Opção 21</span>
+        <h3>Atualizar sistema e schemas</h3>
+        <p>Executa a atualização de pacotes estáveis do sistema operacional e do repositório estável do Koha. Aplica as migrações estruturais de banco de dados com <code class="inline-code">koha-upgrade-schema library</code>, limpa pacotes órfãos e executa o validador completo para assegurar que nenhum serviço quebrou na atualização.</p>
+      </div>
+
+      <!-- OPÇÃO 22 -->
+      <div class="card">
+        <span class="menu-badge">Opção 22</span>
+        <h3>Validar o sistema completo</h3>
+        <p>Motor de diagnóstico com relatório em formato texto. Avalia conexão de rede, resolução de DNS, processos em memória, portas TCP ativas, códigos de resposta HTTP (80 e 8080), integridade de sintaxe do XML do Koha via parser Python nativo (resolvendo o problema de blocos comentados no <code class="inline-code">koha-conf.xml</code>), conformidade dos agendamentos de cron, idade e integridade do último backup e status do firewall e Rclone.</p>
+      </div>
+
+      <!-- OPÇÃO 23 -->
+      <div class="card">
+        <span class="menu-badge">Opção 23</span>
+        <h3>Status detalhado</h3>
+        <p>Painel de telemetria em tempo real: exibe em uma única janela o estado de todos os serviços (Apache, MariaDB, Memcached, Plack, Zebra, Elasticsearch, Cloudflared), motor de busca ativo, jobs pendentes na fila, memória RAM em uso, espaço em disco e data do último backup efetuado (tanto em nuvem quanto SCP).</p>
+      </div>
+
+      <!-- OPÇÃO 24 -->
+      <div class="card">
+        <span class="menu-badge">Opção 24</span>
+        <h3>Atualizar este painel</h3>
+        <p>Autoatualização atômica do script: baixa a versão mais recente do código do repositório no GitHub para um arquivo temporário em <code class="inline-code">/tmp</code>, valida a sintaxe completa com <code class="inline-code">bash -n</code> e, se não houver erros, substitui o executável oficial em <code class="inline-code">/usr/local/bin/options.sh</code>, preservando uma cópia de backup da versão anterior.</p>
+      </div>
+
+      <!-- OPÇÃO 25 -->
+      <div class="card">
+        <span class="menu-badge">Opção 25</span>
+        <h3>Reiniciar o servidor</h3>
+        <p>Envia sinal de reinicialização controlado ao sistema operacional após confirmação na tela, garantindo que buffers de disco e conexões ativas do MariaDB sejam descarregados de forma íntegra.</p>
+      </div>
+
+      <!-- OPÇÃO 26 -->
+      <div class="card">
+        <span class="menu-badge">Opção 26</span>
+        <h3>Sobre o programa (GitHub / Apoio)</h3>
+        <p>Exibe os créditos do desenvolvedor de Palotina e as informações da versão, incentivando a colaboração de código aberto via GitHub.</p>
+      </div>
+
+      <!-- OPÇÃO 27 -->
+      <div class="card">
+        <span class="menu-badge">Opção 27</span>
+        <h3>Sair</h3>
+        <p>Encerra a navegação no painel interativo, restaura os timers de atualização do APT e retorna o controle para o terminal Linux com código de saída limpo.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>6. Concluindo o Web Installer no Navegador</h2>
+      <p>Abra seu navegador em seu computador de trabalho e acesse a porta administrativa 8080:</p>
       <ul>
-        <li><strong>Modo Expresso (Google Drive):</strong> Abre o assistente de conexão remota. O script exibe na tela o comando de autorização OOB (<code>rclone authorize "drive" "..."</code>). Você copia esse comando, cola no terminal do seu computador de trabalho (onde existe navegador), faz login com a conta Google da biblioteca e recebe o token de acesso. Basta colar esse token de volta no servidor para concluir a vinculação.</li>
-        <li><strong>Modo Manual:</strong> Permite vincular OneDrive, Dropbox, Amazon S3, Google Cloud Storage, SFTP ou Nextcloud utilizando o assistente nativo do Rclone.</li>
-        <li><strong>Validação e Teste Imediato:</strong> O script testa a criação da pasta remota (<code>Backup_SQL_Koha</code> e <code>Backup_MARC_Koha</code>), vincula as variáveis em <code>/etc/koha-easy-install/backup.conf</code> e permite disparar um backup de teste imediatamente para você ver o arquivo subindo no seu Drive.</li>
+        <li><strong>Cenários 1, 2 e 4 (Servidor Físico / VPS / VirtualBox):</strong> Digite <code class="inline-code">http://ip_do_servidor:8080</code> (ex: <code class="inline-code">http://192.168.1.105:8080</code>).</li>
+        <li><strong>Cenários 3 e 5 (Linux Gráfico / WSL2):</strong> Digite diretamente <code class="inline-code">http://localhost:8080</code>.</li>
       </ul>
-    </div>
 
-    <!-- OPÇÃO 11 -->
-    <div class="card">
-      <span class="menu-badge">Opção 11</span>
-      <h3>Tarefas agendadas (Horários do Cron)</h3>
-      <p>Abre o arquivo de rotinas do sistema (<code>/etc/cron.d/koha_tasks</code>) no editor Nano com uma cópia de segurança preventiva. Todas as colunas de agendamento são didaticamente explicadas no cabeçalho. O script possui um algoritmo corretor: se você acidentalmente apagar a linha de <code>PATH</code> do cron, o painel a restaura automaticamente antes de reiniciar o serviço, garantindo que o utilitário <code>koha-shell</code> nunca pare de rodar.</p>
-    </div>
+      <p>Complete as etapas sequenciais do assistente:</p>
+      <ol>
+        <li><strong>Autenticação Provisória:</strong> Usuário: <code class="inline-code">koha_library</code> | Senha: Cole a senha gerada pelo script na tela de conclusão da Opção 1 (caso tenha esquecido, consulte a <strong>Opção 2</strong> do painel).</li>
+        <li><strong>Seleção de Idioma:</strong> Escolha <em>Português do Brasil (pt-BR)</em> e clique em Continuar.</li>
+        <li><strong>Módulos Perl e Formato de Catalogação:</strong> Confirme a listagem de dependências e escolha o formato padrão internacional <strong>MARC21</strong>.</li>
+        <li><strong>Configurações Opcionais:</strong> Mantenha marcados os frameworks padrão de catalogação MARC21. <strong>CRÍTICO:</strong> Desmarque todas as opções que mencionarem "dados de exemplo", "amostras de usuários", "amostras de itens" ou "amostras de bibliotecas", garantindo que sua biblioteca nasça limpa.</li>
+        <li><strong>Cadastro da Unidade:</strong> Insira uma sigla curta para sua biblioteca (ex: <code class="inline-code">CENTRAL</code>) e o nome oficial por extenso.</li>
+        <li><strong>Categoria Administrativa:</strong> Código da categoria: <code class="inline-code">STAFF</code> | Descrição: <em>Administração</em> | Tipo: <em>Funcionário (Staff)</em>.</li>
+        <li><strong>Superbibliotecário Permanente:</strong> Preencha seu nome, número de cartão (ex: <code class="inline-code">1</code>), crie seu login definitivo de uso diário e uma senha forte. Anote essa senha.</li>
+        <li><strong>Tipos de Item:</strong> Código: <code class="inline-code">LIV</code> | Descrição: <em>Livro</em>.</li>
+        <li><strong>Regras de Empréstimo:</strong> Defina limites iniciais (ex: 3 a 5 itens, 14 dias de prazo, 2 renovações).</li>
+      </ol>
+      <p>Ao clicar em <em>Concluir e Começar a Usar o Koha</em>, o sistema carregará o painel administrativo definitivo pronto para catalogação.</p>
+    </section>
 
-    <!-- OPÇÃO 12 -->
-    <div class="card">
-      <span class="menu-badge">Opção 12</span>
-      <h3>Configurar e-mails e avisos (SMTP)</h3>
-      <p>Instala as bibliotecas de autenticação SASL necessárias e agenda a execução diária dos disparos de avisos de atraso e notificações de empréstimo (às 08:00 e 08:05). Fornece o guia visual de como cadastrar o servidor SMTP (como Gmail, Outlook ou servidor institucional próprio) na interface web do Koha com suporte a STARTTLS e senhas de aplicativo.</p>
-    </div>
-
-    <!-- OPÇÃO 13 -->
-    <div class="card">
-      <span class="menu-badge">Opção 13</span>
-      <h3>Criar superbibliotecário (Acesso Administrativo)</h3>
-      <p>Criação segura de novos administradores globais diretamente pela linha de comando, ideal para momentos em que a senha da interface web foi esquecida ou a equipe mudou:</p>
+    <section>
+      <h2>7. Publicação Externa, Domínios Gratuitos e Google</h2>
+      <h3>Passo 1: Obter um Domínio Próprio ou Subdomínio Gratuito</h3>
       <ul>
-        <li>Localiza a biblioteca principal e a categoria administrativa cadastradas no banco de dados.</li>
-        <li>Valida nomes de usuário permitindo apenas caracteres alfanuméricos seguros e aplica sanitização contra SQL Injection (duplicação de apóstrofos).</li>
-        <li>Exige senha com no mínimo 8 caracteres e confirmação de digitação.</li>
-        <li><strong>Criptografia Segura por STDIN:</strong> O hash da senha é processado por script Perl usando a biblioteca interna do Koha (<code>Koha::AuthUtils::hash_password</code>). A senha trafega por entrada padrão direta, impedindo que a senha em texto puro seja visualizada no histórico do bash (<code>history</code>) ou nos comandos de monitoramento de processos (<code>ps aux</code>).</li>
+        <li><strong>Opção Recomendada (Domínio Próprio):</strong> Registre um domínio (ex: <code class="inline-code">bibliotecamunicipal.org</code>) na Cloudflare ou Registro.br.</li>
+        <li><strong>Opção Gratuita com o DigitalPlat (Imediato):</strong>
+          <ol>
+            <li>Acesse <a href="https://domain.digitalplat.org" target="_blank" style="color: var(--text-highlight);">domain.digitalplat.org</a> e crie sua conta.</li>
+            <li>Em <em>Domain registration</em>, escolha uma extensão gratuita (ex: <code class="inline-code">.dpdns.org</code> ou <code class="inline-code">.us.kg</code>) e cadastre sua biblioteca (ex: <code class="inline-code">minhabiblioteca.dpdns.org</code>).</li>
+            <li>Vá no site da <a href="https://dash.cloudflare.com" target="_blank" style="color: var(--text-highlight);">Cloudflare</a>, clique em <strong>Adicionar site</strong>, cole o domínio e selecione o <strong>Plano Gratuito</strong>.</li>
+            <li>A Cloudflare vai gerar dois Nameservers (ex: <code class="inline-code">vera.ns.cloudflare.com</code>). Copie e cole os dois de volta no painel do DigitalPlat (seção DNS / Nameservers).</li>
+          </ol>
+        </li>
+        <li><strong>Opção Gratuita com o EU.ORG (Demora de 15 a 45 dias para aprovar):</strong>
+          <ol>
+            <li>Acesse <a href="https://nic.eu.org" target="_blank" style="color: var(--text-highlight);">nic.eu.org</a> e crie sua conta para solicitar um domínio do tipo <code class="inline-code">suabiblioteca.eu.org</code>.</li>
+            <li>O processo é idêntico: adicione o domínio na Cloudflare, pegue os dois Nameservers fornecidos, e cadastre-os no formulário do <code class="inline-code">nic.eu.org</code> enquanto aguarda a aprovação manual dos voluntários deles.</li>
+          </ol>
+        </li>
       </ul>
-    </div>
 
-    <!-- OPÇÃO 14 -->
-    <div class="card">
-      <span class="menu-badge">Opção 14</span>
-      <h3>Acesso externo (Cloudflare Tunnel Zero Trust)</h3>
-      <p>Permite colocar o catálogo na internet em conexões residenciais ou institucionais sem precisar de IP público estático e sem abrir portas no modem/roteador da biblioteca. Baixa e configura o conector oficial <code>cloudflared</code> a partir do token gerado no painel da Cloudflare e inicializa o serviço em segundo plano com reinício automático no boot.</p>
-    </div>
+      <h3>Passo 2: Criação do Túnel Cloudflare (Furar CGNAT e Modem)</h3>
+      <ol>
+        <li>No painel da Cloudflare (seção Zero Trust), vá em <strong>Networks &gt; Tunnels</strong> e clique em <strong>Create a tunnel</strong>.</li>
+        <li>Defina um nome (ex: <code class="inline-code">koha-servidor</code>) e selecione <strong>Debian 64-bit</strong>.</li>
+        <li>Copie o Token gerado (o código que começa com <code class="inline-code">ey...</code>).</li>
+        <li>No terminal do servidor linux, abra o painel interativo (<code>sudo options.sh</code>) e escolha a <strong>Opção 16 (Acesso externo)</strong>. Cole o token: o túnel ficará online imediatamente.</li>
+      </ol>
 
-    <!-- OPÇÃO 15 -->
-    <div class="card">
-      <span class="menu-badge">Opção 15</span>
-      <h3>Certificado SSL gratuito (Let's Encrypt / Certbot)</h3>
-      <p>Para servidores tradicionais que possuem endereço de IP público direto e porta 80 aberta. Instala o <code>certbot</code> e o conector Apache, orientando a emissão do certificado HTTPS com renovação automática e recarga suave do servidor web.</p>
-    </div>
+      <h3>Passo 3: Mapeamento e Acesso Web</h3>
+      <p>Na aba <strong>Public Hostnames</strong> do túnel na Cloudflare, adicione as rotas:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Aplicação</th>
+            <th>Subdomínio</th>
+            <th>Domínio</th>
+            <th>Tipo (Service)</th>
+            <th>URL Local</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Staff (Administração)</strong></td>
+            <td><code class="inline-code">adm</code></td>
+            <td>seu_dominio.org</td>
+            <td>HTTP</td>
+            <td><code class="inline-code">localhost:8080</code></td>
+          </tr>
+          <tr>
+            <td><strong>OPAC (Catálogo Público)</strong></td>
+            <td><em>Deixe em branco</em></td>
+            <td>seu_dominio.org</td>
+            <td>HTTP</td>
+            <td><code class="inline-code">localhost:80</code></td>
+          </tr>
+        </tbody>
+      </table>
 
-    <!-- OPÇÃO 16 -->
-    <div class="card">
-      <span class="menu-badge">Opção 16</span>
-      <h3>Ativar SIP2 e Z39.50</h3>
-      <p>Abre portas e inicializa os daemons de comunicação internacional do Koha:</p>
+      <h3>Passo 4: Integrar ao Google Search Console</h3>
+      <p>Se você quer que seu acervo apareça nas buscas do Google:</p>
+      <ol>
+        <li>Acesse o <a href="https://search.google.com/search-console" target="_blank" style="color: var(--text-highlight);">Google Search Console</a> e adicione sua URL pública (ex: <code class="inline-code">https://seu_dominio.org</code>) escolhendo a verificação por "Prefixo do URL".</li>
+        <li>O Google oferecerá a verificação via <strong>Tag HTML</strong>. Copie o bloco gerado (algo como <code class="inline-code">&lt;meta name="google-site-verification" content="XYZ123..." /&gt;</code>).</li>
+        <li>Acesse o seu Koha na aba Staff administrativa (porta 8080).</li>
+        <li>Vá em <strong>Administração &gt; Preferências do Sistema globais &gt; OPAC &gt; Aparência</strong> e localize a preferência <code class="inline-code">opacheader</code>.</li>
+        <li>Cole o código HTML fornecido pelo Google e salve.</li>
+        <li>Volte ao Search Console e clique em <strong>Verificar</strong>. Pronto! O Google passará a ler e divulgar o acervo.</li>
+      </ol>
+    </section>
+  </div>
+  <!-- FIM DO CONTEÚDO EM PORTUGUÊS -->
+
+  <!-- INÍCIO DO CONTEÚDO EM INGLÊS (Oculto por Padrão) -->
+  <div id="content-en" style="display: none;">
+    <header>
+      <div class="badge-bar">
+        <span class="badge">Koha ILS v3.0</span>
+        <span class="badge">Production Grade</span>
+        <span class="badge">Debian &amp; Ubuntu</span>
+      </div>
+      <h1>Koha Complete Installation and Configuration Manual</h1>
+      <p class="lead">A structured guide focused on operational stability: thorough OS preparation across 5 scenarios, single-line atomic initialization, and full utilization of the 27 features in the <strong>Koha Easy Install (Interactive Panel)</strong>.</p>
+    </header>
+
+    <section>
+      <h2>1. What Koha is and how it works</h2>
+      <p>Koha is the world's first open-source Integrated Library System (ILS). It operates natively on the enterprise LAMP stack (Linux, Apache, MariaDB, and Perl), functioning as a central server that handles both internal staff operations and patron searches.</p>
+      
+      <h3>Dual Independent Port Topology</h3>
+      <p>Unlike conventional web systems that group public and administrative parts under a single URL path, Koha divides its applications into two dedicated and isolated TCP ports on the Apache web server:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Environment</th>
+            <th>Default Port</th>
+            <th>Target Users</th>
+            <th>Scope and Features</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Staff Client (Intranet)</strong></td>
+            <td><code class="inline-code">TCP 8080</code></td>
+            <td>Librarians, Catalogers, and Administrators</td>
+            <td>Bibliographic and authority MARC21 cataloging, circulation (checkouts, returns, quick barcode renewals), acquisitions management, SQL reporting, fines administration, global settings, and SIP2/Z39.50 integration.</td>
+          </tr>
+          <tr>
+            <td><strong>OPAC (Public Catalog)</strong></td>
+            <td><code class="inline-code">TCP 80</code></td>
+            <td>Patrons, Students, Researchers, and Community</td>
+            <td>Public visual search interface, dynamic faceted navigation, item holds, online self-renewal, public bibliographic lists, and access to digital copies.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>This physical separation on distinct ports allows for granular security policies: port 80 (OPAC) can be freely exposed to the internet for public consultation, while port 8080 (Staff) can be restricted solely to the library's internal network or accessed under encrypted tunnel authentication.</p>
+    </section>
+
+    <section>
+      <h2>2. Operating System Preparation (5 Scenarios)</h2>
+      <p>Koha was natively designed to run on Debian or Ubuntu distributions. Strictly choose <strong>only the scenario corresponding</strong> to your infrastructure:</p>
+
+      <div class="card card-highlight">
+        <h3>Scenario 1: Dedicated Physical Server (Ubuntu Server)</h3>
+        <p>Native production installation on a physical machine (desktop or rack server) dedicated exclusively to the catalog.</p>
+        <ul>
+          <li><strong>ISO Download:</strong> Get the official <em>Ubuntu Server LTS</em> image from the Canonical website.</li>
+          <li><strong>USB Flashing with BalenaEtcher:</strong> Connect a USB drive of at least 4 GB to your personal computer. Open BalenaEtcher, click <em>Flash from file</em>, point to the Ubuntu Server ISO, select the USB drive, and confirm.</li>
+          <li><strong>BIOS/UEFI Configuration:</strong> Connect the Ethernet cable to the server. Turn it on, press the Setup key (usually <kbd>F2</kbd>, <kbd>Del</kbd>, or <kbd>F12</kbd>) and configure:
+            <ul>
+              <li><strong>Secure Boot:</strong> <em>Disabled</em> (prevents kernel module blocks).</li>
+              <li><strong>SATA Controller Mode:</strong> <em>AHCI</em>.</li>
+              <li><strong>Restore on AC Power Loss:</strong> <em>Power On</em> (the server automatically turns on after a power outage).</li>
+              <li><strong>Fast Boot:</strong> <em>Disabled</em>.</li>
+              <li><strong>Halt On:</strong> <em>No Errors</em> (prevents boot hang if no keyboard is attached).</li>
+            </ul>
+          </li>
+          <li><strong>Ubuntu Server Installer:</strong>
+            <ul>
+              <li>Boot from the USB drive and configure language and keyboard.</li>
+              <li>Let the network interface obtain an automatic IP via DHCP.</li>
+              <li>In <em>Guided storage configuration</em>, check <strong>Use an entire disk</strong>.</li>
+              <li>Set the server name, username (e.g., <code class="inline-code">administrator</code>), and a strong password.</li>
+              <li><strong>MANDATORY:</strong> On the additional packages screen, navigate to <strong>Install OpenSSH server</strong> and press the spacebar to mark it with an <code class="inline-code">[X]</code>. Remote access will fail without it.</li>
+            </ul>
+          </li>
+          <li>Finish the installation, remove the USB drive, and reboot the server.</li>
+        </ul>
+      </div>
+
+      <div class="card card-highlight">
+        <h3>Scenario 2: Cloud Server / VPS (Hetzner, DigitalOcean, AWS, etc.)</h3>
+        <p>High-uptime data center provider environments, ideal for libraries lacking continuous local infrastructure.</p>
+        <ul>
+          <li>Create an account with your desired provider and set up billing.</li>
+          <li>Deploy a new virtual server (Droplet / Cloud Compute).</li>
+          <li><strong>Operating System:</strong> Strictly choose <em>Ubuntu 22.04 LTS</em> or <em>Ubuntu 24.04 LTS</em> (64-bit).</li>
+          <li><strong>Mandatory Hardware Sizing:</strong> Select a plan with at least <strong>2 vCPUs and 4 GB of RAM</strong>. Servers with only 1 GB or 2 GB will crash during index compilation and exhaust Apache/Plack memory.</li>
+          <li><strong>Authentication:</strong> Set a strong root password or inject your public SSH key.</li>
+          <li>After provisioning, note the Public IP Address provided in the cloud panel.</li>
+        </ul>
+      </div>
+
+      <div class="card card-highlight">
+        <h3>Scenario 3: Computer with Graphical Linux (Linux Mint or Ubuntu Desktop)</h3>
+        <p>Installation on a computer with a screen and GUI that will serve as both a service terminal and a server simultaneously.</p>
+        <ul>
+          <li>Download <em>Linux Mint (Cinnamon Edition)</em> or <em>Ubuntu Desktop LTS</em>.</li>
+          <li>Flash the ISO to a USB drive with BalenaEtcher.</li>
+          <li>Boot the computer from the USB and double-click the graphical installer on the desktop.</li>
+          <li>Complete the visual installation, setting an admin user and password.</li>
+          <li><strong>Operational Advantage:</strong> Using SSH is not mandatory. Open the native terminal by pressing <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd> and run commands directly on the screen.</li>
+        </ul>
+      </div>
+
+      <div class="card card-highlight">
+        <h3>Scenario 4: Windows with a Virtual Machine (VirtualBox)</h3>
+        <p>Running Ubuntu Server inside a virtual machine on a Windows host.</p>
+        <ul>
+          <li><strong>Virtualization in BIOS:</strong> Restart Windows, access the BIOS, and enable <em>Intel Virtualization Technology (VT-x)</em> or <em>SVM Mode (AMD)</em>.</li>
+          <li>Install the stable version of VirtualBox and download the Ubuntu Server LTS ISO.</li>
+          <li><strong>VM Creation:</strong>
+            <ul>
+              <li>Click <em>New</em>. Name: <code class="inline-code">Koha-Server</code>. Type: Linux / Ubuntu 64-bit.</li>
+              <li>Point to the downloaded ISO image.</li>
+              <li><strong>CRITICAL WARNING:</strong> Check the <strong>Skip Unattended Installation</strong> box. If you let the unattended installer run, VirtualBox will create generic users and will NOT install SSH, blocking your access.</li>
+              <li>Allocate at least <strong>4096 MB (4 GB) of RAM</strong> and <strong>2 CPU cores</strong>. Allocate at least 25 GB of disk space.</li>
+            </ul>
+          </li>
+          <li><strong>Mandatory Network Configuration (Bridged Mode):</strong>
+            <ul>
+              <li>In the VM settings, open the <em>Network</em> tab.</li>
+              <li>Change <em>Attached to:</em> from NAT to <strong>Bridged Adapter</strong>.</li>
+              <li>Select the name of your physical network card (cable or Wi-Fi). This ensures the VM receives its own IP from the router, making it visible to other library computers.</li>
+            </ul>
+          </li>
+          <li>Start the VM and finish the manual Ubuntu Server wizard, ensuring OpenSSH is enabled.</li>
+        </ul>
+      </div>
+
+      <div class="card card-highlight">
+        <h3>Scenario 5: Windows 10/11 with Windows Subsystem for Linux (WSL2)</h3>
+        <p>Native execution of a Linux kernel managed by Windows, bypassing heavy virtual machines.</p>
+        <ul>
+          <li>Verify that virtualization (VT-x/SVM) is active in the computer's BIOS.</li>
+          <li>Open the Windows Start menu, type <strong>PowerShell</strong>, right-click, and select <strong>Run as Administrator</strong>.</li>
+          <li>Execute the automatic deployment command:
+            <div class="code-container">
+              <div class="code-header"><span>PowerShell (Admin)</span><button class="copy-btn" onclick="copySnippet(this)">Copy</button></div>
+              <pre><code>wsl --install -d Ubuntu</code></pre>
+            </div>
+          </li>
+          <li>Upon completion, restart the computer. The black Ubuntu terminal window will open, prompting you to create a user and password (save these details).</li>
+          <li><strong>Continuous Operation:</strong> No SSH is required. Run commands directly in the Ubuntu window on Windows. Keep this window open in the background to keep the Koha services running.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2>3. Terminal Access and SSH Connection</h2>
+      <div class="info-box">
+        <strong>Access Rule:</strong> If you installed using <strong>Graphical Linux (Scenario 3)</strong> or <strong>WSL2 (Scenario 5)</strong>, open the terminal on your own screen and skip to Section 4. If you installed on a <strong>Physical Server (Scenario 1)</strong>, <strong>VPS (Scenario 2)</strong>, or <strong>VirtualBox (Scenario 4)</strong>, access the terminal via SSH from another computer.
+      </div>
+
+      <h3>Discovering the Server's Local IP Address</h3>
+      <p>In your Linux server terminal, type:</p>
+      <div class="code-container">
+        <div class="code-header"><span>Server Terminal</span><button class="copy-btn" onclick="copySnippet(this)">Copy</button></div>
+        <pre><code>ip a</code></pre>
+      </div>
+      <p>Locate your physical network interface (e.g., <code class="inline-code">eth0</code>, <code class="inline-code">enp3s0</code>, or <code class="inline-code">wlan0</code>). On the line starting with <code class="inline-code">inet</code>, look at the number before the slash (e.g., in <code class="inline-code">inet 192.168.1.105/24</code>, the IP is <code class="inline-code">192.168.1.105</code>). If you are on a VPS, use the public IP from the cloud dashboard.</p>
+
+      <h3>Remote Connection via PowerShell (Windows) or Terminal (macOS/Linux)</h3>
+      <p>On your workstation, open PowerShell or the terminal and connect:</p>
+      <div class="code-container">
+        <div class="code-header"><span>Your Local Computer</span><button class="copy-btn" onclick="copySnippet(this)">Copy</button></div>
+        <pre><code>ssh server_user@server_ip</code></pre>
+      </div>
+      <p><em>Example: <code class="inline-code">ssh administrator@192.168.1.105</code>. If it is the first connection, type <code class="inline-code">yes</code> and press Enter. Enter the registered password (characters will not appear on the screen for security).</em></p>
+    </section>
+
+    <section>
+      <h2>4. Downloading and Starting the Interactive Panel</h2>
+      <p>Use the atomic single-line command chained with <code class="inline-code">&amp;&amp;</code>. It safely downloads the official script, applies execution permissions, and starts the management suite immediately:</p>
+
+      <div class="code-container">
+        <div class="code-header"><span>Single Initialization Command</span><button class="copy-btn" onclick="copySnippet(this)">Copy</button></div>
+        <pre><code>sudo curl -fsSL "https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer" -o /usr/local/bin/options.sh && sudo chmod +x /usr/local/bin/options.sh && sudo options.sh</code></pre>
+      </div>
+
+      <div class="info-box">
+        <strong>Future System Access:</strong> The executable is permanently registered in the <code class="inline-code">/usr/local/bin/options.sh</code> directory. To manage your server in the future, you will never need to download anything from the internet again. Simply type:
+        <br><br>
+        <code class="inline-code">sudo options.sh</code>
+      </div>
+    </section>
+
+    <section>
+      <h2>5. Complete Guide to the 27 Panel Functions</h2>
+
+      <!-- OPÇÃO 1 -->
+      <div class="card">
+        <span class="menu-badge">Option 1</span>
+        <h3>Install the Koha server (Full Deployment)</h3>
+        <p>This routine executes the complete preparation of the machine to run Koha without error-prone manual interventions. It includes:</p>
+        <ul>
+          <li><strong>Pre-requisite Validation:</strong> Checks root privileges, Linux distribution compatibility, DNS resolution with Koha community repositories, HTTPS connection integrity, and checks for free ports (80 and 8080).</li>
+          <li><strong>Locales and Clock Adjustment:</strong> Configures the mandatory UTF-8 encoding (<code class="inline-code">pt_BR.UTF-8</code> and <code class="inline-code">en_US.UTF-8</code>) and synchronizes the server clock with atomic servers via <code class="inline-code">systemd-timesyncd</code> NTP.</li>
+          <li><strong>Virtual Memory Creation (4 GB SWAP):</strong> Creates and initializes a 4 GB swap file with 600 permissions in <code class="inline-code">/etc/fstab</code>, preventing heavy cataloging spikes from causing the Out-Of-Memory Killer to terminate Apache or MariaDB.</li>
+          <li><strong>Package Manager Shielding:</strong> Disables hidden Ubuntu timers (like <code class="inline-code">unattended-upgrades</code>) that block DPKG locks during installation and implements automatic retries against dropped packages.</li>
+          <li><strong>Essential Dependencies Installation:</strong> Deploys infrastructure utilities, including <code class="inline-code">glabels</code> (crucial for printing barcode and spine labels in libraries), <code class="inline-code">rclone</code>, <code class="inline-code">fail2ban</code>, <code class="inline-code">memcached</code>, and XML manipulation libraries.</li>
+          <li><strong>GPG Keys and Official Repositories:</strong> Adds the digital signature keys and repositories for the <em>Koha Community</em> and <em>Elasticsearch 7.x</em>.</li>
+          <li><strong>'library' Instance Isolation:</strong> Initializes the MariaDB database, applies global templates in <code class="inline-code">koha-sites.conf</code>, configures Apache sockets, generates encrypted random passwords, and activates the Plack application server and Zebra daemon.</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 2 -->
+      <div class="card">
+        <span class="menu-badge">Option 2</span>
+        <h3>View access credentials</h3>
+        <p>Cleanly and immediately extracts the master credentials from the <code class="inline-code">/etc/koha/sites/library/koha-conf.xml</code> file. It displays the database user (<code class="inline-code">koha_library</code>), the password generated during installation, and the access URLs based on the machine's real IP. The script also saves this information in the protected <code class="inline-code">/root/credenciais_koha.txt</code> file with restricted <code class="inline-code">600</code> permissions (only root can read it).</p>
+      </div>
+
+      <!-- OPÇÃO 3 -->
+      <div class="card">
+        <span class="menu-badge">Option 3</span>
+        <h3>Restore catalog from a backup (With Safety Net)</h3>
+        <p>Advanced restoration of database dumps (<code class="inline-code">.sql</code> or <code class="inline-code">.sql.gz</code>) containing the entire catalog, loan history, and registered patrons:</p>
+        <ul>
+          <li><strong>Integrated File Explorer:</strong> Provides a navigable terminal interface to locate the file in any folder (including USB drives mounted on <code class="inline-code">/media</code> or <code class="inline-code">/mnt</code>).</li>
+          <li><strong>Pre-Integrity Validation:</strong> Tests the file against corruption using <code class="inline-code">gzip -t</code> and validates that the headers contain valid SQL commands before dumping any tables.</li>
+          <li><strong>Automatic Safety Backup (Rollback):</strong> Before deleting the current database, the system automatically generates a dump of the current state (<code class="inline-code">PRE-RESTAURACAO_data.sql.gz</code>). If the new file contains errors or has fewer than 50 tables, the script detects the anomaly and offers an immediate rollback to the previous backup, protecting the library from data loss.</li>
+          <li><strong>Schema and Index Reconstruction:</strong> Upon injection completion, it runs <code class="inline-code">koha-upgrade-schema</code> to ensure older databases match the installed version, clears Memcached caches, and rebuilds the active search engine indexes (Zebra or Elasticsearch).</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 4 -->
+      <div class="card">
+        <span class="menu-badge">Option 4</span>
+        <h3>Generate manual local backup now</h3>
+        <p>Allows you to generate instant backups on demand. Opens the <em>Directory Picker</em> for you to set the file destination on the server disk (or on a plugged and mounted USB stick). The dump is performed with <code class="inline-code">single-transaction</code> parameters, ensuring that the catalog can still be used without table locks.</p>
+      </div>
+
+      <!-- OPÇÃO 5 -->
+      <div class="card">
+        <span class="menu-badge">Option 5</span>
+        <h3>Send manual SCP backup now</h3>
+        <p>Generates an immediate backup and sends it across the local network (via SSH/SCP) to another computer, like your Windows or Mac workstation. The panel provides ready-made PowerShell and Terminal commands so you can quickly discover the real IP of your computer and your username. If you use it frequently, the panel will ask if you want to reuse the saved destination from the last transfer.</p>
+      </div>
+
+      <!-- OPÇÃO 6 -->
+      <div class="card">
+        <span class="menu-badge">Option 6</span>
+        <h3>Test the latest backup (Dry Run Restore)</h3>
+        <p>Applies the golden rule of IT security: <em>a backup only exists if it can be restored</em>. This function locates the most recent automatic backup file in <code class="inline-code">/var/backups/koha_sql</code>, creates an isolated temporary database (<code class="inline-code">koha_teste_restauracao</code>), unzips the file, and performs a complete import. It then counts the tables, bibliographic records (biblios), and users (borrowers). Finally, it discards the test database and displays the compliance report. <strong>The official production catalog remains completely untouched.</strong></p>
+      </div>
+
+      <!-- OPÇÃO 7 -->
+      <div class="card">
+        <span class="menu-badge">Option 7</span>
+        <h3>Install Koha languages (International Packs)</h3>
+        <p>Provides a complete catalog of over 70 official language packs maintained by the international community (including Brazilian Portuguese <code class="inline-code">pt-BR</code>, Spanish <code class="inline-code">es-ES</code>, British English <code class="inline-code">en-GB</code>, French <code class="inline-code">fr-FR</code>, Italian, German, etc.):</p>
+        <ul>
+          <li>Downloads and compiles translation packages via <code class="inline-code">koha-translate --install</code>.</li>
+          <li>Restarts the Memcached cache and Plack processes to register the new templates.</li>
+          <li>Prompts if you wish to activate the language immediately in system preferences (<code class="inline-code">language</code> and <code class="inline-code">OPACLanguages</code>), making the flag or language selector available in the public catalog footer and librarian login screen.</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 8 -->
+      <div class="card">
+        <span class="menu-badge">Option 8</span>
+        <h3>Toggle search engine (Zebra &harr; Elasticsearch)</h3>
+        <p>Allows switching between the two search engines supported by Koha with database and configuration consistency:</p>
+        <ul>
+          <li><strong>Zebra:</strong> The traditional built-in C++ engine. Extremely lightweight (uses about 1.5 GB less RAM), perfect for servers with 4 GB of RAM. Indexing is managed by a periodic incremental queue.</li>
+          <li><strong>Elasticsearch:</strong> A modern enterprise Java engine. Requires at least 8 GB of RAM recommended. Offers real-time dynamic facets, typo tolerance (fuzzy search), and superior speed on catalogs with tens of thousands of titles.</li>
+          <li><strong>Transition Security:</strong> The script edits the XML via a native Python parser (without corrupting tags), configures the Elasticsearch JVM Heap memory based on the machine's RAM, activates the biblio and authority indexes, and installs a dedicated systemd service (<code class="inline-code">koha-es-indexer@library</code>) with a watchdog cron every 5 minutes to ensure the indexer never stops.</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 9 -->
+      <div class="card">
+        <span class="menu-badge">Option 9</span>
+        <h3>Repair / rebuild indexing</h3>
+        <p>Preventive and corrective maintenance tool for when a new book is registered but doesn't appear in catalog searches:</p>
+        <ul>
+          <li><strong>For Elasticsearch:</strong> Diagnoses if port 9200 is responding, verifies if the XML block is active, checks the pending jobs queue, and compares the document count in the index with the total MariaDB records. Allows forcing a full rebuild (<code class="inline-code">koha-elasticsearch --rebuild -d library</code>) and canceling orphan jobs.</li>
+          <li><strong>For Zebra:</strong> Kills stuck <code class="inline-code">zebrasrv</code> processes, removes corrupted file locks (<code class="inline-code">.LCK</code> and <code class="inline-code">.pid</code>), restores directory ownership to the Koha user, and rebuilds the index from scratch (<code class="inline-code">koha-rebuild-zebra -f -v -b -a -r library</code>).</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 10 -->
+      <div class="card">
+        <span class="menu-badge">Option 10</span>
+        <h3>Server sizing (Memory Tuning)</h3>
+        <p>Dynamically adjusts library performance based on the server's physical RAM. Concurrently tweaks <code class="inline-code">PLACK_WORKERS</code> (how many web processes answer requests), <code class="inline-code">memcached</code> (session and template cache size), and <code class="inline-code">innodb_buffer_pool_size</code> (memory dedicated to keeping the catalog loaded in RAM inside the database):</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Profile</th>
+              <th>Machine Capacity</th>
+              <th>Plack Workers</th>
+              <th>Memcached Cache</th>
+              <th>InnoDB Buffer Pool</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Profile 1</strong></td>
+              <td>Under 4 GB RAM</td>
+              <td>2 workers</td>
+              <td>64 MB</td>
+              <td>512 MB</td>
+            </tr>
+            <tr>
+              <td><strong>Profile 2</strong></td>
+              <td>4 to 8 GB RAM</td>
+              <td>3 workers</td>
+              <td>128 MB</td>
+              <td>768 MB</td>
+            </tr>
+            <tr>
+              <td><strong>Profile 3</strong></td>
+              <td>8 to 16 GB RAM</td>
+              <td>4 workers</td>
+              <td>128 MB</td>
+              <td>1 GB</td>
+            </tr>
+            <tr>
+              <td><strong>Profile 4</strong></td>
+              <td>Over 16 GB RAM</td>
+              <td>6 workers</td>
+              <td>256 MB</td>
+              <td>2 GB</td>
+            </tr>
+          </tbody>
+        </table>
+        <p><strong>Rollback Security:</strong> If you select an excessively high profile and MariaDB fails to initialize, the script undoes the adjustment and restores the original file on the spot, ensuring the system never goes offline.</p>
+      </div>
+
+      <!-- OPÇÃO 11 -->
+      <div class="card">
+        <span class="menu-badge">Option 11</span>
+        <h3>Set up cloud backup (Google Drive via Rclone)</h3>
+        <p>Ensures that all nightly catalog backups are encrypted and saved off-server in a secure cloud:</p>
+        <ul>
+          <li><strong>Express Mode (Google Drive):</strong> Opens the remote connection wizard. The script displays the OOB authorization command on the screen (<code class="inline-code">rclone authorize "drive" "..."</code>). You copy this command, paste it into the terminal of your workstation (which has a browser), log in with the library's Google account, and receive the access token. Just paste this token back into the server to complete the binding.</li>
+          <li><strong>Manual Mode:</strong> Allows linking OneDrive, Dropbox, Amazon S3, Google Cloud Storage, SFTP, or Nextcloud using the native Rclone wizard.</li>
+          <li><strong>Validation and Immediate Test:</strong> The script tests the remote folder creation (<code class="inline-code">Backup_SQL_Koha</code> and <code class="inline-code">Backup_MARC_Koha</code>), binds variables in <code class="inline-code">/etc/koha-easy-install/backup.conf</code>, and allows triggering a test backup immediately so you can see the file uploading to your Drive.</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 12 -->
+      <div class="card">
+        <span class="menu-badge">Option 12</span>
+        <h3>Set up automatic SCP backup (Local Network)</h3>
+        <p>If you do not want to rely on external cloud storage (like Google Drive), this option creates an invisible network bridge with another computer. The script generates a dedicated elliptic curve encryption key (<code class="inline-code">ed25519</code>), transfers it to the destination computer requiring a password only once, and from that day on, the nightly backup script will dump the database and copy the file silently over the local network every night at 23:00, without needing manual approval or a password.</p>
+      </div>
+
+      <!-- OPÇÃO 13 -->
+      <div class="card">
+        <span class="menu-badge">Option 13</span>
+        <h3>Scheduled tasks (Cron times)</h3>
+        <p>Opens the system routines file (<code class="inline-code">/etc/cron.d/koha_tasks</code>) in the Nano editor alongside a preventive backup copy. All scheduling columns are clearly explained in the header. The script features a self-correction algorithm: if you accidentally delete the <code class="inline-code">PATH</code> line from the cron, the panel automatically restores it before restarting the service, ensuring the <code class="inline-code">koha-shell</code> utility never stops running.</p>
+      </div>
+
+      <!-- OPÇÃO 14 -->
+      <div class="card">
+        <span class="menu-badge">Option 14</span>
+        <h3>Set up email notices (SMTP)</h3>
+        <p>Installs the necessary SASL authentication libraries and schedules the daily execution of overdue notices and loan notifications (at 08:00 and 08:05). Provides a visual guide on how to register the SMTP server (like Gmail, Outlook, or your own institutional server) in the Koha web interface with STARTTLS and app password support.</p>
+      </div>
+
+      <!-- OPÇÃO 15 -->
+      <div class="card">
+        <span class="menu-badge">Option 15</span>
+        <h3>Create a super librarian (Administrative Access)</h3>
+        <p>Secure creation of new global administrators directly from the command line, ideal for times when the web interface password has been forgotten or staff has changed:</p>
+        <ul>
+          <li>Locates the primary library and administrative category registered in the database.</li>
+          <li>Validates usernames allowing only secure alphanumeric characters and applies SQL Injection sanitization (apostrophe duplication).</li>
+          <li>Requires the registration of a <strong>Card Number</strong> and a password of at least 8 characters with typing confirmation.</li>
+          <li><strong>Secure STDIN Encryption:</strong> The password hash is processed by a Perl script using Koha's internal library (<code class="inline-code">Koha::AuthUtils::hash_password</code>). The password travels via direct standard input, preventing the plaintext password from being viewed in the bash history (<code class="inline-code">history</code>) or in process monitoring commands (<code class="inline-code">ps aux</code>).</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 16 -->
+      <div class="card">
+        <span class="menu-badge">Option 16</span>
+        <h3>External access (Cloudflare Tunnel Zero Trust)</h3>
+        <p>Allows putting the catalog on the internet via residential or institutional connections without needing a static public IP and without opening ports on the library's modem/router. Downloads and configures the official <code class="inline-code">cloudflared</code> connector based on the token generated in the Cloudflare dashboard, and initializes the service in the background with auto-restart on boot.</p>
+      </div>
+
+      <!-- OPÇÃO 17 -->
+      <div class="card">
+        <span class="menu-badge">Option 17</span>
+        <h3>Free SSL certificate (Let's Encrypt / Certbot)</h3>
+        <p>For traditional servers that have a direct public IP address and an open port 80. Installs <code class="inline-code">certbot</code> and the Apache connector, guiding the issuance of the HTTPS certificate with automatic renewal and a graceful web server reload.</p>
+      </div>
+
+      <!-- OPÇÃO 18 -->
+      <div class="card">
+        <span class="menu-badge">Option 18</span>
+        <h3>Enable SIP2 and Z39.50</h3>
+        <p>Opens ports and initializes Koha's international communication daemons:</p>
+        <ul>
+          <li><strong>Z39.50 (Port 2100):</strong> Allows other libraries to connect to your catalog to download cataloged records via the international protocol.</li>
+          <li><strong>SIP2 (Port 6001):</strong> Enables communication with self-checkout kiosks, anti-theft security gates, and RFID book return readers.</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 19 -->
+      <div class="card">
+        <span class="menu-badge">Option 19</span>
+        <h3>Clock and timezone</h3>
+        <p>Educational menu allowing changes to the machine's official timezone (with quick shortcuts for all Brazilian and Portuguese timezones). Upon applying the new timezone, it restarts cron immediately to prevent returned books from accruing unwarranted fines due to time discrepancies.</p>
+      </div>
+
+      <!-- OPÇÃO 20 -->
+      <div class="card">
+        <span class="menu-badge">Option 20</span>
+        <h3>Security center</h3>
+        <p>Server audit and shielding across 4 fronts:</p>
+        <ul>
+          <li><strong>Fail2ban Status:</strong> Displays blocked brute-force attack attempts on SSH and Apache chains.</li>
+          <li><strong>Staff Port Firewall (8080):</strong> Allows restricting administrative port 8080 only to accesses originating from the local IP (127.0.0.1) or the library's private network ranges (192.168.x.x and 10.x.x.x), blocking any external public access attempts.</li>
+          <li><strong>Database Password Rotation:</strong> Generates a new strong random 24-character password, updates the MariaDB account with <code class="inline-code">ALTER USER</code>, modifies <code class="inline-code">koha-conf.xml</code>, updates the credentials file, and restarts Plack, testing the system's HTTP response to validate success.</li>
+          <li><strong>UFW Firewall Rules:</strong> Detailed listing of all authorized and blocked ports on the server.</li>
+        </ul>
+      </div>
+
+      <!-- OPÇÃO 21 -->
+      <div class="card">
+        <span class="menu-badge">Option 21</span>
+        <h3>Update system and schemas</h3>
+        <p>Executes the stable package update for the operating system and Koha's stable repository. Applies structural database migrations with <code class="inline-code">koha-upgrade-schema library</code>, cleans orphan packages, and runs the full validator to ensure no services broke during the update.</p>
+      </div>
+
+      <!-- OPÇÃO 22 -->
+      <div class="card">
+        <span class="menu-badge">Option 22</span>
+        <h3>Full system validation</h3>
+        <p>Diagnostic engine with a text-format report. Evaluates network connection, DNS resolution, memory processes, active TCP ports, HTTP response codes (80 and 8080), Koha XML syntax integrity via a native Python parser (resolving the commented blocks issue in <code class="inline-code">koha-conf.xml</code>), cron scheduling compliance, age and integrity of the latest backup, and firewall and Rclone status.</p>
+      </div>
+
+      <!-- OPÇÃO 23 -->
+      <div class="card">
+        <span class="menu-badge">Option 23</span>
+        <h3>Detailed status</h3>
+        <p>Real-time telemetry dashboard: displays the status of all services (Apache, MariaDB, Memcached, Plack, Zebra, Elasticsearch, Cloudflared), the active search engine, pending queue jobs, RAM usage, disk space, and the date of the last completed backup (both Cloud and SCP) in a single window.</p>
+      </div>
+
+      <!-- OPÇÃO 24 -->
+      <div class="card">
+        <span class="menu-badge">Option 24</span>
+        <h3>Update this panel</h3>
+        <p>Atomic script auto-update: downloads the latest code version from the GitHub repository to a temporary file in <code class="inline-code">/tmp</code>, validates the entire syntax with <code class="inline-code">bash -n</code>, and if error-free, replaces the official executable in <code class="inline-code">/usr/local/bin/options.sh</code>, preserving a backup copy of the previous version.</p>
+      </div>
+
+      <!-- OPÇÃO 25 -->
+      <div class="card">
+        <span class="menu-badge">Option 25</span>
+        <h3>Reboot the server</h3>
+        <p>Sends a controlled reboot signal to the operating system after on-screen confirmation, ensuring disk buffers and active MariaDB connections are cleanly flushed.</p>
+      </div>
+
+      <!-- OPÇÃO 26 -->
+      <div class="card">
+        <span class="menu-badge">Option 26</span>
+        <h3>About this program (GitHub / Support)</h3>
+        <p>Displays the credits for the developer from Palotina and version information, encouraging open-source collaboration via GitHub.</p>
+      </div>
+
+      <!-- OPÇÃO 27 -->
+      <div class="card">
+        <span class="menu-badge">Option 27</span>
+        <h3>Exit</h3>
+        <p>Terminates navigation in the interactive panel, restores the APT update timers, and returns control to the Linux terminal with a clean exit code.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>6. Completing the Web Installer in the Browser</h2>
+      <p>Open your browser on your workstation and access the administrative port 8080:</p>
       <ul>
-        <li><strong>Z39.50 (Porta 2100):</strong> Permite que outras bibliotecas conectem no seu catálogo para baixar registros catalogados pelo protocolo internacional.</li>
-        <li><strong>SIP2 (Porta 6001):</strong> Habilita a comunicação com totens de autoatendimento, portais antifurto e leitores RFID de devolução de livros.</li>
+        <li><strong>Scenarios 1, 2, and 4 (Physical Server / VPS / VirtualBox):</strong> Type <code class="inline-code">http://server_ip:8080</code> (e.g., <code class="inline-code">http://192.168.1.105:8080</code>).</li>
+        <li><strong>Scenarios 3 and 5 (Graphical Linux / WSL2):</strong> Type <code class="inline-code">http://localhost:8080</code> directly.</li>
       </ul>
-    </div>
 
-    <!-- OPÇÃO 17 -->
-    <div class="card">
-      <span class="menu-badge">Opção 17</span>
-      <h3>Relógio e fuso horário</h3>
-      <p>Menu didático que permite alterar o fuso horário oficial da máquina (com atalhos rápidos para todos os fusos brasileiros e de Portugal). Ao aplicar o novo fuso, reinicia o cron imediatamente para evitar que devoluções de livros tomem multas indevidas por discrepância de horário.</p>
-    </div>
+      <p>Complete the sequential wizard steps:</p>
+      <ol>
+        <li><strong>Provisional Authentication:</strong> User: <code class="inline-code">koha_library</code> | Password: Paste the password generated by the script at the end of Option 1 (if you forgot it, check <strong>Option 2</strong> in the panel).</li>
+        <li><strong>Language Selection:</strong> Choose your preferred language (e.g. <em>English (US)</em> or <em>Portuguese (pt-BR)</em>) and click Continue.</li>
+        <li><strong>Perl Modules and Cataloging Format:</strong> Confirm the dependency list and choose the international default <strong>MARC21</strong> format.</li>
+        <li><strong>Optional Settings:</strong> Keep the default MARC21 cataloging frameworks checked. <strong>CRITICAL:</strong> Uncheck any options mentioning "sample data", "sample patrons", "sample items", or "sample libraries", ensuring your library starts with a clean slate.</li>
+        <li><strong>Library Setup:</strong> Enter a short code for your library (e.g., <code class="inline-code">MAIN</code>) and its full official name.</li>
+        <li><strong>Administrative Category:</strong> Category code: <code class="inline-code">STAFF</code> | Description: <em>Administration</em> | Type: <em>Staff</em>.</li>
+        <li><strong>Permanent Super Librarian:</strong> Fill in your name, card number (e.g., <code class="inline-code">1</code>), create your definitive daily login, and a strong password. Note this password down.</li>
+        <li><strong>Item Types:</strong> Code: <code class="inline-code">BK</code> | Description: <em>Book</em>.</li>
+        <li><strong>Circulation Rules:</strong> Set initial limits (e.g., 3 to 5 items, 14-day period, 2 renewals).</li>
+      </ol>
+      <p>By clicking <em>Finish and Start Using Koha</em>, the system will load the final administrative dashboard ready for cataloging.</p>
+    </section>
 
-    <!-- OPÇÃO 18 -->
-    <div class="card">
-      <span class="menu-badge">Opção 18</span>
-      <h3>Central de segurança</h3>
-      <p>Auditoria e blindagem do servidor em 4 frentes:</p>
+    <section>
+      <h2>7. External Publication, Free Domains and Google</h2>
+      <h3>Step 1: Get a Custom Domain or Free Subdomain</h3>
       <ul>
-        <li><strong>Status do Fail2ban:</strong> Exibe tentativas de ataques de força bruta bloqueadas nas cadeias SSH e Apache.</li>
-        <li><strong>Firewall da Porta Staff (8080):</strong> Permite restringir a porta administrativa 8080 apenas para acessos originados do IP local (127.0.0.1) ou faixas de rede privada da biblioteca (192.168.x.x e 10.x.x.x), bloqueando qualquer tentativa de acesso público externo.</li>
-        <li><strong>Rotação da Senha do Banco:</strong> Gera uma nova senha randômica forte de 24 caracteres, atualiza a conta do MariaDB com <code>ALTER USER</code>, altera o <code>koha-conf.xml</code>, atualiza o arquivo de credenciais e reinicia o Plack, testando a resposta HTTP do sistema para validar o sucesso.</li>
-        <li><strong>Regras do Firewall UFW:</strong> Lista detalhadamente todas as portas autorizadas e bloqueadas no servidor.</li>
+        <li><strong>Recommended Option (Custom Domain):</strong> Register a domain (e.g., <code class="inline-code">citylibrary.org</code>) on Cloudflare or a local registrar.</li>
+        <li><strong>Free Option with DigitalPlat (Immediate):</strong>
+          <ol>
+            <li>Go to <a href="https://domain.digitalplat.org" target="_blank" style="color: var(--text-highlight);">domain.digitalplat.org</a> and create an account.</li>
+            <li>Under <em>Domain registration</em>, choose a free extension (e.g., <code class="inline-code">.dpdns.org</code> or <code class="inline-code">.us.kg</code>) and register your library (e.g., <code class="inline-code">mylibrary.dpdns.org</code>).</li>
+            <li>Go to the <a href="https://dash.cloudflare.com" target="_blank" style="color: var(--text-highlight);">Cloudflare</a> website, click <strong>Add a site</strong>, paste the domain, and select the <strong>Free Plan</strong>.</li>
+            <li>Cloudflare will provide two Nameservers (e.g., <code class="inline-code">vera.ns.cloudflare.com</code>). Copy and paste both back into the DigitalPlat dashboard (DNS / Nameservers section).</li>
+          </ol>
+        </li>
+        <li><strong>Free Option with EU.ORG (Takes 15 to 45 days to approve):</strong>
+          <ol>
+            <li>Go to <a href="https://nic.eu.org" target="_blank" style="color: var(--text-highlight);">nic.eu.org</a> and create an account to request an <code class="inline-code">yourlibrary.eu.org</code> domain.</li>
+            <li>The process is identical: add the domain on Cloudflare, get the two provided Nameservers, and register them on the <code class="inline-code">nic.eu.org</code> form while waiting for their volunteers' manual approval.</li>
+          </ol>
+        </li>
       </ul>
-    </div>
 
-    <!-- OPÇÃO 19 -->
-    <div class="card">
-      <span class="menu-badge">Opção 19</span>
-      <h3>Atualizar sistema e schemas</h3>
-      <p>Executa a atualização de pacotes estáveis do sistema operacional e do repositório estável do Koha. Aplica as migrações estruturais de banco de dados com <code>koha-upgrade-schema library</code>, limpa pacotes órfãos e executa o validador completo para assegurar que nenhum serviço quebrou na atualização.</p>
-    </div>
+      <h3>Step 2: Cloudflare Tunnel Creation (Bypass CGNAT and Modem)</h3>
+      <ol>
+        <li>In the Cloudflare dashboard (Zero Trust section), go to <strong>Networks &gt; Tunnels</strong> and click <strong>Create a tunnel</strong>.</li>
+        <li>Define a name (e.g., <code class="inline-code">koha-server</code>) and select <strong>Debian 64-bit</strong>.</li>
+        <li>Copy the generated Token (the code starting with <code class="inline-code">ey...</code>).</li>
+        <li>In the Linux server terminal, open the interactive panel (<code class="inline-code">sudo options.sh</code>) and choose <strong>Option 16 (External access)</strong>. Paste the token: the tunnel will come online immediately.</li>
+      </ol>
 
-    <!-- OPÇÃO 20 -->
-    <div class="card">
-      <span class="menu-badge">Opção 20</span>
-      <h3>Plugins do Koha</h3>
-      <p>Habilita ou desabilita o sistema de módulos externos do Koha. Utiliza um script Python para editar o <code>koha-conf.xml</code> de maneira atômica injetando <code>&lt;enable_plugins&gt;1&lt;/enable_plugins&gt;</code>, atualiza as tabelas de preferências do banco e define permissões de leitura e escrita na pasta <code>/var/lib/koha/library/plugins</code>.</p>
-    </div>
+      <h3>Step 3: Mapping and Web Access</h3>
+      <p>In the <strong>Public Hostnames</strong> tab of your tunnel on Cloudflare, add the routes:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Application</th>
+            <th>Subdomain</th>
+            <th>Domain</th>
+            <th>Type (Service)</th>
+            <th>Local URL</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Staff (Administration)</strong></td>
+            <td><code class="inline-code">adm</code></td>
+            <td>your_domain.org</td>
+            <td>HTTP</td>
+            <td><code class="inline-code">localhost:8080</code></td>
+          </tr>
+          <tr>
+            <td><strong>OPAC (Public Catalog)</strong></td>
+            <td><em>Leave blank</em></td>
+            <td>your_domain.org</td>
+            <td>HTTP</td>
+            <td><code class="inline-code">localhost:80</code></td>
+          </tr>
+        </tbody>
+      </table>
 
-    <!-- OPÇÃO 21 -->
-    <div class="card">
-      <span class="menu-badge">Opção 21</span>
-      <h3>Validar o sistema completo</h3>
-      <p>Motor de diagnóstico com relatório em formato texto. Avalia conexão de rede, resolução de DNS, processos em memória, portas TCP ativas, códigos de resposta HTTP (80 e 8080), integridade de sintaxe do XML do Koha via <code>xmllint</code>, conformidade dos agendamentos de cron, idade e integridade do último backup e status do firewall.</p>
-    </div>
-
-    <!-- OPÇÃO 22 -->
-    <div class="card">
-      <span class="menu-badge">Opção 22</span>
-      <h3>Status detalhado</h3>
-      <p>Painel de telemetria em tempo real: exibe em uma única janela o estado de todos os serviços (Apache, MariaDB, Memcached, Plack, Zebra, Elasticsearch, Cloudflared), motor de busca ativo, jobs pendentes na fila, memória RAM em uso, espaço em disco e data do último backup efetuado.</p>
-    </div>
-
-    <!-- OPÇÃO 23 -->
-    <div class="card">
-      <span class="menu-badge">Opção 23</span>
-      <h3>Atualizar este painel</h3>
-      <p>Autoatualização atômica do script: baixa a versão mais recente do código do repositório no GitHub para um arquivo temporário em <code>/tmp</code>, valida a sintaxe completa com <code>bash -n</code> e, se não houver erros, substitui o executável oficial em <code>/usr/local/bin/options.sh</code>, preservando uma cópia de backup da versão anterior.</p>
-    </div>
-
-    <!-- OPÇÃO 24 -->
-    <div class="card">
-      <span class="menu-badge">Opção 24</span>
-      <h3>Reiniciar o servidor</h3>
-      <p>Envia sinal de reinicialização controlado ao sistema operacional após confirmação na tela, garantindo que buffers de disco e conexões ativas do MariaDB sejam descarregados de forma íntegra.</p>
-    </div>
-
-    <!-- OPÇÃO 25 -->
-    <div class="card">
-      <span class="menu-badge">Opção 25</span>
-      <h3>Sair</h3>
-      <p>Encerra a navegação no painel interativo, restaura os timers de atualização do APT e retorna o controle para o terminal Linux com código de saída limpo.</p>
-    </div>
-  </section>
-
-  <section>
-    <h2>6. Concluindo o Web Installer no Navegador</h2>
-    <p>Abra seu navegador em seu computador de trabalho e acesse a porta administrativa 8080:</p>
-    <ul>
-      <li><strong>Cenários 1, 2 e 4 (Servidor Físico / VPS / VirtualBox):</strong> Digite <code>http://ip_do_servidor:8080</code> (ex: <code>http://192.168.1.105:8080</code>).</li>
-      <li><strong>Cenários 3 e 5 (Linux Gráfico / WSL2):</strong> Digite diretamente <code>http://localhost:8080</code>.</li>
-    </ul>
-
-    <p>Complete as etapas sequenciais do assistente:</p>
-    <ol>
-      <li><strong>Autenticação Provisória:</strong> Usuário: <code>koha_library</code> | Senha: Cole a senha gerada pelo script na tela de conclusão da Opção 1 (caso tenha esquecido, consulte a <strong>Opção 2</strong> do painel).</li>
-      <li><strong>Seleção de Idioma:</strong> Escolha <em>Português do Brasil (pt-BR)</em> e clique em Continuar.</li>
-      <li><strong>Módulos Perl e Formato de Catalogação:</strong> Confirme a listagem de dependências e escolha o formato padrão internacional <strong>MARC21</strong>.</li>
-      <li><strong>Configurações Opcionais:</strong> Mantenha marcados os frameworks padrão de catalogação MARC21. <strong>CRÍTICO:</strong> Desmarque todas as opções que mencionarem "dados de exemplo", "amostras de usuários", "amostras de itens" ou "amostras de bibliotecas", garantindo que sua biblioteca nasça limpa.</li>
-      <li><strong>Cadastro da Unidade:</strong> Insira uma sigla curta para sua biblioteca (ex: <code>CENTRAL</code>) e o nome oficial por extenso.</li>
-      <li><strong>Categoria Administrativa:</strong> Código da categoria: <code>STAFF</code> | Descrição: <em>Administração</em> | Tipo: <em>Funcionário (Staff)</em>.</li>
-      <li><strong>Superbibliotecário Permanente:</strong> Preencha seu nome, número de cartão (ex: <code>1</code>), crie seu login definitivo de uso diário e uma senha forte. Anote essa senha.</li>
-      <li><strong>Tipos de Item:</strong> Código: <code>LIV</code> | Descrição: <em>Livro</em>.</li>
-      <li><strong>Regras de Empréstimo:</strong> Defina limites iniciais (ex: 3 a 5 itens, 14 dias de prazo, 2 renovações).</li>
-    </ol>
-    <p>Ao clicar em <em>Concluir e Começar a Usar o Koha</em>, o sistema carregará o painel administrativo definitivo pronto para catalogação.</p>
-  </section>
-
-  <section>
-    <h2>7. Publicação Externa com Cloudflare Tunnel</h2>
-    <h3>Passo 1: Domínio Próprio ou Subdomínio Gratuito</h3>
-    <ul>
-      <li><strong>Opção Recomendada (Domínio Próprio):</strong> Registre um domínio (ex: <code>bibliotecamunicipal.org</code>) na Cloudflare ou Registro.br.</li>
-      <li><strong>Opção Gratuita (DigitalPlat):</strong> Crie um subdomínio gratuito no DigitalPlat:
-        <ol>
-          <li>Acesse <a href="https://domain.digitalplat.org" target="_blank" style="color: var(--text-highlight);">domain.digitalplat.org</a> e crie sua conta.</li>
-          <li>Em <em>Domain registration</em>, escolha uma das extensões gratuitas (como <code>.dpdns.org</code> ou <code>.us.kg</code>) e cadastre o nome da sua biblioteca (ex: <code>minhabiblioteca.dpdns.org</code>).</li>
-          <li>No painel da Cloudflare, clique em <strong>Adicionar site</strong>, cole o domínio criado e selecione o <strong>Plano Gratuito (Free)</strong>.</li>
-          <li>Copie os dois servidores de nome autoritativos (Nameservers) fornecidos pela Cloudflare e cole-os no painel de controle do DigitalPlat.</li>
-        </ol>
-      </li>
-    </ul>
-
-    <h3>Passo 2: Criação do Túnel e Conexão no Painel</h3>
-    <ol>
-      <li>No painel Cloudflare Zero Trust, vá em <strong>Networks &gt; Tunnels</strong> e clique em <strong>Create a tunnel</strong>.</li>
-      <li>Defina um nome para o túnel (ex: <code>koha-servidor</code>) e selecione <strong>Debian 64-bit</strong> na tela de ambiente.</li>
-      <li>Copie o Token gerado (o código extenso que inicia com <code>ey...</code>).</li>
-      <li>No terminal do servidor, abra o painel com <code>sudo options.sh</code> e escolha a <strong>Opção 14 (Acesso externo)</strong>. Cole o token na tela: o conector será configurado e ativado imediatamente.</li>
-    </ol>
-
-    <h3>Passo 3: Mapeamento dos Endereços Públicos</h3>
-    <p>Na aba <strong>Public Hostnames</strong> do túnel no painel da Cloudflare, adicione duas rotas:</p>
-    <table>
-      <thead>
-        <tr>
-          <th>Aplicação</th>
-          <th>Subdomínio</th>
-          <th>Domínio</th>
-          <th>Tipo (Service)</th>
-          <th>URL Local</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><strong>Staff (Administração)</strong></td>
-          <td><code>adm</code></td>
-          <td>seu_dominio.org</td>
-          <td>HTTP</td>
-          <td><code>localhost:8080</code></td>
-        </tr>
-        <tr>
-          <td><strong>OPAC (Catálogo Público)</strong></td>
-          <td><em>Deixe em branco</em></td>
-          <td>seu_dominio.org</td>
-          <td>HTTP</td>
-          <td><code>localhost:80</code></td>
-        </tr>
-      </tbody>
-    </table>
-    <p>Pronto! Sua equipe acessará a administração por <code>https://adm.seu_dominio.org</code> e o público consultará o catálogo em <code>https://seu_dominio.org</code> com certificado SSL HTTPS automático.</p>
-  </section>
+      <h3>Step 4: Integrate with Google Search Console</h3>
+      <p>If you want your catalog to appear in Google searches:</p>
+      <ol>
+        <li>Go to <a href="https://search.google.com/search-console" target="_blank" style="color: var(--text-highlight);">Google Search Console</a> and add your public URL (e.g., <code class="inline-code">https://your_domain.org</code>) choosing the "URL Prefix" verification.</li>
+        <li>Google will offer verification via <strong>HTML Tag</strong>. Copy the generated block (something like <code class="inline-code">&lt;meta name="google-site-verification" content="XYZ123..." /&gt;</code>).</li>
+        <li>Access your Koha in the administrative Staff tab (port 8080).</li>
+        <li>Go to <strong>Administration &gt; Global System Preferences &gt; OPAC &gt; Appearance</strong> and find the <code class="inline-code">opacheader</code> preference.</li>
+        <li>Paste the HTML code provided by Google and save.</li>
+        <li>Return to the Search Console and click <strong>Verify</strong>. Done! Google will now read and index your collection.</li>
+      </ol>
+    </section>
+  </div>
+  <!-- FIM DO CONTEÚDO EM INGLÊS -->
 
 </div>
 
@@ -854,7 +1463,7 @@
 
     navigator.clipboard.writeText(code).then(() => {
       const originalText = button.innerHTML;
-      button.innerText = '✓ Copiado!';
+      button.innerText = '✓ Copiado / Copied!';
       button.classList.add('copied');
       setTimeout(() => {
         button.innerHTML = originalText;
