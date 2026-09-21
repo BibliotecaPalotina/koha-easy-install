@@ -1677,9 +1677,9 @@ EOF
     validate_complete_system "instalação concluída"
     log "instalacao concluida (ok=$V_OK warn=$V_WARN fail=$V_FAIL)"
 
-    msg_info "$(t "Instalação Concluída" "Installation Complete")" \
-"$(t "INSTALAÇÃO CONCLUÍDA.\n\nACESSO:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENCIAIS (salvas em /root/credenciais_koha.txt):\n  Usuário: ${DB_NAME}\n  Senha:   ${db_pass}\n\nPASSO SEGUINTE: abra o Staff no navegador para o Web Installer (ou use a opção 3 se tiver backup).\n\nValidação: OK=$V_OK  Avisos=$V_WARN  Falhas=$V_FAIL" \
-"INSTALLATION COMPLETE.\n\nACCESS:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENTIALS (saved in /root/credenciais_koha.txt):\n  User: ${DB_NAME}\n  Pass: ${db_pass}\n\nNEXT STEP: open Staff in browser for the Web Installer (or use option 3 with a backup).\n\nValidation: OK=$V_OK  Warnings=$V_WARN  Failures=$V_FAIL")" 24 78
+msg_info "$(t "Instalação Concluída" "Installation Complete")" \
+"$(t "INSTALAÇÃO CONCLUÍDA.\n\nACESSO:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENCIAIS (salvas em /root/credenciais_koha.txt):\n  Usuário: ${DB_NAME}\n  Senha:   ${db_pass}\n\nPASSO SEGUINTE: abra o Staff no navegador para o Web Installer (ou use a Restauração de banco de dados se tiver backup).\n\nValidação: OK=$V_OK  Avisos=$V_WARN  Falhas=$V_FAIL" \
+"INSTALLATION COMPLETE.\n\nACCESS:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENTIALS (saved in /root/credenciais_koha.txt):\n  User: ${DB_NAME}\n  Pass: ${db_pass}\n\nNEXT STEP: open Staff in browser for the Web Installer (or use Database restoration with a backup).\n\nValidation: OK=$V_OK  Warnings=$V_WARN  Failures=$V_FAIL")" 24 78
 
     if prompt_yes_no "$(t "Reiniciar Servidor (Recomendado)" "Reboot Server (Recommended)")" \
 "$(t "Para ativar a aceleração total do Plack, carregar a SWAP e garantir o desempenho máximo do catálogo, é altamente recomendado reiniciar a máquina agora.\n\nAs credenciais já foram guardadas em /root/credenciais_koha.txt.\n\nDeseja reiniciar o servidor imediatamente?" \
