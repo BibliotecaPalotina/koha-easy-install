@@ -3365,6 +3365,89 @@ function_configure_ssl() {
 }
 
 # ======================================================================
+# 32. GOOGLE SEARCH CONSOLE / SEO
+# ======================================================================
+function_google_search_console() {
+    local opac_url sitemap_url verification_method http_status
+
+    opac_url=$(dialog --title "$(t "Endereço público do OPAC" "Public OPAC address")" \
+        --inputbox "$(t "Informe a URL pública completa do OPAC, incluindo HTTPS:" "Enter the complete public OPAC URL, including HTTPS:")" \
+        10 78 "https://" 3>&1 1>&2 2>&3) || return 0
+    [ -z "$opac_url" ] && return 0
+
+    opac_url="${opac_url%/}"
+
+    msg_info "$(t "Google Search Console — Guia de Indexação" "Google Search Console — Indexing Guide")" \
+        "$(t "Esta central realiza verificações automáticas no servidor e explica claramente o que precisa ser feito MANUALMENTE no Google.\n\nIMPORTANTE:\n- O Google não garante a indexação imediata.\n- O instalador NÃO solicita nem armazena sua senha Google.\n- A verificação da propriedade deve ser feita por você ou pela TI.\n- A indexação depende das regras e decisões do Google." \
+        "This center performs automatic server checks and clearly explains what must be done MANUALLY in Google.\n\nIMPORTANT:\n- Google does not guarantee immediate indexing.\n- The installer does NOT request or store your Google password.\n- Property verification must be completed by you or IT.\n- Indexing depends on Google's rules and decisions.")" 18 78
+
+    clear
+    display_explanation "Verificando acessibilidade pública do OPAC..." "Checking OPAC public accessibility..."
+
+    http_status=$(curl -L -k -sS -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 "$opac_url" 2>/dev/null)
+
+    if [[ "$http_status" =~ ^2[0-9][0-9]$|^3[0-9][0-9]$ ]]; then
+        msg_ok "$(t "OPAC acessível!\n\nEndereço testado: $opac_url\nCódigo HTTP recebido: $http_status" "OPAC accessible!\n\nTested address: $opac_url\nHTTP status received: $http_status")" 10 74
+    else
+        msg_error "" "$(t "Não foi possível confirmar o acesso ao OPAC.\n\nCódigo HTTP recebido: ${http_status:-indisponível}\n\nVerifique o domínio, o túnel (Cloudflare/Tailscale), o certificado SSL e o firewall." "Could not confirm OPAC access.\n\nHTTP status received: ${http_status:-unavailable}\n\nCheck the domain, tunnel (Cloudflare/Tailscale), SSL certificate and firewall.")" 13 80
+    fi
+
+    sitemap_url="${opac_url}/sitemap.xml"
+    clear
+    display_explanation "Verificando o sitemap em $sitemap_url..." "Checking sitemap at $sitemap_url..."
+
+    http_status=$(curl -L -k -sS -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 "$sitemap_url" 2>/dev/null)
+
+    if [[ "$http_status" =~ ^2[0-9][0-9]$ ]]; then
+        msg_ok "$(t "Sitemap encontrado com sucesso em:\n$sitemap_url\n\nCódigo HTTP: $http_status" "Sitemap successfully found at:\n$sitemap_url\n\nHTTP status: $http_status")" 10 74
+    else
+        msg_info "$(t "Sitemap não confirmado" "Sitemap not confirmed")" \
+            "$(t "Não foi possível confirmar automaticamente:\n$sitemap_url\n\nIsso não significa necessariamente um problema. A localização do sitemap pode variar.\nVerifique a documentação da sua versão do Koha e utilize a URL real no Google." "Could not automatically confirm:\n$sitemap_url\n\nThis doesn't necessarily mean a problem. The sitemap location may vary.\nCheck your Koha documentation and use the actual URL in Google.")" 13 80
+    fi
+
+    while true; do
+        verification_method=$(dialog --title "$(t "Verificação Manual Obrigatória" "Required Manual Verification")" \
+            --cancel-button "$(t "Sair" "Exit")" \
+            --menu "$(t "Escolha o método que pretende utilizar no Google Search Console:" "Choose the method you intend to use in Google Search Console:")" \
+            18 82 5 \
+            "1" "$(t "Verificação por Domínio (DNS)" "Domain verification (DNS)")" \
+            "2" "$(t "Verificação por Prefixo de URL (Recomendado)" "URL-prefix verification (Recommended)")" \
+            "3" "$(t "Enviar sitemap ao Google" "Submit sitemap to Google")" \
+            "4" "$(t "Solicitar indexação de uma página" "Request indexing for a page")" \
+            "5" "$(t "Checklist Final e Links Úteis" "Final Checklist and Useful Links")" \
+            3>&1 1>&2 2>&3) || break
+
+        case "$verification_method" in
+            1)
+                msg_info "$(t "Verificação por Domínio (DNS)" "Domain Verification (DNS)")" \
+"$(t "PASSO A PASSO:\n1. Abra: https://search.google.com/search-console\n2. Adicionar propriedade > 'Domínio'.\n3. Informe somente o domínio (ex: bibliotecapalotina.org).\n4. O Google exibirá um registro TXT DNS.\n5. Abra o painel DNS (Cloudflare, Registro.br, TI da prefeitura).\n6. Crie um registro TXT com os dados fornecidos.\n7. Aguarde a propagação do DNS e clique em 'Verificar'.\n\nATENÇÃO: O instalador não pode fazer isso sem acesso ao seu provedor de DNS." \
+"STEP BY STEP:\n1. Open: https://search.google.com/search-console\n2. Add property > 'Domain'.\n3. Enter only the domain (e.g. library.org).\n4. Google will display a DNS TXT record.\n5. Open your DNS panel (Cloudflare, Registrar, IT dept).\n6. Create a TXT record with the provided data.\n7. Wait for DNS propagation and click 'Verify'.\n\nWARNING: The installer cannot do this without access to your DNS provider.")" 20 86
+                ;;
+            2)
+                msg_info "$(t "Verificação por Prefixo de URL" "URL-prefix Verification")" \
+"$(t "PASSO A PASSO:\n1. Adicionar propriedade > 'Prefixo do URL'.\n2. Cole exatamente o endereço público: $opac_url\n3. Escolha o método TAG HTML.\n4. Copie a meta tag fornecida pelo Google (<meta name=\"google-site-verification\"...).\n5. Cole essa tag no Koha Staff em:\n   Administração > Preferências do Sistema > opacheader\n6. Salve a preferência e clique em 'Verificar' no Google.\n\nEste é o método mais fácil se você tiver acesso ao painel Staff!" \
+"STEP BY STEP:\n1. Add property > 'URL prefix'.\n2. Paste the exact public address: $opac_url\n3. Choose the HTML TAG method.\n4. Copy the meta tag provided by Google (<meta name=\"google-site-verification\"...).\n5. Paste this tag in Koha Staff under:\n   Administration > System Preferences > opacheader\n6. Save the preference and click 'Verify' in Google.\n\nThis is the easiest method if you have access to the Staff panel!")" 20 88
+                ;;
+            3)
+                msg_info "$(t "Enviar o Sitemap" "Submit Sitemap")" \
+"$(t "DEPOIS de verificar a propriedade:\n\n1. No Search Console, clique em 'Sitemaps' (menu esquerdo).\n2. No campo 'Adicionar um novo sitemap', digite:\n   sitemap.xml\n3. Clique em 'Enviar'.\n\nCOMPREENDENDO O RESULTADO:\n- 'Enviado' não significa indexação imediata.\n- É apenas um mapa; o Google decide quando e o que indexar.\n- Pode levar dias ou semanas para aparecer nas buscas." \
+"AFTER verifying the property:\n\n1. In Search Console, click 'Sitemaps' (left menu).\n2. In 'Add a new sitemap', enter:\n   sitemap.xml\n3. Click 'Submit'.\n\nUNDERSTANDING THE RESULT:\n- 'Submitted' does not mean immediate indexing.\n- It's just a map; Google decides when and what to index.\n- It may take days or weeks to appear in searches.")" 18 86
+                ;;
+            4)
+                msg_info "$(t "Solicitar Indexação" "Request Indexing")" \
+"$(t "Para forçar o Google a olhar uma página rapidamente:\n\n1. No Search Console, use a barra superior 'Inspecionar qualquer URL'.\n2. Cole o endereço completo (ex: $opac_url).\n3. Dê Enter e aguarde a análise.\n4. Clique em 'Solicitar indexação'.\n\nRECOMENDAÇÃO: Use apenas para a página inicial. O resto do acervo o Google descobre sozinho pelo sitemap." \
+"To force Google to look at a page quickly:\n\n1. In Search Console, use the top bar 'Inspect any URL'.\n2. Paste the full address (e.g., $opac_url).\n3. Press Enter and wait for analysis.\n4. Click 'Request indexing'.\n\nRECOMMENDATION: Use only for the homepage. Google will discover the rest of the catalog through the sitemap.")" 16 86
+                ;;
+            5)
+                msg_info "$(t "Checklist Final" "Final Checklist")" \
+"$(t "LINKS ÚTEIS:\nGoogle Search Console: https://search.google.com/search-console\n\nCHECKLIST:\n[ ] O OPAC abre externamente.\n[ ] A propriedade foi verificada no Google.\n[ ] A tag HTML foi inserida no 'opacheader' (se usou prefixo).\n[ ] O sitemap foi enviado no painel do Google.\n\nAgora é ter paciência. O Google fará o rastreamento no tempo dele." \
+"USEFUL LINKS:\nGoogle Search Console: https://search.google.com/search-console\n\nCHECKLIST:\n[ ] OPAC opens externally.\n[ ] Property was verified in Google.\n[ ] HTML tag was inserted in 'opacheader' (if using prefix).\n[ ] Sitemap was submitted in Google panel.\n\nNow be patient. Google will crawl it on its own schedule.")" 18 88
+                ;;
+        esac
+    done
+}
+
+# ======================================================================
 # 18. INTEROPERABILIDADE / INTEROPERABILITY (SIP2 / Z39.50)
 # ======================================================================
 function_interoperability() {
@@ -4066,13 +4149,15 @@ sub_menu_public_web() {
             --cancel-button "$(t "Voltar" "Back")" \
             --menu "$(t "Escolha uma ação:" "Choose an action:")" \
             --item-help \
-            18 88 3 \
+            19 88 4 \
             "1" "$(t "Configurar Cloudflare Tunnel (Domínio Institucional)" "Set up Cloudflare Tunnel (Institutional Domain)")" \
             "$(t "Expõe o Koha na web com HTTPS usando domínio próprio." "Exposes Koha on the web with HTTPS using a custom domain.")" \
             "2" "$(t "Configurar Tailscale Funnel (Acesso Rápido)" "Set up Tailscale Funnel (Quick Access)")" \
             "$(t "Publica o Koha por túnel HTTPS via Tailscale." "Publishes Koha through an HTTPS tunnel via Tailscale.")" \
             "3" "$(t "Configurar Certificado SSL Local" "Set up local SSL certificate")" \
             "$(t "Emite um certificado Let's Encrypt via Certbot/Apache." "Issues a Let's Encrypt certificate via Certbot/Apache.")" \
+            "4" "$(t "Google Search Console (SEO)" "Google Search Console (SEO)")" \
+            "$(t "Guia e diagnóstico para indexar o acervo no Google." "Guide and diagnostics to index the catalog on Google.")" \
             3>&1 1>&2 2>&3
         )
         rc=$?
@@ -4081,6 +4166,7 @@ sub_menu_public_web() {
             1) function_configure_cloudflare ;;
             2) function_configure_tailscale ;;
             3) function_configure_ssl ;;
+            4) function_google_search_console ;;
         esac
     done
 }
