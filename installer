@@ -691,10 +691,14 @@ validate_pre_installation() {
         && v_ok "HTTPS: $(t "repositório Koha respondeu" "Koha repository responded")." \
         || v_fail "HTTPS: $(t "repositório Koha não respondeu" "Koha repository did not respond")."
 
-    free_disk=$(get_free_space_mb /)
-    if [ "${free_disk:-0}" -ge 10240 ] 2>/dev/null; then v_ok "Disco: ${free_disk} MB."
-    elif [ "${free_disk:-0}" -ge 5120 ] 2>/dev/null; then v_warn "Disco: ${free_disk} MB ($(t "apertado para Elasticsearch" "tight for Elasticsearch"))."
-    else v_fail "Disco: ${free_disk:-0} MB ($(t "mínimo recomendado: 5 GB" "recommended minimum: 5 GB"))."; fi
+free_disk=$(get_free_space_mb /)
+    if [ "${free_disk:-0}" -ge 10240 ] 2>/dev/null; then
+        v_ok "Disco: ${free_disk} MB."
+    elif [ "${free_disk:-0}" -ge 5120 ] 2>/dev/null; then
+        v_warn "Disco: ${free_disk} MB ($(t "apertado para Elasticsearch" "tight for Elasticsearch"))."
+    else
+        v_warn "Disco: ${free_disk:-0} MB ($(t "espaço baixo; recomendado > 5 GB" "low disk space; recommended > 5 GB"))."
+    fi
 
     for p in 80 8080; do
         if ss -lnt 2>/dev/null | awk '{print $4}' | grep -Eq "([.:]$p)\$"; then
