@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Koha Easy Install - Manual Completo / Complete Guide</title>
+  <title>Koha Easy Install & Tools - Manual Completo / Complete Guide</title>
   <style>
     :root {
       --bg-body: #0b0f19;
@@ -329,7 +329,7 @@
         <span class="badge">Ubuntu Supported</span>
       </div>
       <h1>Manual Completo de Instalação e Configuração do Koha</h1>
-      <p class="lead">Guia estruturado com foco em estabilidade operacional: preparação minuciosa do sistema operacional em 5 cenários, inicialização atômica em linha única e utilização completa das 27 funções do <strong>Koha Easy Install (Painel Interativo)</strong>.</p>
+      <p class="lead">Guia estruturado com foco em estabilidade operacional: preparação minuciosa do sistema operacional em 5 cenários, inicialização atômica em linha única e utilização completa das 31 funções do <strong>Koha Easy Install & Tools (Painel Interativo)</strong>.</p>
     </header>
 
     <section>
@@ -369,7 +369,7 @@
 
     <section>
       <h2>2. Preparação do Sistema Operacional (5 Cenários)</h2>
-      <p>O Koha Easy Install foi concebido e testado estritamente para rodar sobre a distribuição <strong>Ubuntu (Server ou Desktop) nas versões 22.04 LTS, 24.04 LTS e 26.04 LTS</strong>. O script bloqueia intencionalmente a execução em outras distros para garantir a integridade dos pacotes. Escolha rigorosamente <strong>apenas o cenário correspondente</strong> à sua infraestrutura:</p>
+      <p>O Koha Easy Install & Tools foi concebido e testado estritamente para rodar sobre a distribuição <strong>Ubuntu (Server ou Desktop) nas versões 22.04 LTS, 24.04 LTS e 26.04 LTS</strong>. O script bloqueia intencionalmente a execução em outras distros para garantir a integridade dos pacotes. Escolha rigorosamente <strong>apenas o cenário correspondente</strong> à sua infraestrutura:</p>
 
       <div class="card card-highlight">
         <h3>Cenário 1: Servidor Físico Dedicado (Ubuntu Server)</h3>
@@ -496,7 +496,7 @@
 
       <div class="code-container">
         <div class="code-header"><span>Comando Único de Inicialização</span><button class="copy-btn" onclick="copySnippet(this)">Copiar</button></div>
-        <pre><code>sudo curl -fsSL "https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer" -o /usr/local/bin/options.sh && sudo chmod +x /usr/local/bin/options.sh && sudo options.sh</code></pre>
+        <pre><code>sudo curl -fsSL 'https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer' -o /usr/local/bin/options.sh && sudo chmod +x /usr/local/bin/options.sh && sudo options.sh</code></pre>
       </div>
 
       <div class="info-box">
@@ -507,7 +507,7 @@
     </section>
 
     <section>
-      <h2>5. Guia Completo das 27 Funções do Painel</h2>
+      <h2>5. Guia Completo das 31 Funções do Painel</h2>
 
       <!-- OPÇÃO 1 -->
       <div class="card">
@@ -515,12 +515,12 @@
         <h3>Instalar o servidor Koha (Implantação Completa)</h3>
         <p>Essa rotina executa a preparação integral da máquina para rodar o Koha sem intervenções manuais propensas a erro. Ela compreende:</p>
         <ul>
-          <li><strong>Pré-validação de Requisitos:</strong> Checa privilégios root, compatibilidade de distribuição Linux, resolução de DNS com os repositórios da comunidade Koha, integridade de conexão HTTPS e checagem de portas livres (80 e 8080).</li>
+          <li><strong>Pré-validação de Requisitos:</strong> Checa privilégios root, compatibilidade de arquitetura (amd64/arm64), integridade de DNS e HTTPS com os repositórios da comunidade Koha, e checagem de portas livres (80 e 8080).</li>
           <li><strong>Ajuste de Locales e Relógio:</strong> Configura codificação obrigatória UTF-8 (<code class="inline-code">pt_BR.UTF-8</code> e <code class="inline-code">en_US.UTF-8</code>) e sincroniza o relógio do servidor com servidores atômicos via <code class="inline-code">systemd-timesyncd</code> NTP.</li>
           <li><strong>Criação de Memória Virtual (SWAP 4 GB):</strong> Cria e inicializa um arquivo de swap de 4 GB com permissões 600 em <code class="inline-code">/etc/fstab</code>, evitando que picos de catalogação provoquem o encerramento do processo do Apache ou MariaDB por falta de memória física (Out-Of-Memory Killer).</li>
-          <li><strong>Blindagem do Gerenciador de Pacotes:</strong> Desativa timers ocultos do Ubuntu (como o <code class="inline-code">unattended-upgrades</code>) que bloqueiam travas de DPKG durante a instalação e implementa repetições automáticas (retry) contra quedas de pacotes.</li>
+          <li><strong>Blindagem do Gerenciador de Pacotes:</strong> Desativa timers do Ubuntu (<code class="inline-code">apt-daily</code> e <code class="inline-code">unattended-upgrades</code>) que bloqueiam travas de DPKG durante a instalação e implementa repetições automáticas contra falhas de rede.</li>
           <li><strong>Instalação de Dependências Essenciais:</strong> Implanta utilitários de infraestrutura, incluindo o <code class="inline-code">glabels</code> (imprescindível para impressão de etiquetas de código de barras e lombada em bibliotecas), <code class="inline-code">rclone</code>, <code class="inline-code">fail2ban</code>, <code class="inline-code">memcached</code> e bibliotecas de manipulação XML.</li>
-          <li><strong>Chaves GPG e Repositórios Oficiais:</strong> Adiciona as chaves de assinatura digital e os repositórios do <em>Koha Community</em> e do <em>Elasticsearch 7.x</em>.</li>
+          <li><strong>Chaves GPG e Repositório Oficial:</strong> Adiciona as chaves de assinatura digital e os repositórios oficiais estáveis do <em>Koha Community</em>.</li>
           <li><strong>Isolamento da Instância 'library':</strong> Inicializa o banco de dados MariaDB, aplica os templates globais em <code class="inline-code">koha-sites.conf</code>, configura os sockets do Apache, gera senhas aleatórias criptografadas e ativa o servidor de aplicações Plack e o daemon Zebra.</li>
         </ul>
       </div>
@@ -540,7 +540,7 @@
         <ul>
           <li><strong>Explorador de Arquivos Integrado:</strong> Apresenta uma interface navegável pelo terminal para localizar o arquivo em qualquer pasta (inclusive pendrives montados em <code class="inline-code">/media</code> ou <code class="inline-code">/mnt</code>).</li>
           <li><strong>Validação Prévia de Integridade:</strong> Testa o arquivo contra corrupção com <code class="inline-code">gzip -t</code> e valida se os cabeçalhos contêm comandos SQL válidos antes de descarregar qualquer tabela.</li>
-          <li><strong>Backup de Segurança Automático (Rollback):</strong> Antes de deletar a base atual, o sistema gera automaticamente um dump do estado atual (<code class="inline-code">PRE-RESTAURACAO_data.sql.gz</code>). Caso o arquivo novo contenha erros ou menos de 50 tabelas, o script detecta a anomalia e oferece reversão imediata para o backup anterior, protegendo a biblioteca contra perda de dados.</li>
+          <li><strong>Proteção por Flock:</strong> Utiliza descritor de ficheiro atômico para impedir que backups e restaurações concorrentes corrompam a base em disco.</li>
           <li><strong>Reconstrução de Esquema e Índices:</strong> Ao término da injeção, roda o <code class="inline-code">koha-upgrade-schema</code> para compatibilizar bancos antigos com a versão instalada, limpa os caches Memcached e reconstrói os índices do motor de busca ativo (Zebra ou Elasticsearch).</li>
         </ul>
       </div>
@@ -656,9 +656,9 @@
         <h3>Configurar backup em nuvem (Google Drive via Rclone)</h3>
         <p>Garante que todos os backups noturnos do acervo sejam criptografados e salvos fora do servidor em nuvem segura:</p>
         <ul>
-          <li><strong>Modo Expresso (Google Drive):</strong> Abre o assistente de conexão remota. O script exibe na tela o comando de autorização OOB (<code class="inline-code">rclone authorize "drive" "..."</code>). Você copia esse comando, cola no terminal do seu computador de trabalho (onde existe navegador), faz login com a conta Google da biblioteca e recebe o token de acesso. Basta colar esse token de volta no servidor para concluir a vinculação.</li>
+          <li><strong>Modo Expresso (Google Drive):</strong> Abre o assistente de conexão remota. O script exibe na tela o comando de autorização OOB (<code class="inline-code">rclone authorize "drive"</code>). Você copia esse comando, cola no terminal do seu computador de trabalho (onde existe navegador), faz login com a conta Google da biblioteca e recebe o token de acesso. Basta colar esse token de volta no servidor para concluir a vinculação.</li>
           <li><strong>Modo Manual:</strong> Permite vincular OneDrive, Dropbox, Amazon S3, Google Cloud Storage, SFTP ou Nextcloud utilizando o assistente nativo do Rclone.</li>
-          <li><strong>Validação e Teste Imediato:</strong> O script testa a criação da pasta remota (<code class="inline-code">Backup_SQL_Koha</code> e <code class="inline-code">Backup_MARC_Koha</code>), vincula as variáveis em <code class="inline-code">/etc/koha-easy-install/backup.conf</code> e permite disparar um backup de teste imediatamente para você ver o arquivo subindo no seu Drive.</li>
+          <li><strong>Validação e Teste Imediato:</strong> O script testa a criação da pasta remota (<code class="inline-code">Backup_SQL_Koha</code> e <code class="inline-code">Backup_MARC_Koha</code>), vincula as variáveis de forma segura via parser dedicado em <code class="inline-code">/etc/koha-easy-install/backup.conf</code> e valida a prontidão dos uploads.</li>
         </ul>
       </div>
 
@@ -765,29 +765,57 @@
       <!-- OPÇÃO 24 -->
       <div class="card">
         <span class="menu-badge">Opção 24</span>
-        <h3>Atualizar este painel</h3>
-        <p>Autoatualização atômica do script: baixa a versão mais recente do código do repositório no GitHub para um arquivo temporário em <code class="inline-code">/tmp</code>, valida a sintaxe completa com <code class="inline-code">bash -n</code> e, se não houver erros, substitui o executável oficial em <code class="inline-code">/usr/local/bin/options.sh</code>, preservando uma cópia de backup da versão anterior.</p>
+        <h3>Explorador de Arquivos (Midnight Commander)</h3>
+        <p>Interface de gerenciamento de ficheiros em dois painéis (<code class="inline-code">mc</code>). Permite navegar visualmente pelas pastas do Koha, inspecionar discos montados e visualizar/editar ficheiros de configuração (tecla F4) sem precisar de comandos manuais repetitivos.</p>
       </div>
 
       <!-- OPÇÃO 25 -->
       <div class="card">
         <span class="menu-badge">Opção 25</span>
-        <h3>Reiniciar o servidor</h3>
-        <p>Envia sinal de reinicialização controlado ao sistema operacional após confirmação na tela, garantindo que buffers de disco e conexões ativas do MariaDB sejam descarregados de forma íntegra.</p>
+        <h3>Navegador Web de Terminal (Links)</h3>
+        <p>Navegador em modo texto ultrarrápido integrado diretamente na interface. Permite testar e validar o carregamento HTTP do Catálogo Público (Porta 80) e da Intranet Staff (Porta 8080) internamente pelo localhost sem sair da sessão SSH.</p>
       </div>
 
       <!-- OPÇÃO 26 -->
       <div class="card">
         <span class="menu-badge">Opção 26</span>
-        <h3>Sobre o programa (GitHub / Apoio)</h3>
-        <p>Exibe os créditos do desenvolvedor de Palotina e as informações da versão, incentivando a colaboração de código aberto via GitHub.</p>
+        <h3>Monitoramento de Recursos (Htop / Nethogs)</h3>
+        <p>Diagnóstico de infraestrutura em tempo real. Abre o <code class="inline-code">htop</code> para auditoria minuciosa de consumo de CPU, memória RAM e threads do Plack/Elasticsearch, ou o <code class="inline-code">nethogs</code> para monitorar o tráfego de rede por processo.</p>
       </div>
 
       <!-- OPÇÃO 27 -->
       <div class="card">
         <span class="menu-badge">Opção 27</span>
+        <h3>Auditoria de Logs em Tempo Real</h3>
+        <p>Monitor contínuo com streaming instantâneo (<code class="inline-code">--line-buffered</code>) e realce colorido de falhas críticas nos arquivos de log do Apache para o Staff (<code class="inline-code">koha_library_error.log</code>) e OPAC (<code class="inline-code">koha_library_opac_error.log</code>).</p>
+      </div>
+
+      <!-- OPÇÃO 28 -->
+      <div class="card">
+        <span class="menu-badge">Opção 28</span>
+        <h3>Atualizar este painel</h3>
+        <p>Autoatualização atômica do script com trava de integridade reforçada: faz o download do código novo para pasta temporária, valida tamanho mínimo, shebang, assinaturas de integridade (<code class="inline-code">KOHA EASY INSTALL &amp; TOOLS</code>), presença das funções mestres e checagem sintática estrita com <code class="inline-code">bash -n</code> antes de substituir o binário em produção.</p>
+      </div>
+
+      <!-- OPÇÃO 29 -->
+      <div class="card">
+        <span class="menu-badge">Opção 29</span>
+        <h3>Reiniciar o servidor</h3>
+        <p>Envia sinal de reinicialização controlado ao sistema operacional após confirmação na tela, garantindo que buffers de disco e conexões ativas do MariaDB sejam descarregados de forma íntegra.</p>
+      </div>
+
+      <!-- OPÇÃO 30 -->
+      <div class="card">
+        <span class="menu-badge">Opção 30</span>
+        <h3>Sobre o programa (GitHub / Apoio)</h3>
+        <p>Exibe os créditos do desenvolvedor de Palotina[cite: 1] e as informações da versão, incentivando a colaboração de código aberto via GitHub[cite: 1].</p>
+      </div>
+
+      <!-- OPÇÃO 31 -->
+      <div class="card">
+        <span class="menu-badge">Opção 31</span>
         <h3>Sair</h3>
-        <p>Encerra a navegação no painel interativo, restaura os timers de atualização do APT e retorna o controle para o terminal Linux com código de saída limpo.</p>
+        <p>Encerra a navegação no painel interativo, liberta os locks com <code class="inline-code">flock -u</code>, restaura os timers de atualização do APT e retorna o controle para o terminal Linux com código de saída limpo.</p>
       </div>
     </section>
 
@@ -896,7 +924,7 @@
         <span class="badge">Ubuntu Supported</span>
       </div>
       <h1>Koha Complete Installation and Configuration Manual</h1>
-      <p class="lead">A structured guide focused on operational stability: thorough OS preparation across 5 scenarios, single-line atomic initialization, and full utilization of the 27 features in the <strong>Koha Easy Install (Interactive Panel)</strong>.</p>
+      <p class="lead">A structured guide focused on operational stability: thorough OS preparation across 5 scenarios, single-line atomic initialization, and full utilization of the 31 features in the <strong>Koha Easy Install & Tools (Interactive Panel)</strong>.</p>
     </header>
 
     <section>
@@ -936,7 +964,7 @@
 
     <section>
       <h2>2. Operating System Preparation (5 Scenarios)</h2>
-      <p>Koha Easy Install was natively designed and tested strictly to run on <strong>Ubuntu (Server or Desktop) versions 22.04 LTS, 24.04 LTS and 26.04 LTS</strong>. The script intentionally blocks execution on other distros to guarantee package integrity. Strictly choose <strong>only the scenario corresponding</strong> to your infrastructure:</p>
+      <p>Koha Easy Install & Tools was natively designed and tested strictly to run on <strong>Ubuntu (Server or Desktop) versions 22.04 LTS, 24.04 LTS and 26.04 LTS</strong>. The script intentionally blocks execution on other distros to guarantee package integrity. Strictly choose <strong>only the scenario corresponding</strong> to your infrastructure:</p>
 
       <div class="card card-highlight">
         <h3>Scenario 1: Dedicated Physical Server (Ubuntu Server)</h3>
@@ -995,7 +1023,7 @@
         <h3>Scenario 4: Windows with a Virtual Machine (VirtualBox)</h3>
         <p>Running Ubuntu Server inside a virtual machine on a Windows host.</p>
         <ul>
-          <li><strong>Virtualization in BIOS:</strong> Restart Windows, access the BIOS, and enable <em>Intel Virtualization Technology (VT-x)</em> or <em>SVM Mode (AMD)</em>.</li>
+          <li><strong>Virtualização na BIOS:</strong> Restart Windows, access the BIOS, and enable <em>Intel Virtualization Technology (VT-x)</em> or <em>SVM Mode (AMD)</em>.</li>
           <li>Install the stable version of VirtualBox and download the Ubuntu Server LTS ISO.</li>
           <li><strong>VM Creation:</strong>
             <ul>
@@ -1063,7 +1091,7 @@
 
       <div class="code-container">
         <div class="code-header"><span>Single Initialization Command</span><button class="copy-btn" onclick="copySnippet(this)">Copy</button></div>
-        <pre><code>sudo curl -fsSL "https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer" -o /usr/local/bin/options.sh && sudo chmod +x /usr/local/bin/options.sh && sudo options.sh</code></pre>
+        <pre><code>sudo curl -fsSL 'https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer' -o /usr/local/bin/options.sh && sudo chmod +x /usr/local/bin/options.sh && sudo options.sh</code></pre>
       </div>
 
       <div class="info-box">
@@ -1074,7 +1102,7 @@
     </section>
 
     <section>
-      <h2>5. Complete Guide to the 27 Panel Functions</h2>
+      <h2>5. Complete Guide to the 31 Panel Functions</h2>
 
       <!-- OPÇÃO 1 -->
       <div class="card">
@@ -1082,12 +1110,12 @@
         <h3>Install the Koha server (Full Deployment)</h3>
         <p>This routine executes the complete preparation of the machine to run Koha without error-prone manual interventions. It includes:</p>
         <ul>
-          <li><strong>Pre-requisite Validation:</strong> Checks root privileges, Linux distribution compatibility, DNS resolution with Koha community repositories, HTTPS connection integrity, and checks for free ports (80 and 8080).</li>
+          <li><strong>Pre-requisite Validation:</strong> Checks root privileges, architecture compatibility (amd64/arm64), DNS resolution with Koha community repositories, HTTPS connection integrity, and checks for free ports (80 and 8080).</li>
           <li><strong>Locales and Clock Adjustment:</strong> Configures the mandatory UTF-8 encoding (<code class="inline-code">pt_BR.UTF-8</code> and <code class="inline-code">en_US.UTF-8</code>) and synchronizes the server clock with atomic servers via <code class="inline-code">systemd-timesyncd</code> NTP.</li>
           <li><strong>Virtual Memory Creation (4 GB SWAP):</strong> Creates and initializes a 4 GB swap file with 600 permissions in <code class="inline-code">/etc/fstab</code>, preventing heavy cataloging spikes from causing the Out-Of-Memory Killer to terminate Apache or MariaDB.</li>
-          <li><strong>Package Manager Shielding:</strong> Disables hidden Ubuntu timers (like <code class="inline-code">unattended-upgrades</code>) that block DPKG locks during installation and implements automatic retries against dropped packages.</li>
+          <li><strong>Package Manager Shielding:</strong> Disables hidden Ubuntu timers (like <code class="inline-code">apt-daily</code> and <code class="inline-code">unattended-upgrades</code>) that block DPKG locks during installation and implements automatic retries against dropped packages.</li>
           <li><strong>Essential Dependencies Installation:</strong> Deploys infrastructure utilities, including <code class="inline-code">glabels</code> (crucial for printing barcode and spine labels in libraries), <code class="inline-code">rclone</code>, <code class="inline-code">fail2ban</code>, <code class="inline-code">memcached</code>, and XML manipulation libraries.</li>
-          <li><strong>GPG Keys and Official Repositories:</strong> Adds the digital signature keys and repositories for the <em>Koha Community</em> and <em>Elasticsearch 7.x</em>.</li>
+          <li><strong>GPG Keys and Official Repositories:</strong> Adds the digital signature keys and official stable repositories for the <em>Koha Community</em>.</li>
           <li><strong>'library' Instance Isolation:</strong> Initializes the MariaDB database, applies global templates in <code class="inline-code">koha-sites.conf</code>, configures Apache sockets, generates encrypted random passwords, and activates the Plack application server and Zebra daemon.</li>
         </ul>
       </div>
@@ -1107,7 +1135,7 @@
         <ul>
           <li><strong>Integrated File Explorer:</strong> Provides a navigable terminal interface to locate the file in any folder (including USB drives mounted on <code class="inline-code">/media</code> or <code class="inline-code">/mnt</code>).</li>
           <li><strong>Pre-Integrity Validation:</strong> Tests the file against corruption using <code class="inline-code">gzip -t</code> and validates that the headers contain valid SQL commands before dumping any tables.</li>
-          <li><strong>Automatic Safety Backup (Rollback):</strong> Before deleting the current database, the system automatically generates a dump of the current state (<code class="inline-code">PRE-RESTAURACAO_data.sql.gz</code>). If the new file contains errors or has fewer than 50 tables, the script detects the anomaly and offers an immediate rollback to the previous backup, protecting the library from data loss.</li>
+          <li><strong>Flock Protection:</strong> Leverages kernel-level atomic locks to prevent concurrent backups and restores from corrupting database tables.</li>
           <li><strong>Schema and Index Reconstruction:</strong> Upon injection completion, it runs <code class="inline-code">koha-upgrade-schema</code> to ensure older databases match the installed version, clears Memcached caches, and rebuilds the active search engine indexes (Zebra or Elasticsearch).</li>
         </ul>
       </div>
@@ -1223,9 +1251,9 @@
         <h3>Set up cloud backup (Google Drive via Rclone)</h3>
         <p>Ensures that all nightly catalog backups are encrypted and saved off-server in a secure cloud:</p>
         <ul>
-          <li><strong>Express Mode (Google Drive):</strong> Opens the remote connection wizard. The script displays the OOB authorization command on the screen (<code class="inline-code">rclone authorize "drive" "..."</code>). You copy this command, paste it into the terminal of your workstation (which has a browser), log in with the library's Google account, and receive the access token. Just paste this token back into the server to complete the binding.</li>
+          <li><strong>Express Mode (Google Drive):</strong> Opens the remote connection wizard. The script displays the OOB authorization command on the screen (<code class="inline-code">rclone authorize "drive"</code>). You copy this command, paste it into the terminal of your workstation (which has a browser), log in with the library's Google account, and receive the access token. Just paste this token back into the server to complete the binding.</li>
           <li><strong>Manual Mode:</strong> Allows linking OneDrive, Dropbox, Amazon S3, Google Cloud Storage, SFTP, or Nextcloud using the native Rclone wizard.</li>
-          <li><strong>Validation and Immediate Test:</strong> The script tests the remote folder creation (<code class="inline-code">Backup_SQL_Koha</code> and <code class="inline-code">Backup_MARC_Koha</code>), binds variables in <code class="inline-code">/etc/koha-easy-install/backup.conf</code>, and allows triggering a test backup immediately so you can see the file uploading to your Drive.</li>
+          <li><strong>Validation and Immediate Test:</strong> The script tests the remote folder creation (<code class="inline-code">Backup_SQL_Koha</code> and <code class="inline-code">Backup_MARC_Koha</code>), binds variables securely via a dedicated parser in <code class="inline-code">/etc/koha-easy-install/backup.conf</code>, and ensures upload readiness.</li>
         </ul>
       </div>
 
@@ -1332,29 +1360,57 @@
       <!-- OPÇÃO 24 -->
       <div class="card">
         <span class="menu-badge">Option 24</span>
-        <h3>Update this panel</h3>
-        <p>Atomic script auto-update: downloads the latest code version from the GitHub repository to a temporary file in <code class="inline-code">/tmp</code>, validates the entire syntax with <code class="inline-code">bash -n</code>, and if error-free, replaces the official executable in <code class="inline-code">/usr/local/bin/options.sh</code>, preserving a backup copy of the previous version.</p>
+        <h3>File Explorer (Midnight Commander)</h3>
+        <p>Dual-pane visual file management interface (<code class="inline-code">mc</code>). Allows inspecting Koha system folders, browsing mounted drives, and viewing or editing configuration files (F4 key) without typing repetitive shell commands.</p>
       </div>
 
       <!-- OPÇÃO 25 -->
       <div class="card">
         <span class="menu-badge">Option 25</span>
-        <h3>Reboot the server</h3>
-        <p>Sends a controlled reboot signal to the operating system after on-screen confirmation, ensuring disk buffers and active MariaDB connections are cleanly flushed.</p>
+        <h3>Terminal Web Browser (Links)</h3>
+        <p>Integrated text-based browser for immediate local validation. Test and inspect the HTTP responses of both Public Catalog (Port 80) and Staff Client (Port 8080) directly via localhost without terminating your remote SSH session.</p>
       </div>
 
       <!-- OPÇÃO 26 -->
       <div class="card">
         <span class="menu-badge">Option 26</span>
-        <h3>About this program (GitHub / Support)</h3>
-        <p>Displays the credits for the developer from Palotina and version information, encouraging open-source collaboration via GitHub.</p>
+        <h3>Resource Monitoring (Htop / Nethogs)</h3>
+        <p>Real-time system diagnostics suite. Launches <code class="inline-code">htop</code> for auditing CPU cores, RAM consumption, and Plack/Elasticsearch threads, or runs <code class="inline-code">nethogs</code> to track network bandwidth usage per process.</p>
       </div>
 
       <!-- OPÇÃO 27 -->
       <div class="card">
         <span class="menu-badge">Option 27</span>
+        <h3>Real-Time Log Auditing</h3>
+        <p>Continuous log monitoring with instant line streaming (<code class="inline-code">--line-buffered</code>) and colored pattern highlights for Apache error logs across both Staff (<code class="inline-code">koha_library_error.log</code>) and OPAC (<code class="inline-code">koha_library_opac_error.log</code>).</p>
+      </div>
+
+      <!-- OPÇÃO 28 -->
+      <div class="card">
+        <span class="menu-badge">Option 28</span>
+        <h3>Update this panel</h3>
+        <p>Atomic self-update with reinforced verification: downloads the new script to a temporary file, validates size, shebang, integrity signatures (<code class="inline-code">KOHA EASY INSTALL &amp; TOOLS</code>), presence of core functions, and tests syntax with <code class="inline-code">bash -n</code> before replacing the live executable.</p>
+      </div>
+
+      <!-- OPÇÃO 29 -->
+      <div class="card">
+        <span class="menu-badge">Option 29</span>
+        <h3>Reboot the server</h3>
+        <p>Sends a controlled reboot signal to the operating system after on-screen confirmation, ensuring disk buffers and active MariaDB connections are cleanly flushed.</p>
+      </div>
+
+      <!-- OPÇÃO 30 -->
+      <div class="card">
+        <span class="menu-badge">Option 30</span>
+        <h3>About this program (GitHub / Support)</h3>
+        <p>Displays the credits for the developer from Palotina[cite: 1] and version information, encouraging open-source collaboration via GitHub[cite: 1].</p>
+      </div>
+
+      <!-- OPÇÃO 31 -->
+      <div class="card">
+        <span class="menu-badge">Option 31</span>
         <h3>Exit</h3>
-        <p>Terminates navigation in the interactive panel, restores the APT update timers, and returns control to the Linux terminal with a clean exit code.</p>
+        <p>Terminates navigation in the interactive panel, unlocks files with <code class="inline-code">flock -u</code>, restores APT update timers, and returns control to the Linux shell with a clean exit status.</p>
       </div>
     </section>
 
