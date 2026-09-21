@@ -15,6 +15,7 @@ set -o pipefail
 umask 022
 
 VERSAO_PAINEL="3.0"
+# TESTE_SYNC_PALOTINA_OK=1
 URL_ATUALIZACAO="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
