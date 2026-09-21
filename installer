@@ -3212,7 +3212,7 @@ while true; do
         "27" "$(t "Auditoria de Logs em Tempo Real" "Real-Time Log Auditing")" \
         "28" "$(t "Atualizar este painel" "Update this panel")" \
         "29" "$(t "Reiniciar o servidor" "Reboot the server")" \
-        "30" "$(t "Sobre o programa (GitHub / Apoio)" "About this program (GitHub / Support)")" \
+        "30" "$(t "Sobre o programa" "About this program")" \
         "31" "$(t "Sair" "Exit")" 3>&1 1>&2 2>&3) || { clear; exit 0; }
 
     [ -z "$OPTION" ] && { clear; exit 0; }
