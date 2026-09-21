@@ -3340,8 +3340,7 @@ function_about() {
 # ======================================================================
 function_configure_tailscale() {
     msg_info "Tailscale Funnel" \
-"$(t "O Tailscale Funnel publica o Koha na internet instantaneamente\nfornecendo um domínio HTTPS automático (ex.: sua-maquina.ts.net),\nsem precisar de Cloudflare ou configuração no roteador.\n\nRequisitos:\n1. Criar uma conta no Tailscale (tailscale.com)\n2. Ativar o 'Funnel' no painel admin (Access Controls)\n\nNa próxima tela, vamos instalar e conectar o servidor." \
-"Tailscale Funnel publishes Koha to the internet instantly\nproviding an automatic HTTPS domain (e.g., your-machine.ts.net),\nwithout needing Cloudflare or router configuration.\n\nRequirements:\n1. Create a Tailscale account (tailscale.com)\n2. Enable 'Funnel' in the admin panel (Access Controls)\n\nNext, we will install and connect the server.")" 20 78
+        $(t "O Tailscale Funnel publica o Koha na internet instantaneamente\nfornecendo um domínio HTTPS automático, sem precisar de Cloudflare.\n\nRequisitos:\n1. Criar uma conta no Tailscale (tailscale.com)\n2. Ativar o 'Funnel' no painel admin (Access Controls)\n\nVamos verificar a conexão do servidor agora." "Tailscale Funnel publishes Koha to the internet instantly\nproviding an automatic HTTPS domain, without needing Cloudflare.\n\nRequirements:\n1. Create a Tailscale account (tailscale.com)\n2. Enable 'Funnel' in the admin panel (Access Controls)\n\nWe will check the server connection now.") 18 76
     
     clear
     display_explanation "Verificando instalação do Tailscale..." "Checking Tailscale installation..."
@@ -3354,16 +3353,57 @@ function_configure_tailscale() {
         fi
     fi
 
-    display_explanation "Iniciando a conexão com sua conta Tailscale..." "Initiating connection to your Tailscale account..."
-    echo -e "\e[1;33m$(t "Siga o link abaixo no seu navegador para autenticar este servidor:" "Follow the link below in your browser to authenticate this server:")\e[0m"
-    tailscale up
-    echo ""
-    
-    if tailscale status >/dev/null 2>&1; then
-        msg_ok "$(t "Servidor conectado ao Tailscale com sucesso!\n\nPara publicar o catálogo (OPAC) na internet, rode no terminal:\n  sudo tailscale funnel 80\n\nPara publicar a Administração (Staff):\n  sudo tailscale funnel 8080" "Server successfully connected to Tailscale!\n\nTo publish the catalog (OPAC) to the internet, run:\n  sudo tailscale funnel 80\n\nTo publish the Administration (Staff):\n  sudo tailscale funnel 8080")" 14 76
-    else
-        msg_error "" "$(t "Não foi possível confirmar a conexão ativa do Tailscale." "Could not confirm active Tailscale connection.")" 9 70
+    if ! tailscale status >/dev/null 2>&1; then
+        display_explanation "Iniciando a conexão com sua conta Tailscale..." "Initiating connection to your Tailscale account..."
+        echo -e "\e[1;33m$(t "Siga o link abaixo no seu navegador para autenticar este servidor:" "Follow the link below in your browser to authenticate this server:")\e[0m"
+        tailscale up
+        echo ""
     fi
+
+    if ! tailscale status >/dev/null 2>&1; then
+        msg_error "" "$(t "O servidor não pôde ser autenticado no Tailscale. Tente novamente." "The server could not be authenticated on Tailscale. Try again.")" 9 70
+        return 1
+    fi
+
+    # Submenu interativo para o usuário escolher o que publicar com um clique
+    while true; do
+        local choice
+        choice=$(whiptail --title "$(t "Gerenciador do Tailscale Funnel" "Tailscale Funnel Manager")" \
+            --cancel-button "$(t "Voltar" "Back")" \
+            --menu "$(t "Servidor conectado! O que você deseja publicar na internet?" "Server connected! What do you want to publish on the internet?")" 16 76 3 \
+            "1" "$(t "Publicar Catálogo Público (OPAC - Porta 80)" "Publish Public Catalog (OPAC - Port 80)")" \
+            "2" "$(t "Publicar Administração (Staff - Porta 8080)" "Publish Administration (Staff - Port 8080)")" \
+            "3" "$(t "Desativar/Parar todos os Funnels ativos" "Stop all active Funnels")" \
+            3>&1 1>&2 2>&3)
+        [[ $? -ne 0 ]] && break
+
+        case "$choice" in
+            1)
+                clear
+                display_explanation "Ativando o Funnel para o Catálogo (Porta 80)..." "Enabling Funnel for Catalog (Port 80)..."
+                if tailscale funnel --bg 80; then
+                    msg_ok "$(t "Catálogo público publicado com sucesso via Tailscale Funnel!" "Public catalog successfully published via Tailscale Funnel!")" 9 70
+                else
+                    msg_error "" "$(t "Falha ao iniciar o Funnel na porta 80. Verifique se o recurso está ativado no painel admin da sua conta Tailscale." "Failed to start Funnel on port 80. Check if the feature is enabled in your Tailscale admin panel.")" 11 76
+                fi
+                ;;
+            2)
+                clear
+                display_explanation "Ativando o Funnel para a Administração (Porta 8080)..." "Enabling Funnel for Administration (Port 8080)..."
+                if tailscale funnel --bg 8080; then
+                    msg_ok "$(t "Administração (Staff) publicada com sucesso via Tailscale Funnel!" "Administration (Staff) successfully published via Tailscale Funnel!")" 9 70
+                else
+                    msg_error "" "$(t "Falha ao iniciar o Funnel na porta 8080. Verifique se o recurso está ativado no painel admin." "Failed to start Funnel on port 8080. Check if the feature is enabled in the admin panel.")" 11 76
+                fi
+                ;;
+            3)
+                clear
+                display_explanation "Desativando os Funnels ativos..." "Stopping active Funnels..."
+                tailscale funnel off >/dev/null 2>&1 || true
+                msg_ok "$(t "Todos os tunelamentos do Funnel foram desativados." "All Funnel tunnels have been turned off.")" 9 64
+                ;;
+        esac
+    done
 }
 
 # ======================================================================
