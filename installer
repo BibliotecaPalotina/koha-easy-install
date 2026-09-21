@@ -441,12 +441,16 @@ v_reset() {
         echo "KOHA EASY INSTALL & Tools - RELATORIO DE VALIDACAO / VALIDATION REPORT"
         echo "Contexto/Context: ${1:-geral}"
         echo "Data/Date: $(date '+%Y-%m-%d %H:%M:%S %Z')"
-        echo "Host: $(hostname)   Painel: v${PANEL_VERSION}"
+        echo "Host: $(hostname)    Painel: v${PANEL_VERSION}"
         echo "======================================================================"
     } > "$VALIDATION_LOG"
 }
 v_ok()   { V_OK=$((V_OK+1));     printf '[ OK ] %s\n' "$1" | tee -a "$VALIDATION_LOG"; }
-v_warn() { V_WARN=$((V_WARN+1)); printf '[AVISO] %s\n' "$1" | tee -a "$VALIDATION_LOG"; }
+v_warn() { 
+    V_WARN=$((V_WARN+1))
+    local msg; msg="$(t "[AVISO] $1" "[WARN] $1")"
+    printf '%s\n' "$msg" | tee -a "$VALIDATION_LOG"
+}
 v_fail() { V_FAIL=$((V_FAIL+1)); printf '[FALHA] %s\n' "$1" | tee -a "$VALIDATION_LOG"; }
 v_info() { printf '[INFO] %s\n' "$1" | tee -a "$VALIDATION_LOG"; }
 
