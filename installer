@@ -27,13 +27,11 @@ if [ "${EUID:-$(id -u)}" -ne 0 ]; then
     echo ""
 
     if [ -f "$0" ]; then
-        # Execução tradicional: o arquivo existe no disco
         exec sudo -E bash "$0" "$@"
     else
-        # Execução via pipe (ex: curl ... | bash) onde $0 não é um arquivo
-        echo "ERRO/ERROR: Para executar diretamente via curl/web, use o sudo no início:"
+        echo "ERRO/ERROR: Para executar diretamente via curl/web, chame com sudo:"
         echo ""
-        echo "  curl -fsSL \"$UPDATE_URL\" | sudo bash"
+        echo "  curl -fsSL \"https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer\" | sudo bash"
         echo ""
         exit 1
     fi
@@ -196,28 +194,21 @@ fi
 # ======================================================================
 save_and_stop_apt_services
 
+# 1. Libera travas pendentes do APT/DPKG
 if command -v fuser >/dev/null 2>&1; then
-    initial_wait=0
-    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
-          fuser /var/lib/dpkg/lock >/dev/null 2>&1 || \
-          fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
-        sleep 2
-        initial_wait=$((initial_wait + 2))
-        if [ "$initial_wait" -ge 60 ]; then
-            fuser -k /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock >/dev/null 2>&1 || true
-            break
-        fi
+    for lock in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock; do
+        fuser -k "$lock" >/dev/null 2>&1 || true
     done
 fi
-
 dpkg --configure -a >/dev/null 2>&1 || true
 
-# Garante que o relógio não bloqueia a validação de assinaturas do APT
+# 2. Sincroniza o relógio antes de tocar nos repositórios
 if command -v timedatectl >/dev/null 2>&1; then
     timedatectl set-ntp true >/dev/null 2>&1 || true
     systemctl restart systemd-timesyncd >/dev/null 2>&1 || true
 fi
 
+# 3. Detecta dependências faltantes
 deps_to_install=()
 for dep in dialog curl python3 unzip psmisc; do
     if ! command -v "$dep" >/dev/null 2>&1; then
@@ -225,21 +216,16 @@ for dep in dialog curl python3 unzip psmisc; do
     fi
 done
 
+# 4. Instala com flags defensivas caso falte algum pacote
 if [ ${#deps_to_install[@]} -gt 0 ]; then
     echo ""
-    echo "$(t "Instalando dependências necessárias: ${deps_to_install[*]}" "Installing required dependencies: ${deps_to_install[*]}" "Instalando dependencias necesarias: ${deps_to_install[*]}")"
+    echo "Instalando dependências essenciais: ${deps_to_install[*]}..."
     echo ""
 
-    # Ignora discrepâncias transitórias de horário para evitar o erro "Release file is not valid yet"
     apt-get update -y -o Acquire::ForceIPv4=true -o Acquire::Check-Valid-Until=false || true
 
-    if ! DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-         -o Acquire::Check-Valid-Until=false "${deps_to_install[@]}"; then
-        echo ""
-        echo "[ERRO/ERROR] Falha ao instalar dependências. Verifique a ligação à rede e o relógio do sistema."
-        restore_apt_timers
-        exit 1
-    fi
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        -o Acquire::Check-Valid-Until=false "${deps_to_install[@]}" || true
 fi
 
 restore_apt_timers
