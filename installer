@@ -191,16 +191,53 @@ if command -v fuser >/dev/null 2>&1; then
         fi
     done
 fi
+# ======================================================================
+# INSTALAÇÃO SEGURA DAS DEPENDÊNCIAS DO PAINEL
+# ======================================================================
+save_and_stop_apt_services
+
+if command -v fuser >/dev/null 2>&1; then
+    initial_wait=0
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+          fuser /var/lib/dpkg/lock >/dev/null 2>&1 || \
+          fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
+        sleep 2
+        initial_wait=$((initial_wait + 2))
+        if [ "$initial_wait" -ge 60 ]; then
+            echo "[AVISO] Forçando liberação de travas do APT/DPKG..."
+            fuser -k /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock >/dev/null 2>&1 || true
+            break
+        fi
+    done
+fi
+
+dpkg --configure -a >/dev/null 2>&1 || true
+
+# Identifica o que realmente precisa ser instalado
+deps_to_install=()
 for dep in dialog curl python3 unzip psmisc; do
     if ! command -v "$dep" >/dev/null 2>&1; then
-        echo "$(t "Instalando dependência do painel: $dep" "Installing panel dependency: $dep" "Instalando la dependencia del panel: $dep")"
-        DEBIAN_FRONTEND=noninteractive apt-get install -y "$dep" >/dev/null 2>&1 || {
-            echo "$(t "Não foi possível instalar '$dep'. Abortando." "Could not install '$dep'. Aborting." "No se pudo instalar '$dep'. La operación se cancelará.")"
-            restore_apt_timers
-            exit 1
-        }
+        deps_to_install+=("$dep")
     fi
 done
+
+# Se faltar algum pacote, atualiza os índices e instala
+if [ ${#deps_to_install[@]} -gt 0 ]; then
+    echo ""
+    echo "$(t "Instalando dependências necessárias: ${deps_to_install[*]}" "Installing required dependencies: ${deps_to_install[*]}" "Instalando dependencias necesarias: ${deps_to_install[*]}")"
+    echo ""
+    
+    # Atualiza as listas do APT para não dar erro de pacote inexistente
+    apt-get update -y -o Acquire::ForceIPv4=true
+    
+    if ! DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${deps_to_install[@]}"; then
+        echo ""
+        echo "[ERRO/ERROR] Falha ao instalar dependências. Verifique os erros do APT acima."
+        restore_apt_timers
+        exit 1
+    fi
+fi
+
 restore_apt_timers
 
 # ======================================================================
