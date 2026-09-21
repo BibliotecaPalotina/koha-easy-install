@@ -326,7 +326,7 @@
       <div class="badge-bar">
         <span class="badge">Koha ILS v3.0</span>
         <span class="badge">Production Grade</span>
-        <span class="badge">Debian &amp; Ubuntu</span>
+        <span class="badge">Ubuntu Supported</span>
       </div>
       <h1>Manual Completo de Instalação e Configuração do Koha</h1>
       <p class="lead">Guia estruturado com foco em estabilidade operacional: preparação minuciosa do sistema operacional em 5 cenários, inicialização atômica em linha única e utilização completa das 27 funções do <strong>Koha Easy Install (Painel Interativo)</strong>.</p>
@@ -369,7 +369,7 @@
 
     <section>
       <h2>2. Preparação do Sistema Operacional (5 Cenários)</h2>
-      <p>O Koha foi concebido nativamente para rodar sobre distribuições Debian ou Ubuntu. Escolha rigorosamente <strong>apenas o cenário correspondente</strong> à sua infraestrutura:</p>
+      <p>O Koha Easy Install foi concebido e testado estritamente para rodar sobre a distribuição <strong>Ubuntu (Server ou Desktop) nas versões 22.04 LTS, 24.04 LTS e 26.04 LTS</strong>. O script bloqueia intencionalmente a execução em outras distros para garantir a integridade dos pacotes. Escolha rigorosamente <strong>apenas o cenário correspondente</strong> à sua infraestrutura:</p>
 
       <div class="card card-highlight">
         <h3>Cenário 1: Servidor Físico Dedicado (Ubuntu Server)</h3>
@@ -405,7 +405,7 @@
         <ul>
           <li>Crie sua conta no provedor desejado e acerte os dados de faturamento.</li>
           <li>Inicie a criação de um novo servidor virtual (Droplet / Cloud Compute).</li>
-          <li><strong>Sistema Operacional:</strong> Escolha rigorosamente <em>Ubuntu 22.04 LTS</em> ou <em>Ubuntu 24.04 LTS</em> (64-bit).</li>
+          <li><strong>Sistema Operacional:</strong> Escolha rigorosamente <em>Ubuntu LTS (22.04, 24.04 ou 26.04)</em> (64-bit).</li>
           <li><strong>Dimensionamento Obrigatório de Hardware:</strong> Selecione um plano com no mínimo <strong>2 vCPUs e 4 GB de RAM</strong>. Servidores com apenas 1 GB ou 2 GB travarão nos processos de compilação de índices e esgotarão a memória do Apache/Plack.</li>
           <li><strong>Autenticação:</strong> Defina uma senha root robusta ou insira sua chave pública SSH.</li>
           <li>Após o provisionamento, anote o Endereço de IP Público fornecido no painel da VPS.</li>
@@ -413,10 +413,10 @@
       </div>
 
       <div class="card card-highlight">
-        <h3>Cenário 3: Computador com Linux Gráfico (Linux Mint ou Ubuntu Desktop)</h3>
+        <h3>Cenário 3: Computador com Linux Gráfico (Ubuntu Desktop ou Linux Mint)</h3>
         <p>Instalação em computador com tela e interface gráfica que funcionará como terminal de atendimento e servidor simultaneamente.</p>
         <ul>
-          <li>Baixe o <em>Linux Mint (Cinnamon Edition)</em> ou <em>Ubuntu Desktop LTS</em>.</li>
+          <li>Baixe o <em>Ubuntu Desktop LTS</em> (ou equivalente baseado nele como Linux Mint).</li>
           <li>Grave o arquivo ISO no pendrive com o BalenaEtcher.</li>
           <li>Inicie o computador pelo pendrive e dê duplo clique no instalador gráfico na área de trabalho.</li>
           <li>Conclua a instalação visual em português, definindo usuário e senha de administrador.</li>
@@ -893,7 +893,7 @@
       <div class="badge-bar">
         <span class="badge">Koha ILS v3.0</span>
         <span class="badge">Production Grade</span>
-        <span class="badge">Debian &amp; Ubuntu</span>
+        <span class="badge">Ubuntu Supported</span>
       </div>
       <h1>Koha Complete Installation and Configuration Manual</h1>
       <p class="lead">A structured guide focused on operational stability: thorough OS preparation across 5 scenarios, single-line atomic initialization, and full utilization of the 27 features in the <strong>Koha Easy Install (Interactive Panel)</strong>.</p>
@@ -936,7 +936,7 @@
 
     <section>
       <h2>2. Operating System Preparation (5 Scenarios)</h2>
-      <p>Koha was natively designed to run on Debian or Ubuntu distributions. Strictly choose <strong>only the scenario corresponding</strong> to your infrastructure:</p>
+      <p>Koha Easy Install was natively designed and tested strictly to run on <strong>Ubuntu (Server or Desktop) versions 22.04 LTS, 24.04 LTS and 26.04 LTS</strong>. The script intentionally blocks execution on other distros to guarantee package integrity. Strictly choose <strong>only the scenario corresponding</strong> to your infrastructure:</p>
 
       <div class="card card-highlight">
         <h3>Scenario 1: Dedicated Physical Server (Ubuntu Server)</h3>
@@ -972,7 +972,7 @@
         <ul>
           <li>Create an account with your desired provider and set up billing.</li>
           <li>Deploy a new virtual server (Droplet / Cloud Compute).</li>
-          <li><strong>Operating System:</strong> Strictly choose <em>Ubuntu 22.04 LTS</em> or <em>Ubuntu 24.04 LTS</em> (64-bit).</li>
+          <li><strong>Operating System:</strong> Strictly choose <em>Ubuntu LTS (22.04, 24.04 or 26.04)</em> (64-bit).</li>
           <li><strong>Mandatory Hardware Sizing:</strong> Select a plan with at least <strong>2 vCPUs and 4 GB of RAM</strong>. Servers with only 1 GB or 2 GB will crash during index compilation and exhaust Apache/Plack memory.</li>
           <li><strong>Authentication:</strong> Set a strong root password or inject your public SSH key.</li>
           <li>After provisioning, note the Public IP Address provided in the cloud panel.</li>
@@ -980,10 +980,10 @@
       </div>
 
       <div class="card card-highlight">
-        <h3>Scenario 3: Computer with Graphical Linux (Linux Mint or Ubuntu Desktop)</h3>
+        <h3>Scenario 3: Computer with Graphical Linux (Ubuntu Desktop or Linux Mint)</h3>
         <p>Installation on a computer with a screen and GUI that will serve as both a service terminal and a server simultaneously.</p>
         <ul>
-          <li>Download <em>Linux Mint (Cinnamon Edition)</em> or <em>Ubuntu Desktop LTS</em>.</li>
+          <li>Download <em>Ubuntu Desktop LTS</em> (or based distros like Linux Mint).</li>
           <li>Flash the ISO to a USB drive with BalenaEtcher.</li>
           <li>Boot the computer from the USB and double-click the graphical installer on the desktop.</li>
           <li>Complete the visual installation, setting an admin user and password.</li>
