@@ -3593,7 +3593,7 @@ sub_menu_updates() {
 }
 
 # ======================================================================
-# MENU PRINCIPAL (NOVA ESTRUTURA COM DESCRIÇÕES DE RODAPÉ)
+# MENU PRINCIPAL (COMPATIBILIDADE NATIVA WHIPTAIL)
 # ======================================================================
 while true; do
     restore_apt_timers
@@ -3601,30 +3601,18 @@ while true; do
     
     OPTION=$(whiptail --title "Koha Easy Install & Tools v${PANEL_VERSION} - $(t "Painel de Controle" "Control Dashboard")" \
         --cancel-button "$(t "Sair" "Exit")" \
-        --item-help \
-        --menu "$(t "Escolha uma área de atuação:" "Choose an action area:")" 26 84 11 \
-        "1"  "$(t "Instalação" "Installation")" \
-             "$(t "Executa a instalação limpa e o setup inicial completo do ambiente Koha." "Runs the clean installation and initial setup of the Koha environment.")" \
-        "2"  "$(t "Ver credenciais de primeiro acesso" "View first access credentials")" \
-             "$(t "Exibe as senhas, usuários e portas geradas na instalação do sistema." "Displays passwords, users, and ports generated during installation.")" \
-        "3"  "$(t "Restauração de banco de dados" "Database restoration")" \
-             "$(t "Restaura o banco do Koha a partir de um arquivo de backup salvo." "Restores the Koha database from a saved backup file.")" \
-        "4"  "$(t "Central de backups e envio remoto" "Backup and remote transfer center")" \
-             "$(t "Cria cópias de segurança locais e envia os arquivos para nuvem ou servidores." "Creates local backups and sends files to the cloud or external servers.")" \
-        "5"  "$(t "Configurações de motor de busca e indexação" "Search engine and indexing settings")" \
-             "$(t "Reindexa o catálogo (Zebra ou Elastic) para atualizar as buscas dos livros." "Reindexes the catalog (Zebra or Elastic) to update book search results.")" \
+        --menu "$(t "Escolha uma área de atuação:" "Choose an action area:")" 22 78 11 \
+        "1"  "$(t "Instalação do servidor Koha" "Install Koha server")" \
+        "2"  "$(t "Ver credenciais de primeiro acesso" "View access credentials")" \
+        "3"  "$(t "Restauração de banco de dados" "Restore catalog database")" \
+        "4"  "$(t "Central de backups e envio remoto" "Backups & remote transfer center")" \
+        "5"  "$(t "Motor de busca e indexação (Zebra/ES)" "Search engine & indexing settings")" \
         "6"  "$(t "Publicação do sistema na internet" "System web publication")" \
-             "$(t "Configura acesso externo seguro via Cloudflare, Tailscale ou SSL local." "Sets up secure external access via Cloudflare, Tailscale, or local SSL.")" \
-        "7"  "$(t "Central de manutenção, reparo e segurança" "Maintenance, repair, and security center")" \
-             "$(t "Executa rotinas de autocura, diagnóstico, logs e verificação de integridade." "Runs self-healing routines, diagnostics, logs, and integrity checks.")" \
-        "8"  "$(t "Configurações de idiomas" "Language settings")" \
-             "$(t "Altera ou instala pacotes de idiomas para a interface do Koha." "Changes or installs language packs for the Koha interface.")" \
-        "9"  "$(t "Central de atualizações" "Updates center")" \
-             "$(t "Verifica e aplica atualizações do sistema Koha e deste Painel." "Checks and applies updates for the Koha system and this Panel.")" \
-        "10" "$(t "Sobre" "About")" \
-             "$(t "Exibe informações de versão, créditos e detalhes da automação." "Displays version information, credits, and automation details.")" \
+        "7"  "$(t "Central de manutenção e segurança" "Maintenance & security center")" \
+        "8"  "$(t "Configurações de idiomas" "Language pack settings")" \
+        "9"  "$(t "Central de atualizações" "System updates center")" \
+        "10" "$(t "Sobre o programa" "About this program")" \
         "11" "$(t "Sair" "Exit")" \
-             "$(t "Fecha o painel de controle e retorna ao terminal do sistema." "Closes the control panel and returns to the system terminal.")" \
         3>&1 1>&2 2>&3) || { clear; exit 0; }
 
     [ -z "$OPTION" ] && { clear; exit 0; }
