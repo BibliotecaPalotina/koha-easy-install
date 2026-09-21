@@ -7,26 +7,7 @@
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
-# CORREÇÃO DE PIPE (CURL | BASH) E REEXECUÇÃO SEGURA
-# ======================================================================
-# Se o script estiver sendo executado via pipe (stdin não é um terminal),
-# comandos como `read` ou `dialog` falharão ao tentar ler o teclado, engolindo
-# partes do próprio script. Esta rotina força o download para o disco.
-if [ ! -t 0 ]; then
-    echo "[AVISO] Execução via pipe detectada. Baixando instalador para o disco local..."
-    TMP_SCRIPT="/tmp/koha_installer_temp.sh"
-    curl -fsSL "$UPDATE_URL" -o "$TMP_SCRIPT" || {
-        echo "ERRO: Falha ao baixar o instalador."
-        exit 1
-    }
-    chmod +x "$TMP_SCRIPT"
-    # Reexecuta o arquivo local reconectando a entrada padrão ao terminal físico
-    exec bash "$TMP_SCRIPT" "$@" < /dev/tty
-    exit 0
-fi
-
-# ======================================================================
-# ELEVAÇÃO DE PRIVILÉGIOS / PRIVILEGE ESCALATION
+# 1. ELEVAÇÃO DE PRIVILÉGIOS / PRIVILEGE ESCALATION
 # ======================================================================
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
     echo ""
@@ -39,9 +20,27 @@ if [ "${EUID:-$(id -u)}" -ne 0 ]; then
     if [ -f "$0" ]; then
         exec sudo -E bash "$0" "$@"
     else
-        echo "ERRO/ERROR: Não foi possível determinar o arquivo de origem para elevação."
+        echo "ERRO/ERROR: Para executar via web, chame o comando com sudo:"
+        echo ""
+        echo "  curl -fsSL \"$UPDATE_URL\" | sudo bash"
+        echo ""
         exit 1
     fi
+fi
+
+# ======================================================================
+# 2. CORREÇÃO DE PIPE (CURL | BASH) E REEXECUÇÃO SEGURA
+# ======================================================================
+if [ ! -t 0 ]; then
+    echo "[AVISO] Execução via pipe detectada. Baixando instalador para o disco local..."
+    TMP_SCRIPT="/tmp/koha_installer_temp.sh"
+    curl -fsSL "$UPDATE_URL" -o "$TMP_SCRIPT" || {
+        echo "ERRO: Falha ao baixar o instalador."
+        exit 1
+    }
+    chmod +x "$TMP_SCRIPT"
+    exec bash "$TMP_SCRIPT" "$@" < /dev/tty
+    exit 0
 fi
 
 REAL_USER="${SUDO_USER:-${USER:-root}}"
