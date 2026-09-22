@@ -3412,14 +3412,14 @@ function_about() {
 }
 
 # ======================================================================
-# (WHIPTAIL / NEWT)
+# Tema
 # ======================================================================
 export NEWT_COLORS='
     root=brightcyan,black
     window=brightcyan,black
     border=brightcyan,black
     shadow=black,black
-    title=brightcyan,black
+    title=white,black
     button=black,brightcyan
     actbutton=black,white
     compactbutton=brightcyan,black
@@ -3428,9 +3428,9 @@ export NEWT_COLORS='
     entry=brightcyan,black
     label=brightcyan,black
     listbox=brightcyan,black
-    actlistbox=black,lightgray
+    actlistbox=black,white
     sellistbox=brightcyan,black
-    actsellistbox=black,lightgray
+    actsellistbox=black,white
     textbox=brightcyan,black
     acttextbox=black,brightcyan
     helpline=brightcyan,black
