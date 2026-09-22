@@ -4503,6 +4503,21 @@ main_menu() {
 }
 
 main() {
+    # Proteção contra falha silenciosa do 'dialog' por falta de espaço na tela
+    if [ "$(tput cols)" -lt 98 ] || [ "$(tput lines)" -lt 28 ]; then
+        clear
+        echo "=================================================================="
+        echo " ERRO: O SEU TERMINAL É MUITO PEQUENO PARA ABRIR O PAINEL"
+        echo "=================================================================="
+        echo "Tamanho atual: $(tput cols) colunas x $(tput lines) linhas."
+        echo "O instalador precisa de pelo menos 98 colunas e 28 linhas."
+        echo ""
+        echo "-> MAXIMIZE A JANELA DO SEU TERMINAL (ou diminua a fonte com Ctrl + -)"
+        echo "   e tente rodar o comando novamente."
+        echo "=================================================================="
+        exit 1
+    fi
+
     clear
     log "Entrando no menu principal."
     main_menu
