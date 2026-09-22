@@ -1790,18 +1790,20 @@ function_restore_database() {
         systemctl enable --now "koha-zebra-daemon@${INSTANCE}" >/dev/null 2>&1 || true
         systemctl restart "koha-zebra-daemon@${INSTANCE}" >/dev/null 2>&1 || true
         write_cron_zebra
-        if ! /usr/sbin/koha-rebuild-zebra -f -v -b -a "$INSTANCE"; then rebuild_ok="no"; fi
+        # Reindexa salvando log e reinicia o daemon logo em seguida para carregar o catálogo
+        /usr/sbin/koha-rebuild-zebra -f -v -b -a "$INSTANCE" > /var/log/koha-easy-install/zebra-rebuild.log 2>&1 || rebuild_ok="no"
+        systemctl restart "koha-zebra-daemon@${INSTANCE}" >/dev/null 2>&1 || true
     fi
 
     backup_lock_release
     systemctl restart memcached >/dev/null 2>&1 || true
-    koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
+    /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
 
     validate_complete_system "restauração do banco"
     log "restauracao concluida a partir de $file (motor=$engine rebuild=$rebuild_ok)"
 
     if [ "$rebuild_ok" = "no" ]; then
-        msg_error "" "$(t "O banco foi restaurado, mas a reconstrução do índice falhou.\nUse a opção de reparar indexação." "The database was restored, but index rebuilding failed.\nUse the repair indexing option.")" 11 78
+        msg_error "" "$(t "O banco foi restaurado, mas a reconstrução do índice falhou.\nConsulte /var/log/koha-easy-install/zebra-rebuild.log" "The database was restored, but index rebuilding failed.\nCheck /var/log/koha-easy-install/zebra-rebuild.log")" 11 78
         return 1
     fi
 
