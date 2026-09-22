@@ -112,7 +112,7 @@ log "===== painel iniciado (v$PANEL_VERSION, usuario=$REAL_USER) ====="
 # Garante listas do APT populadas em imagens mínimas antes de checar comandos
 DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::ForceIPv4=true >/dev/null 2>&1
 
-for dep in whiptail curl python3 unzip; do
+for dep in whiptail curl python3 unzip gpg wget; do
     if ! command -v "$dep" >/dev/null 2>&1; then
         echo "$(t "Instalando dependência do painel: $dep" "Installing panel dependency: $dep")"
         DEBIAN_FRONTEND=noninteractive apt-get install -y "$dep" >/dev/null 2>&1 || {
