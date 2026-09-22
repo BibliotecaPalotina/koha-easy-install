@@ -3412,32 +3412,34 @@ function_about() {
 }
 
 # ======================================================================
-# TEMA CYBERPUNK / CYBERPUNK THEME (WHIPTAIL / NEWT)
+# TEMA TERMINAL HACKER / MATRIX GREEN (WHIPTAIL / NEWT)
 # ======================================================================
 export NEWT_COLORS='
-    root=brightcyan,black
-    window=brightcyan,black
-    border=brightmagenta,black
+    root=green,black
+    window=green,black
+    border=brightgreen,black
     shadow=black,black
-    title=yellow,black
-    button=brightmagenta,black
-    actbutton=black,brightcyan
-    compactbutton=yellow,black
-    checkbox=white,black
-    actcheckbox=black,brightmagenta
-    entry=black,brightcyan
-    label=yellow,black
-    listbox=brightcyan,black
-    actlistbox=black,brightmagenta
-    textbox=white,black
-    acttextbox=black,brightcyan
-    helpline=yellow,black
-    roottext=brightmagenta,black
+    title=brightgreen,black
+    button=black,green
+    actbutton=black,brightgreen
+    compactbutton=brightgreen,black
+    checkbox=green,black
+    actcheckbox=black,brightgreen
+    entry=brightgreen,black
+    label=brightgreen,black
+    listbox=green,black
+    actlistbox=brightgreen,gray
+    textbox=green,black
+    acttextbox=black,brightgreen
+    helpline=green,black
+    roottext=brightgreen,black
 '
 
 # ======================================================================
 # MENU PRINCIPAL / MAIN MENU (16 OPÇÕES)
 # ======================================================================
+unset NCURSES_NO_UTF8_ACS
+
 while true; do
     restore_apt_timers
 
