@@ -1759,7 +1759,7 @@ function_restore_database() {
     
     # 1. Executa a migração forçando o sucesso (|| true) para ignorar falsos positivos
     mkdir -p /var/log/koha-easy-install
-    koha-upgrade-schema "$INSTANCE" > /var/log/koha-easy-install/schema-upgrade.log 2>&1 || true
+    /usr/sbin/koha-upgrade-schema "$INSTANCE" > /var/log/koha-easy-install/schema-upgrade.log 2>&1 || true
 
     # 2. Validação Real: Tenta consultar a versão diretamente no MariaDB
     if ! mysql -e "SELECT value FROM koha_${INSTANCE}.systempreferences WHERE variable='Version';" >/dev/null 2>&1; then
@@ -1790,7 +1790,7 @@ function_restore_database() {
         systemctl enable --now "koha-zebra-daemon@${INSTANCE}" >/dev/null 2>&1 || true
         systemctl restart "koha-zebra-daemon@${INSTANCE}" >/dev/null 2>&1 || true
         write_cron_zebra
-        if ! koha-rebuild-zebra -f -v -b -a "$INSTANCE"; then rebuild_ok="no"; fi
+        if ! /usr/sbin/koha-rebuild-zebra -f -v -b -a "$INSTANCE"; then rebuild_ok="no"; fi
     fi
 
     backup_lock_release
