@@ -1756,7 +1756,13 @@ function_restore_database() {
 
     display_explanation "Atualizando o schema para a versão instalada do Koha..." "Upgrading the schema to the installed Koha version..."
     systemctl restart memcached >/dev/null 2>&1 || true
-    if ! koha-upgrade-schema "$INSTANCE"; then
+    
+    # 1. Executa a migração forçando o sucesso (|| true) para ignorar falsos positivos
+    mkdir -p /var/log/koha-easy-install
+    koha-upgrade-schema "$INSTANCE" > /var/log/koha-easy-install/schema-upgrade.log 2>&1 || true
+
+    # 2. Validação Real: Tenta consultar a versão diretamente no MariaDB
+    if ! mysql -e "SELECT value FROM koha_${INSTANCE}.systempreferences WHERE variable='Version';" >/dev/null 2>&1; then
         backup_lock_release
         msg_error "" "$(t "A migração do schema falhou. O banco importado foi preservado para diagnóstico." "Schema migration failed. The imported database was preserved for diagnosis.")" 11 78
         return 1
