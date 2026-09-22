@@ -39,14 +39,35 @@ if [ ! -t 0 ]; then
         exit 1
     }
     chmod +x "$TMP_SCRIPT"
+
+    # Confere se /dev/tty está de fato acessível ANTES de tentar usar,
+    # em vez de deixar o 'exec' matar o processo em silêncio se não estiver.
+    if ! exec 3< /dev/tty 2>/dev/null; then
+        echo ""
+        echo "======================================================================"
+        echo "ERRO: não foi possível acessar /dev/tty nesta sessão."
+        echo ""
+        echo "Isso costuma acontecer quando o comando é executado via SSH sem"
+        echo "alocar um terminal (faltou o '-t'), ou por algum tipo de automação"
+        echo "que não fornece um terminal interativo."
+        echo ""
+        echo "SOLUÇÃO: baixe o instalador e rode localmente, em vez de usar pipe:"
+        echo ""
+        echo "  curl -fsSL \"$UPDATE_URL\" -o options.sh"
+        echo "  chmod +x options.sh"
+        echo "  sudo ./options.sh"
+        echo ""
+        echo "Se estiver conectando via SSH, tente adicionar -t ao comando ssh:"
+        echo "  ssh -t usuario@servidor 'curl -fsSL \"$UPDATE_URL\" | sudo bash'"
+        echo "======================================================================"
+        rm -f "$TMP_SCRIPT"
+        exit 1
+    fi
+    exec 3<&-
+
     exec bash "$TMP_SCRIPT" "$@" < /dev/tty
     exit 0
 fi
-
-REAL_USER="${SUDO_USER:-${USER:-root}}"
-REAL_HOME="$(getent passwd "$REAL_USER" 2>/dev/null | cut -d: -f6)"
-[ -z "$REAL_HOME" ] && REAL_HOME="/root"
-[ -d "$REAL_HOME" ] || REAL_HOME="/root"
 
 # ======================================================================
 # IDIOMA / LANGUAGE
