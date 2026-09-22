@@ -4,6 +4,10 @@
 # Author: Paulo Fernando Baldi Filho
 # ======================================================================
 
+set -o pipefail
+umask 022
+
+PANEL_VERSION="3.0"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
@@ -28,41 +32,48 @@ if [ "${EUID:-$(id -u)}" -ne 0 ]; then
     fi
 fi
 
+REAL_USER="${SUDO_USER:-${USER:-root}}"
+REAL_HOME="$(getent passwd "$REAL_USER" 2>/dev/null | cut -d: -f6)"
+[ -z "$REAL_HOME" ] && REAL_HOME="/root"
+[ -d "$REAL_HOME" ] || REAL_HOME="/root"
+
 # ======================================================================
 # 2. CORREÇÃO DE PIPE (CURL | BASH) E REEXECUÇÃO SEGURA
 # ======================================================================
 if [ ! -t 0 ]; then
     echo "[AVISO] Execução via pipe detectada. Baixando instalador para o disco local..."
-    TMP_SCRIPT="/tmp/koha_installer_temp.sh"
-    curl -fsSL "$UPDATE_URL" -o "$TMP_SCRIPT" || {
-        echo "ERRO: Falha ao baixar o instalador."
-        exit 1
-    }
-    chmod +x "$TMP_SCRIPT"
 
-    # Confere se /dev/tty está de fato acessível ANTES de tentar usar,
-    # em vez de deixar o 'exec' matar o processo em silêncio se não estiver.
+    TMP_SCRIPT="/tmp/koha_installer_temp.sh"
+
+    if ! curl -fsSL "$UPDATE_URL" -o "$TMP_SCRIPT"; then
+        echo "ERRO: Falha ao baixar o instalador."
+        rm -f "$TMP_SCRIPT"
+        exit 1
+    fi
+
+    chmod 700 "$TMP_SCRIPT"
+
     if ! exec 3< /dev/tty 2>/dev/null; then
         echo ""
         echo "======================================================================"
         echo "ERRO: não foi possível acessar /dev/tty nesta sessão."
         echo ""
-        echo "Isso costuma acontecer quando o comando é executado via SSH sem"
-        echo "alocar um terminal (faltou o '-t'), ou por algum tipo de automação"
-        echo "que não fornece um terminal interativo."
+        echo "Isso normalmente significa que não existe um terminal interativo."
         echo ""
-        echo "SOLUÇÃO: baixe o instalador e rode localmente, em vez de usar pipe:"
+        echo "SOLUÇÃO:"
         echo ""
         echo "  curl -fsSL \"$UPDATE_URL\" -o options.sh"
         echo "  chmod +x options.sh"
         echo "  sudo ./options.sh"
         echo ""
-        echo "Se estiver conectando via SSH, tente adicionar -t ao comando ssh:"
-        echo "  ssh -t usuario@servidor 'curl -fsSL \"$UPDATE_URL\" | sudo bash'"
+        echo "Ou, via SSH:"
+        echo "  ssh -t usuario@servidor"
         echo "======================================================================"
+
         rm -f "$TMP_SCRIPT"
         exit 1
     fi
+
     exec 3<&-
 
     exec bash "$TMP_SCRIPT" "$@" < /dev/tty
@@ -70,84 +81,99 @@ if [ ! -t 0 ]; then
 fi
 
 # ======================================================================
-# IDIOMA / LANGUAGE
+# 3. IDIOMA / LANGUAGE
 # ======================================================================
 detect_system_language() {
     local raw="${LC_ALL:-${LC_MESSAGES:-${LANG:-${LANGUAGE:-en}}}}"
+
     raw="${raw%%:*}"
     raw="${raw//-/_}"
     raw="${raw,,}"
+
     case "$raw" in
-        pt|pt_*) printf 'pt' ;;
-        es|es_*) printf 'es' ;;
-        *)       printf 'en' ;;
+        pt|pt_*)
+            printf 'pt'
+            ;;
+        es|es_*)
+            printf 'es'
+            ;;
+        *)
+            printf 'en'
+            ;;
     esac
 }
 
 SYS_LANG="$(detect_system_language)"
 
-# O terceiro argumento é o espanhol. Por compatibilidade, chamadas antigas
-# com apenas português/inglês continuam funcionando normalmente.
+# Português | English | Español
 t() {
     case "$SYS_LANG" in
-        pt) printf '%b' "${1:-}" ;;
-        es) printf '%b' "${3:-${2:-}}" ;;
-        *)  printf '%b' "${2:-}" ;;
+        pt)
+            printf '%b' "${1:-}"
+            ;;
+        es)
+            printf '%b' "${3:-${2:-}}"
+            ;;
+        *)
+            printf '%b' "${2:-}"
+            ;;
     esac
 }
 
 # ======================================================================
-# TRAVAS DE EXECUÇÃO / EXECUTION LOCKS (PID BASED)
+# 4. TRAVA DE EXECUÇÃO / EXECUTION LOCK
 # ======================================================================
 PANEL_LOCK_FILE="/var/lock/koha_easy_install.lock"
+
 exec 8>"$PANEL_LOCK_FILE"
 chmod 600 "$PANEL_LOCK_FILE" 2>/dev/null || true
+
 if ! flock -n 8; then
     echo ""
-    echo "$(t "ERRO: o Koha Easy Install & Tools já está em execução." "ERROR: Koha Easy Install & Tools is already running.")"
+    echo "$(t \
+        "ERRO: o Koha Easy Install & Tools já está em execução." \
+        "ERROR: Koha Easy Install & Tools is already running." \
+        "ERROR: Koha Easy Install & Tools ya está en ejecución.")"
     echo ""
     exit 1
 fi
 
-BACKUP_LOCK_FILE="/var/lock/koha_backup.lock"
-backup_lock_acquire() {
-    exec 9>"$BACKUP_LOCK_FILE"
-    chmod 600 "$BACKUP_LOCK_FILE" 2>/dev/null || true
-    flock -n 9
-}
-backup_lock_release() {
-    flock -u 9 2>/dev/null || true
-}
-
 # ======================================================================
-# CONSTANTES GLOBAIS / GLOBAL CONSTANTS
+# 5. CONSTANTES GLOBAIS / GLOBAL CONSTANTS
 # ======================================================================
 INSTANCE="library"
 DB_NAME="koha_${INSTANCE}"
 KOHA_CONF="/etc/koha/sites/${INSTANCE}/koha-conf.xml"
+
 CRON_TASKS="/etc/cron.d/koha_tasks"
 CRON_ZEBRA="/etc/cron.d/koha_zebra_queue"
 CRON_ES="/etc/cron.d/koha_es_watchdog"
+
 CONF_DIR="/etc/koha-easy-install"
 BACKUP_CONF="${CONF_DIR}/backup.conf"
 SCP_BACKUP_CONF="${CONF_DIR}/scp_backup.conf"
+
 DIR_SQL="/var/backups/koha_sql"
 DIR_MARC="/var/backups/koha_marc"
+
 LOG_DIR="/var/log/koha-easy-install"
 RUN_LOG="${LOG_DIR}/painel-$(date '+%Y%m%d').log"
+
 CRON_PATH='PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 
 mkdir -p "$LOG_DIR" "$CONF_DIR" 2>/dev/null
 
-log() { printf '%s | %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$RUN_LOG" 2>/dev/null; }
-log "===== painel iniciado (v$PANEL_VERSION, usuario=$REAL_USER) ====="
+log() {
+    printf '%s | %s\n' \
+        "$(date '+%Y-%m-%d %H:%M:%S')" \
+        "$*" >> "$RUN_LOG" 2>/dev/null
+}
+
+log "===== painel iniciado (v$PANEL_VERSION, usuario=$REAL_USER, idioma=$SYS_LANG) ====="
 
 # ======================================================================
-# DEPENDÊNCIAS MÍNIMAS DO PRÓPRIO PAINEL (COM DIALOG)
+# 6. ESTADO DOS SERVIÇOS APT
 # ======================================================================
-# O painel pode precisar mexer no APT para instalar suas próprias dependências.
-# Guardamos o estado real dos serviços antes de pará-los e restauramos somente
-# o que estava ativo antes, inclusive se houver interrupção/erro precoce.
 APT_TIMERS_STOPPED="no"
 APT_DAILY_TIMER_WAS_ACTIVE="no"
 APT_DAILY_UPGRADE_TIMER_WAS_ACTIVE="no"
@@ -163,12 +189,25 @@ save_and_stop_apt_services() {
     APT_DAILY_SERVICE_WAS_ACTIVE="no"
     APT_DAILY_UPGRADE_SERVICE_WAS_ACTIVE="no"
 
-    systemctl is-active --quiet apt-daily.timer && APT_DAILY_TIMER_WAS_ACTIVE="yes"
-    systemctl is-active --quiet apt-daily-upgrade.timer && APT_DAILY_UPGRADE_TIMER_WAS_ACTIVE="yes"
-    systemctl is-active --quiet apt-daily.service && APT_DAILY_SERVICE_WAS_ACTIVE="yes"
-    systemctl is-active --quiet apt-daily-upgrade.service && APT_DAILY_UPGRADE_SERVICE_WAS_ACTIVE="yes"
+    systemctl is-active --quiet apt-daily.timer \
+        && APT_DAILY_TIMER_WAS_ACTIVE="yes"
 
-    systemctl stop apt-daily.timer apt-daily-upgrade.timer apt-daily.service apt-daily-upgrade.service >/dev/null 2>&1 || true
+    systemctl is-active --quiet apt-daily-upgrade.timer \
+        && APT_DAILY_UPGRADE_TIMER_WAS_ACTIVE="yes"
+
+    systemctl is-active --quiet apt-daily.service \
+        && APT_DAILY_SERVICE_WAS_ACTIVE="yes"
+
+    systemctl is-active --quiet apt-daily-upgrade.service \
+        && APT_DAILY_UPGRADE_SERVICE_WAS_ACTIVE="yes"
+
+    systemctl stop \
+        apt-daily.timer \
+        apt-daily-upgrade.timer \
+        apt-daily.service \
+        apt-daily-upgrade.service \
+        >/dev/null 2>&1 || true
+
     APT_TIMERS_STOPPED="yes"
     APT_STATE_SAVED="yes"
 }
@@ -179,12 +218,15 @@ restore_apt_timers() {
     if [ "$APT_DAILY_TIMER_WAS_ACTIVE" = "yes" ]; then
         systemctl start apt-daily.timer >/dev/null 2>&1 || true
     fi
+
     if [ "$APT_DAILY_UPGRADE_TIMER_WAS_ACTIVE" = "yes" ]; then
         systemctl start apt-daily-upgrade.timer >/dev/null 2>&1 || true
     fi
+
     if [ "$APT_DAILY_SERVICE_WAS_ACTIVE" = "yes" ]; then
         systemctl start apt-daily.service >/dev/null 2>&1 || true
     fi
+
     if [ "$APT_DAILY_UPGRADE_SERVICE_WAS_ACTIVE" = "yes" ]; then
         systemctl start apt-daily-upgrade.service >/dev/null 2>&1 || true
     fi
@@ -198,64 +240,77 @@ on_exit() {
     flock -u 8 2>/dev/null || true
     log "===== painel encerrado ====="
 }
+
 trap on_exit EXIT
 trap 'echo ""; echo "$(t "Interrompido pelo usuário." "Interrupted by user." "Interrumpido por el usuario.")"; exit 130' INT TERM
 
-save_and_stop_apt_services
-if command -v fuser >/dev/null 2>&1; then
-    initial_wait=0
-    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
-          fuser /var/lib/dpkg/lock >/dev/null 2>&1 || \
-          fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
-        sleep 2
-        initial_wait=$((initial_wait + 2))
-        if [ "$initial_wait" -ge 120 ]; then
-            echo "$(t "O APT/DPKG continua ocupado após 2 minutos. Abortando com segurança." "APT/DPKG is still busy after 2 minutes. Aborting safely." "APT/DPKG continúa ocupado después de 2 minutos. La operación se cancelará de forma segura.")"
-            restore_apt_timers
-            exit 1
-        fi
-    done
-fi
 # ======================================================================
-# INSTALAÇÃO SEGURA DAS DEPENDÊNCIAS DO PAINEL
+# 7. SINCRONIZAÇÃO DO RELÓGIO ANTES DO APT
 # ======================================================================
 save_and_stop_apt_services
 
-# 1. Libera travas pendentes do APT/DPKG
-if command -v fuser >/dev/null 2>&1; then
-    for lock in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock; do
-        fuser -k "$lock" >/dev/null 2>&1 || true
-    done
-fi
-dpkg --configure -a >/dev/null 2>&1 || true
-
-# 2. Sincroniza o relógio antes de tocar nos repositórios
 if command -v timedatectl >/dev/null 2>&1; then
+    echo ""
+    echo "$(t \
+        "Sincronizando relógio do servidor antes de acessar os repositórios..." \
+        "Synchronizing the server clock before accessing repositories..." \
+        "Sincronizando el reloj del servidor antes de acceder a los repositorios...")"
+
     timedatectl set-ntp true >/dev/null 2>&1 || true
     systemctl restart systemd-timesyncd >/dev/null 2>&1 || true
+
+    ntp_ok="no"
+
+    for _ in $(seq 1 30); do
+        if timedatectl show -p NTPSynchronized --value 2>/dev/null | grep -qx 'yes'; then
+            ntp_ok="yes"
+            break
+        fi
+
+        sleep 2
+    done
+
+    if [ "$ntp_ok" = "yes" ]; then
+        echo "$(t \
+            "Relógio sincronizado corretamente." \
+            "Clock synchronized successfully." \
+            "Reloj sincronizado correctamente.")"
+    else
+        echo ""
+        echo "$(t \
+            "[AVISO] O relógio ainda não foi confirmado pelo NTP." \
+            "[WARN] The clock has not yet been confirmed by NTP." \
+            "[AVISO] El reloj todavía no ha sido confirmado por NTP.")"
+        echo ""
+
+        timedatectl status 2>/dev/null | sed -n '1,12p'
+
+        echo ""
+        echo "$(t \
+            "O APT pode rejeitar os repositórios caso a data/hora estejam incorretas." \
+            "APT may reject repositories if the system date/time is incorrect." \
+            "APT puede rechazar los repositorios si la fecha/hora del sistema es incorrecta.")"
+        echo ""
+    fi
 fi
 
-# 3. Detecta dependências faltantes
+# ======================================================================
+# 8. DEPENDÊNCIAS DO PAINEL
+# ======================================================================
 deps_to_install=()
-for dep in dialog curl python3 unzip psmisc; do
+
+# 'dialog', 'curl', 'python3' e 'unzip' possuem executáveis verificáveis.
+for dep in dialog curl python3 unzip; do
     if ! command -v "$dep" >/dev/null 2>&1; then
         deps_to_install+=("$dep")
     fi
 done
 
-# 4. Instala com flags defensivas caso falte algum pacote
-if [ ${#deps_to_install[@]} -gt 0 ]; then
-    echo ""
-    echo "Instalando dependências essenciais: ${deps_to_install[*]}..."
-    echo ""
-
-    apt-get update -y -o Acquire::ForceIPv4=true -o Acquire::Check-Valid-Until=false || true
-
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        -o Acquire::Check-Valid-Until=false "${deps_to_install[@]}" || true
+# psmisc é um PACOTE, não o nome de um executável.
+if ! dpkg-query -W -f='${Status}' psmisc 2>/dev/null | \
+    grep -q '^install ok installed$'; then
+    deps_to_install+=("psmisc")
 fi
-
-restore_apt_timers
 # ======================================================================
 # LIMPEZA AO SAIR / CLEANUP ON EXIT
 # ======================================================================
@@ -4524,24 +4579,85 @@ main_menu() {
 }
 
 main() {
-    # Proteção contra falha silenciosa do 'dialog' por falta de espaço na tela
-    if [ "$(tput cols)" -lt 98 ] || [ "$(tput lines)" -lt 28 ]; then
-        clear
-        echo "=================================================================="
-        echo " ERRO: O SEU TERMINAL É MUITO PEQUENO PARA ABRIR O PAINEL"
-        echo "=================================================================="
-        echo "Tamanho atual: $(tput cols) colunas x $(tput lines) linhas."
-        echo "O instalador precisa de pelo menos 98 colunas e 28 linhas."
+    local cols lines min_cols=80 min_lines=24
+
+    # ================================================================
+    # VERIFICAÇÃO DO TERMINAL
+    # ================================================================
+    # Não limpar a tela antes de verificar o terminal.
+    # Isso evita apagar a mensagem do APT/DPKG ou esconder um erro
+    # quando o ambiente não possui dimensões suficientes.
+    cols=$(tput cols 2>/dev/null || printf '80')
+    lines=$(tput lines 2>/dev/null || printf '24')
+
+    # Garante valores numéricos válidos.
+    [[ "$cols" =~ ^[0-9]+$ ]] || cols=80
+    [[ "$lines" =~ ^[0-9]+$ ]] || lines=24
+
+    if [ "$cols" -lt "$min_cols" ] || [ "$lines" -lt "$min_lines" ]; then
         echo ""
-        echo "-> MAXIMIZE A JANELA DO SEU TERMINAL (ou diminua a fonte com Ctrl + -)"
-        echo "   e tente rodar o comando novamente."
-        echo "=================================================================="
-        exit 1
+        echo "======================================================================"
+        printf ' KOHA EASY INSTALL & TOOLS\n'
+        echo "======================================================================"
+        echo ""
+        echo "$(t "O terminal atual é pequeno demais para abrir o painel gráfico." \
+                   "The current terminal is too small to open the graphical panel." \
+                   "El terminal actual es demasiado pequeño para abrir el panel gráfico.")"
+        echo ""
+        echo "$(t "Tamanho detectado: ${cols} colunas x ${lines} linhas." \
+                   "Detected size: ${cols} columns x ${lines} lines." \
+                   "Tamaño detectado: ${cols} columnas x ${lines} líneas.")"
+        echo ""
+        echo "$(t "Tamanho mínimo recomendado: ${min_cols} x ${min_lines}." \
+                   "Recommended minimum size: ${min_cols} x ${min_lines}." \
+                   "Tamaño mínimo recomendado: ${min_cols} x ${min_lines}.")"
+        echo ""
+        echo "$(t "Maximize a janela do terminal e execute novamente." \
+                   "Maximize the terminal window and run the installer again." \
+                   "Maximice la ventana del terminal y ejecute nuevamente.")"
+        echo ""
+        echo "======================================================================"
+        return 1
     fi
 
-    clear
-    log "Entrando no menu principal."
-    main_menu
+    # ================================================================
+    # TESTE DO DIALOG
+    # ================================================================
+    # Em vez de simplesmente limpar a tela e falhar silenciosamente,
+    # confirma primeiro se o dialog consegue abrir uma interface.
+    if ! command -v dialog >/dev/null 2>&1; then
+        echo ""
+        echo "======================================================================"
+        echo "$(t "ERRO: o programa 'dialog' não está instalado." \
+                   "ERROR: the 'dialog' program is not installed." \
+                   "ERROR: el programa 'dialog' no está instalado.")"
+        echo ""
+        echo "$(t "Instale manualmente com:" \
+                   "Install it manually with:" \
+                   "Instálelo manualmente con:")"
+        echo ""
+        echo "  sudo apt-get update"
+        echo "  sudo apt-get install -y dialog"
+        echo ""
+        echo "======================================================================"
+        return 1
+    fi
+
+    # ================================================================
+    # INÍCIO DO PAINEL
+    # ================================================================
+    clear 2>/dev/null || true
+
+    log "Entrando no menu principal. Terminal=${cols}x${lines}."
+    
+    if ! main_menu; then
+        local rc=$?
+        echo ""
+        log "Menu principal encerrado com código $rc."
+        return "$rc"
+    fi
+
+    return 0
 }
 
 main "$@"
