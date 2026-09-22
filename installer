@@ -27,7 +27,7 @@ if [ "${EUID:-$(id -u)}" -ne 0 ]; then
     echo "+---------------------------------------------------------------+"
     echo ""
     if [ -f "$0" ]; then
-        if command -v sudo >/dev/null 2>&1; then
+        if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null || sudo -v 2>/dev/null; then
             exec sudo -E bash "$0" "$@"
         elif command -v su >/dev/null 2>&1; then
             exec su -c "bash '$0' $*"
