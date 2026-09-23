@@ -1938,7 +1938,7 @@ function_manual_backup() {
     display_explanation "Gerando o backup..." "Generating the backup..."
     if mysqldump --single-transaction --quick --routines --triggers \
          --default-character-set=utf8mb4 "$DB_NAME" | gzip > "$target_file" && gzip -t "$target_file" 2>/dev/null; then
-        log "backup manual: $target_file"
+        log "$(t "backup manual gerado:" "manual backup generated:") $target_file"
         backup_lock_release
         msg_ok "$(t "Backup gerado e verificado:\n$target_file\n\nTamanho: $(du -h "$target_file" | cut -f1)" "Backup generated and verified:\n$target_file\n\nSize: $(du -h "$target_file" | cut -f1)")" 11 76
     else
@@ -1972,7 +1972,7 @@ function_send_manual_scp_backup() {
         [ -z "$host" ] && return 0
         user=$(whiptail --title "$(t "Usuário" "Username")" --inputbox "$(t "Usuário SSH:" "SSH username:")" 9 60 "$REAL_USER" 3>&1 1>&2 2>&3) || return 0
         [ -z "$user" ] && return 0
-        port=$(whiptail --title "Porta SSH / SSH Port" --inputbox "$(t "Porta SSH:" "SSH port:")" 9 60 "22" 3>&1 1>&2 2>&3) || return 0
+        port=$(whiptail --title "$(t "Porta SSH" "SSH Port")" --inputbox "$(t "Porta SSH:" "SSH port:")" 9 60 "22" 3>&1 1>&2 2>&3) || return 0
         [ -z "$port" ] && port="22"
         folder=$(whiptail --title "$(t "Pasta de Destino" "Destination Folder")" --inputbox "$(t "Pasta no destino (deve existir):" "Folder on the destination (must exist):")" 10 70 "/home/${user}/Desktop" 3>&1 1>&2 2>&3) || return 0
         [ -z "$folder" ] && return 0
@@ -1996,7 +1996,7 @@ function_send_manual_scp_backup() {
     [ -n "$key" ] && opts+=(-i "$key")
 
     if scp "${opts[@]}" "$target" "${user}@${host}:${folder%/}/" 2>&1 | tee -a "$RUN_LOG"; then
-        log "backup enviado via SCP manual: $target -> ${user}@${host}:${folder}"
+        log "$(t "backup enviado via SCP manual:" "backup sent via manual SCP:") $target -> ${user}@${host}:${folder}"
         msg_ok "$(t "Backup gerado e enviado com sucesso!\n\nArquivo: $(basename "$target")\nDestino: ${user}@${host}:${folder}" "Backup generated and sent successfully!\n\nFile: $(basename "$target")\nDestination: ${user}@${host}:${folder}")" 11 76
     else
         msg_error "" "$(t "O backup foi gerado localmente (${target}), mas o envio por SCP falhou.\nSe você não usou o destino salvo, e a chave não estiver autorizada,\no SCP vai pedir senha (digite-a quando aparecer no terminal).\n\nLog: $RUN_LOG" "The backup was generated locally (${target}), but the SCP transfer\nfailed. If you didn't use the saved destination and the key isn't\nauthorized, SCP will prompt for a password (type it when it appears).\n\nLog: $RUN_LOG")" 13 78
@@ -2038,7 +2038,7 @@ function_test_backup() {
     bib=$(run_sql "SELECT COUNT(*) FROM ${test_db}.biblio;")
     usu=$(run_sql "SELECT COUNT(*) FROM ${test_db}.borrowers;")
     mysql -e "DROP DATABASE IF EXISTS ${test_db};" >/dev/null 2>&1 || true
-    log "teste de backup: $newest tabelas=$tab biblios=$bib"
+    log "$(t "teste de backup:" "backup test:") $newest tabelas=$tab biblios=$bib"
     if [ "${tab:-0}" -gt 50 ] 2>/dev/null && [ "${bib:-0}" -ge 0 ] 2>/dev/null; then
         msg_ok "$(t "BACKUP ÍNTEGRO E RESTAURÁVEL.\n\nArquivo: $(basename "$newest")\nTabelas: ${tab}\nRegistros bibliográficos: ${bib}\nUsuários: ${usu}" "BACKUP IS INTACT AND RESTORABLE.\n\nFile: $(basename "$newest")\nTables: ${tab}\nBibliographic records: ${bib}\nPatrons: ${usu}")" 13 74
     else
@@ -2124,7 +2124,7 @@ function_install_languages() {
         msg_ok "$(t "Idioma '$choice' ativado com sucesso.\nAjustes finos em: Administração > Preferências > I18N/L10N." "Language '$choice' enabled successfully.\nFine tuning in: Administration > Preferences > I18N/L10N.")" 10 74
     else
         local err_msg
-        err_msg=$(tail -n 12 /tmp/koha_lang.log 2>/dev/null || echo "Log vazio.")
+        err_msg=$(tail -n 12 /tmp/koha_lang.log 2>/dev/null || echo "$(t "Log vazio." "Empty log.")")
         msg_error "" "$(t "Falha ao processar o idioma '$choice'.\n\nDetalhes do erro nativo do Koha:\n$err_msg" "Failed to process language '$choice'.\n\nKoha native error details:\n$err_msg")" 18 80
     fi
 }
@@ -2188,7 +2188,7 @@ function_toggle_search_engine() {
         fi
         backup_lock_release
         /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
-        validate_complete_system "troca para Zebra"
+        validate_complete_system "$(t "troca para Zebra" "switch to Zebra")"
         msg_ok "$(t "Sistema operando com ZEBRA.\nA indexação incremental roda a cada 2 minutos." "System now running on ZEBRA.\nIncremental indexing runs every 2 minutes.")" 10 70
         return 0
     fi
@@ -2307,7 +2307,7 @@ function_toggle_search_engine() {
     if [ "$indexer_ok" = "yes" ] && ! rebuild_koha_elasticsearch "$cut_time"; then rebuild_ok="no"; fi
     backup_lock_release
     /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
-    validate_complete_system "ativação do Elasticsearch"
+    validate_complete_system "$(t "ativação do Elasticsearch" "Elasticsearch activation")"
     if [ "$indexer_ok" = "yes" ] && [ "$rebuild_ok" = "yes" ] && is_koha_indexer_running; then
         msg_ok "$(t "Sistema operando com ELASTICSEARCH.\n\nO indexador tem reinício automático e o vigia confere a fila a cada 5 minutos." "System now running on ELASTICSEARCH.\n\nThe indexer has automatic recovery and the watchdog checks the queue every 5 minutes.")" 12 78
     elif [ "$indexer_ok" = "no" ]; then
@@ -2350,7 +2350,7 @@ function_repair_indexing() {
     local engine; engine=$(get_search_engine)
     if [ "$engine" = "Elasticsearch" ]; then
         local es_up idx broker pend bibs docs
-        es_up=$(curl -s --max-time 5 http://127.0.0.1:9200 >/dev/null 2>&1 && echo "OK" || echo "FORA/DOWN")
+        es_up=$(curl -s --max-time 5 http://127.0.0.1:9200 >/dev/null 2>&1 && echo "OK" || echo "$(t "FORA" "DOWN")")
         is_koha_indexer_running && idx="$(t "rodando" "running")" || idx="$(t "PARADO" "STOPPED")"
         ss -lnt 2>/dev/null | grep -q ':61613' && broker="OK" || broker="$(t "ausente" "absent")"
         pend=$(get_pending_es_jobs); bibs=$(get_total_biblios); docs=$(get_total_es_documents)
@@ -2375,7 +2375,7 @@ $(t "Fila crescendo + índice menor que o banco = indexador parado." "Growing qu
             local cut_time; cut_time=$(date '+%Y-%m-%d %H:%M:%S')
             rebuild_koha_elasticsearch "$cut_time"
         fi
-        v_reset "reparo da indexação"
+        v_reset "$(t "reparo da indexação" "indexing repair")"
         validate_elasticsearch "Elasticsearch"
         if is_koha_indexer_running; then
             msg_ok "$(t "Indexador ativo.\nCadastre um registro de teste e busque em ~10 segundos." "Indexer is running.\nAdd a test record and search for it after ~10 seconds.")" 10 74
@@ -2503,7 +2503,7 @@ validate_and_register_rclone() {
         return 1
     fi
     chmod 600 "$BACKUP_CONF"
-    log "rclone remote configurado: $name"
+    log "$(t "rclone remote configurado:" "rclone remote configured:") $name"
     display_explanation "Testando o envio real para a nuvem..." "Testing the real cloud upload..."
     bash /root/backup_sql.sh >/dev/null 2>&1
     if rclone lsf "${name}:Backup_SQL_Koha" 2>/dev/null | grep -q '\.sql\.gz$'; then
@@ -2556,15 +2556,15 @@ function_configure_rclone() {
             read -r token_input
             token_input=$(echo "$token_input" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
             if [ -z "$token_input" ]; then
-                echo -e "\n\e[1;31m[ERRO] O token não pode ser vazio. Tente novamente ou tecle Ctrl+C para cancelar.\e[0m\n"
+                echo -e "\n\e[1;31m$(t "[ERRO] O token não pode ser vazio. Tente novamente ou tecle Ctrl+C para cancelar." "[ERROR] Token cannot be empty. Try again or press Ctrl+C to cancel.")\e[0m\n"
                 continue
             fi
             if [[ ! "$token_input" =~ ^\{.*\}$ ]]; then
-                echo -e "\n\e[1;31m[ERRO] Formato inválido! O token deve começar com '{' e terminar com '}'. Tente novamente:\e[0m\n"
+                echo -e "\n\e[1;31m$(t "[ERRO] Formato inválido! O token deve começar com '{' e terminar com '}'. Tente novamente:" "[ERROR] Invalid format! Token must start with '{' and end with '}'. Try again:")\e[0m\n"
                 continue
             fi
             if ! python3 -c 'import sys, json; json.loads(sys.argv[1])' "$token_input" 2>/dev/null; then
-                echo -e "\n\e[1;31m[ERRO] O JSON fornecido está corrompido ou foi cortado ao copiar. Tente novamente:\e[0m\n"
+                echo -e "\n\e[1;31m$(t "[ERRO] O JSON fornecido está corrompido ou foi cortado ao copiar. Tente novamente:" "[ERROR] Provided JSON is corrupt or was truncated when copying. Try again:")\e[0m\n"
                 continue
             fi
             break
@@ -2608,7 +2608,7 @@ function_configure_automatic_scp_backup() {
         --inputbox "$(t "Usuário SSH no destino:" "SSH username on the destination:")" 9 60 "$REAL_USER" 3>&1 1>&2 2>&3) || return 0
     [ -z "$user" ] && return 0
 
-    port=$(whiptail --title "Porta SSH / SSH Port" \
+    port=$(whiptail --title "$(t "Porta SSH" "SSH Port")" \
         --inputbox "$(t "Porta SSH do destino:" "SSH port of the destination:")" 9 60 "22" 3>&1 1>&2 2>&3) || return 0
     [ -z "$port" ] && port="22"
 
@@ -2650,7 +2650,7 @@ function_configure_automatic_scp_backup() {
     set_scp_config "SCP_KEY" "$key"
     chmod 600 "$SCP_BACKUP_CONF"
 
-    log "backup automatico via SCP configurado: ${user}@${host}:${folder}"
+    log "$(t "backup automático via SCP configurado:" "automatic backup via SCP configured:") ${user}@${host}:${folder}"
     msg_ok "$(t "Backup automático via SCP configurado e testado com sucesso.\n\nDestino: ${user}@${host}:${folder}\n\nA partir de agora, o backup diário das 23h também envia uma\ncópia para lá, sem depender do rclone." "Automatic SCP backup configured and tested successfully.\n\nDestination: ${user}@${host}:${folder}\n\nFrom now on, the daily 23:00 backup also sends a copy there,\nwithout going through rclone.")" 12 78
 }
 
@@ -2802,7 +2802,7 @@ INSERT INTO borrowers (userid, cardnumber, password, surname, firstname, branchc
 VALUES ('$(esc "$user")', '$(esc "$cardnumber")', '$(esc "$hash")', '$(esc "$surname")', '$(esc "$first_name")', '$(esc "$branch")', '$(esc "$cat_")', 1);
 SQLEOF
     then
-        log "superbibliotecario criado: $user (cardnumber: $cardnumber)"
+        log "$(t "superbibliotecário criado:" "super librarian created:") $user (cardnumber: $cardnumber)"
         msg_ok "$(t "Superbibliotecário criado com sucesso.\n\nUsuário: $user\nCartão:  $cardnumber\n\nGuarde a senha: ela não fica salva em lugar nenhum." "Super Librarian created successfully.\n\nUser: $user\nCard: $cardnumber\n\nKeep the password safe: it is not stored anywhere.")" 12 70
     else
         msg_error "" "$(t "Não foi possível criar o usuário. Ele já existe ou faltam campos obrigatórios nesta versão do Koha.\nCrie pela interface web e marque 'Superlibrarian'." "Could not create the user. It may already exist or this Koha version requires more fields.\nCreate it in the web interface and tick 'Superlibrarian'.")" 11 76
@@ -2815,7 +2815,7 @@ SQLEOF
 function_configure_cloudflare() {
     msg_info "$(t "Passo 1: Domínio e Nameservers" "Step 1: Domain & Nameservers")" \
 "$(t "COMO ASSOCIAR SEU DOMÍNIO À CLOUDFLARE:\n\n1. OBTENHA UM DOMÍNIO GRATUITO:\n    - Digital Plat (rápido/automático): https://domain.digitalplat.org/\n    - nic.eu.org (manual, demora de 14 a 45 dias): https://nic.eu.org\n    - Ou solicite à TI um CNAME oficial (ex: catalogo.palotina.pr.gov.br)\n\n2. ADICIONE NA CLOUDFLARE (dash.cloudflare.com):\n    - Clique em 'Add a site/domain', digite o domínio e selecione Free.\n    - A Cloudflare exibirá DOIS Nameservers. Copie os dois.\n\n3. ATUALIZE ONDE REGISTROU O DOMÍNIO:\n    - No Digital Plat ou nic.eu.org, vá em DNS / Nameservers.\n    - Substitua os servidores existentes pelos DOIS da Cloudflare.\n    - Na Cloudflare, clique em 'Check nameservers' até o status ficar Ativo.\n\nEsta parte não dá pra automatizar, mas o resto do processo é todo automático." \
-"HOW TO LINK YOUR DOMAIN TO CLOUDFLARE:\n\n1. GET A FREE DOMAIN:\n    - Digital Plat (fast/automated): https://domain.digitalplat.org/\n    - nic.eu.org (manual, takes 14 to 45 days): https://nic.eu.org\n    - Or ask local IT for an official CNAME (e.g. catalog.city.gov.br)\n\n2. ADD TO CLOUDFLARE (dash.cloudflare.com):\n    - Click 'Add a site/domain', type your domain and select Free.\n    - Cloudflare provides TWO Nameservers. Copy both.\n\n3. UPDATE AT YOUR DOMAIN REGISTRAR:\n    - Replace existing servers with the TWO from Cloudflare.\n    - In Cloudflare, click 'Check nameservers' until status is Active.\n\nThis part can't be automated, but everything from here on is fully automatic.")" 22 78
+"HOW TO LINK YOUR DOMAIN TO CLOUDFLARE:\n\n1. GET A FREE DOMAIN:\n    - Digital Plat (fast/automated): https://domain.digitalplat.org/\n    - nic.eu.org (manual, takes 14 to 45 days): https://nic.eu.org\n    - Or ask local IT for an official CNAME (e.g. catalog.palotina.pr.gov.br)\n\n2. ADD TO CLOUDFLARE (dash.cloudflare.com):\n    - Click 'Add a site/domain', type your domain and select Free.\n    - Cloudflare provides TWO Nameservers. Copy both.\n\n3. UPDATE AT YOUR DOMAIN REGISTRAR:\n    - Replace existing servers with the TWO from Cloudflare.\n    - In Cloudflare, click 'Check nameservers' until status is Active.\n\nThis part can't be automated, but everything from here on is fully automatic.")" 22 78
 
     clear
     display_explanation "Instalando o cloudflared..." "Installing cloudflared..."
@@ -2842,7 +2842,7 @@ function_configure_cloudflare() {
     fi
 
     if [ ! -f "$REAL_HOME/.cloudflared/cert.pem" ] && [ ! -f "/root/.cloudflared/cert.pem" ]; then
-        msg_info "Cloudflare Tunnel" \
+        msg_info "$(t "Túnel Cloudflare" "Cloudflare Tunnel")" \
 "$(t "AUTORIZAÇÃO (só na primeira vez):\n\nVai aparecer um link abaixo. Copie e abra em qualquer navegador,\nescolha o domínio que você já ativou na Cloudflare e clique Authorize.\n\nNão precisa colar código nenhum de volta - o servidor detecta\nsozinho quando você autorizar." "AUTHORIZATION (first time only):\n\nA link will appear below. Copy it into any browser, select the\ndomain you already activated in Cloudflare, and click Authorize.\n\nNo need to paste anything back - the server detects it automatically.")" 12 76
         clear
         cloudflared tunnel login
@@ -2859,7 +2859,7 @@ function_configure_cloudflare() {
     
     # Se o túnel já existe, apenas avisa e continua; se não existe, cria
     if cloudflared tunnel list 2>/dev/null | grep -q "$tunnel_name"; then
-        log "Túnel '$tunnel_name' já existe; reaproveitando..."
+        log "$(t "Túnel '$tunnel_name' já existe; reaproveitando..." "Tunnel '$tunnel_name' already exists; reusing...")"
     else
         display_explanation "Criando o túnel '$tunnel_name'..." "Creating tunnel '$tunnel_name'..."
         if ! cloudflared tunnel create "$tunnel_name"; then
@@ -2924,7 +2924,6 @@ EOF
 # TAILSCALE FUNNEL / TAILSCALE FUNNEL CONFIGURATION
 # ======================================================================
 
-# Função auxiliar: descobre o hostname via Python e monta/mostra os links ativos
 mostrar_links_tailscale() {
     local ts_hostname opac_ativo=false staff_ativo=false funnel_status texto
 
@@ -3143,63 +3142,59 @@ function_google_search_console() {
         "$(t "Este assistente prepara e verifica o OPAC para o Google.\n\nO painel fará automaticamente:\n• verificar se o OPAC está acessível pela internet;\n• verificar robots.txt;\n• localizar o script oficial de sitemap do Koha;\n• gerar o sitemap quando possível;\n• verificar a preferência OpacMetaRobots;\n• verificar se o sitemap está acessível publicamente.\n\nO que você precisará fazer manualmente:\n• adicionar/verificar a propriedade no Google Search Console;\n• enviar o sitemap no Search Console;\n• solicitar indexação de páginas específicas.\n\nO painel NÃO solicita nem armazena sua senha Google." \
         "This assistant prepares and checks the OPAC for Google.\n\nThe panel will automatically:\n• check whether the OPAC is publicly accessible;\n• check robots.txt;\n• locate Koha's official sitemap script;\n• generate the sitemap when possible;\n• check the OpacMetaRobots preference;\n• check whether the sitemap is publicly accessible.\n\nWhat you will need to do manually:\n• add/verify the property in Google Search Console;\n• submit the sitemap in Search Console;\n• request indexing for specific pages when necessary.\n\nThe panel does NOT request or store your Google password.")" 24 88
 
-    display_explanation "$(t "Verificando acesso público ao OPAC..." "Checking public OPAC access...")" \
-        "$(t "O Google precisa conseguir acessar o catálogo pela internet." "Google must be able to access the catalog from the internet.")"
+    display_explanation "Verificando acesso público ao OPAC..." "Checking public OPAC access..."
 
     http_code=$(curl -L -k -sS -o /dev/null -w '%{http_code}' --connect-timeout 10 --max-time 30 "$opac_url" 2>/dev/null)
 
     if [[ "$http_code" =~ ^[23][0-9][0-9]$ ]]; then
         msg_ok "$(t "OPAC acessível.\n\nURL:\n$opac_url\n\nCódigo HTTP:\n$http_code" "OPAC accessible.\n\nURL:\n$opac_url\n\nHTTP status:\n$http_code")" 11 76
     else
-        msg_error "$(t "O OPAC não respondeu corretamente pela internet." "The OPAC did not respond correctly from the internet.")" \
-            "$(t "URL:\n$opac_url\n\nHTTP:\n${http_code:-sem resposta}\n\nVerifique DNS, Cloudflare Tunnel, Apache, HTTPS e firewall antes de tentar a indexação." "URL:\n$opac_url\n\nHTTP:\n${http_code:-no response}\n\nCheck DNS, Cloudflare Tunnel, Apache, HTTPS and firewall before attempting indexing.")" 16 82
+        msg_error "$(t "Erro de Conexão" "Connection Error")" \
+            "$(t "O OPAC não respondeu corretamente pela internet.\n\nURL:\n$opac_url\n\nHTTP:\n${http_code:-sem resposta}\n\nVerifique DNS, Cloudflare Tunnel, Apache, HTTPS e firewall antes de tentar a indexação." "The OPAC did not respond correctly from the internet.\n\nURL:\n$opac_url\n\nHTTP:\n${http_code:-no response}\n\nCheck DNS, Cloudflare Tunnel, Apache, HTTPS and firewall before attempting indexing.")" 16 82
 
         prompt_yes_no "$(t "Continuar?" "Continue?")" \
             "$(t "O OPAC ainda não está respondendo corretamente.\n\nDeseja continuar com as verificações locais?" "The OPAC is not responding correctly yet.\n\nDo you want to continue with local checks?")" 11 74 || return 0
     fi
 
     if is_database_ready; then
-        display_explanation "$(t "Verificando OpacMetaRobots..." "Checking OpacMetaRobots...")" \
-            "$(t "Essa preferência pode permitir ou impedir a indexação do OPAC." "This preference can allow or prevent OPAC indexing.")"
+        display_explanation "Verificando OpacMetaRobots..." "Checking OpacMetaRobots..."
 
         meta_robots=$(run_sql "SELECT value FROM ${DB_NAME}.systempreferences WHERE variable='OpacMetaRobots' LIMIT 1;" 2>/dev/null || true)
 
         if printf '%s' "$meta_robots" | grep -qi 'noindex'; then
-            msg_error "$(t "ATENÇÃO: o OPAC está configurado com NOINDEX." "WARNING: the OPAC is configured with NOINDEX.")" \
-                "$(t "Valor atual:\n$meta_robots\n\nEnquanto 'noindex' estiver configurado, o Google pode ser instruído a não indexar as páginas.\n\nPara corrigir manualmente:\n\nKoha Staff\n→ Administração\n→ Preferências do sistema\n→ OPAC\n→ OpacMetaRobots\n\nRemova a opção 'noindex' e salve.\nO painel NÃO altera isso automaticamente." "Current value:\n$meta_robots\n\nWhile 'noindex' is configured, Google may be instructed not to index the pages.\n\nTo fix it manually:\n\nKoha Staff\n→ Administration\n→ System preferences\n→ OPAC\n→ OpacMetaRobots\n\nRemove the 'noindex' option and save.\nThe panel does NOT change this automatically.")" 22 88
+            msg_error "$(t "Aviso: NOINDEX Detectado" "Warning: NOINDEX Detected")" \
+                "$(t "ATENÇÃO: o OPAC está configurado com NOINDEX.\n\nValor atual:\n$meta_robots\n\nEnquanto 'noindex' estiver configurado, o Google pode ser instruído a não indexar as páginas.\n\nPara corrigir manualmente:\n\nKoha Staff\n→ Administração\n→ Preferências do sistema\n→ OPAC\n→ OpacMetaRobots\n\nRemova a opção 'noindex' e salve.\nO painel NÃO altera isso automaticamente." "WARNING: the OPAC is configured with NOINDEX.\n\nCurrent value:\n$meta_robots\n\nWhile 'noindex' is configured, Google may be instructed not to index the pages.\n\nTo fix it manually:\n\nKoha Staff\n→ Administration\n→ System preferences\n→ OPAC\n→ OpacMetaRobots\n\nRemove the 'noindex' option and save.\nThe panel does NOT change this automatically.")" 22 88
         else
             msg_ok "$(t "OpacMetaRobots não contém 'noindex'.\n\nValor atual:\n${meta_robots:-não definido}" "OpacMetaRobots does not contain 'noindex'.\n\nCurrent value:\n${meta_robots:-not defined}")" 12 78
         fi
     fi
 
-sitemap_script=""
-if [ -f "/usr/share/koha/misc/cronjobs/sitemap.pl" ]; then
-    sitemap_script="/usr/share/koha/misc/cronjobs/sitemap.pl"
-else
-    sitemap_script=$(find /usr/share/koha -type f -path '*/misc/cronjobs/sitemap.pl' 2>/dev/null | head -n 1 || true)
-fi
+    sitemap_script=""
+    if [ -f "/usr/share/koha/misc/cronjobs/sitemap.pl" ]; then
+        sitemap_script="/usr/share/koha/misc/cronjobs/sitemap.pl"
+    else
+        sitemap_script=$(find /usr/share/koha -type f -path '*/misc/cronjobs/sitemap.pl' 2>/dev/null | head -n 1 || true)
+    fi
     if [ -n "$sitemap_script" ]; then
-        display_explanation "$(t "Gerando sitemap do Koha..." "Generating Koha sitemap...")" \
-            "$(t "O Koha possui um script próprio para geração dos sitemaps." "Koha has its own script for generating sitemaps.")"
+        display_explanation "Gerando sitemap do Koha..." "Generating Koha sitemap..."
         if koha-shell "$INSTANCE" "/usr/bin/perl $sitemap_script" >/tmp/koha_google_sitemap.log 2>&1; then
-            log "Sitemap do Koha gerado com sucesso."
+            log "$(t "Sitemap do Koha gerado com sucesso." "Koha sitemap generated successfully.")"
         else
-            log "Aviso: não foi possível executar automaticamente o sitemap."
+            log "$(t "Aviso: não foi possível executar automaticamente o sitemap." "Warning: could not run sitemap automatically.")"
         fi
     else
-        log "Aviso: script sitemap.pl não encontrado."
+        log "$(t "Aviso: script sitemap.pl não encontrado." "Warning: sitemap.pl script not found.")"
     fi
 
-    display_explanation "$(t "Verificando o sitemap publicado..." "Checking the published sitemap...")" \
-        "$(t "Endereço testado:\n$sitemap_url" "Address being tested:\n$sitemap_url")"
+    display_explanation "Verificando o sitemap publicado..." "Checking the published sitemap..."
 
     sitemap_code=$(curl -L -k -sS -o /dev/null -w '%{http_code}' --connect-timeout 10 --max-time 30 "$sitemap_url" 2>/dev/null)
 
     if [[ "$sitemap_code" =~ ^2[0-9][0-9]$ ]]; then
         msg_ok "$(t "Sitemap encontrado!\n\nURL:\n$sitemap_url\n\nHTTP:\n$sitemap_code" "Sitemap found!\n\nURL:\n$sitemap_url\n\nHTTP:\n$sitemap_code")" 12 82
     else
-        msg_info "$(t "O sitemap não foi confirmado neste endereço." "The sitemap was not confirmed at this address.")" \
-            "$(t "$sitemap_url\n\nIsso não significa necessariamente que o Koha esteja com problema.\nPode ser necessário configurar/publicar o sitemap na raiz do OPAC ou confirmar o caminho utilizado pela instalação." "$sitemap_url\n\nThis does not necessarily mean that Koha has a problem.\nThe sitemap may need to be configured/published at the OPAC root, or the path used by the installation may need to be confirmed.")" 16 84
+        msg_info "$(t "Sitemap não confirmado" "Sitemap unconfirmed")" \
+            "$(t "O sitemap não foi confirmado neste endereço.\n\n$sitemap_url\n\nIsso não significa necessariamente que o Koha esteja com problema.\nPode ser necessário configurar/publicar o sitemap na raiz do OPAC ou confirmar o caminho utilizado pela instalação." "The sitemap was not confirmed at this address.\n\n$sitemap_url\n\nThis does not necessarily mean that Koha has a problem.\nThe sitemap may need to be configured/published at the OPAC root, or the path used by the installation may need to be confirmed.")" 16 84
     fi
 
     robots_body=$(curl -L -k -sS --connect-timeout 10 --max-time 30 "$robots_url" 2>/dev/null || true)
@@ -3207,12 +3202,12 @@ fi
         if printf '%s\n' "$robots_body" | grep -Fqi 'Sitemap:'; then
             msg_ok "$(t "robots.txt encontrado e já possui uma linha Sitemap:" "robots.txt found and already contains a Sitemap: line.")" 10 82
         else
-            msg_info "$(t "robots.txt encontrado, mas sem referência ao sitemap." "robots.txt found, but without a sitemap reference.")" \
-                "$(t "Recomendação:\n\nAdicionar uma linha semelhante a:\nSitemap: $sitemap_url\n\nA alteração deve ser feita na configuração correta do OPAC, e não em um arquivo aleatório do sistema." "Recommendation:\n\nAdd a line similar to:\nSitemap: $sitemap_url\n\nThe change should be made in the correct OPAC configuration, not in an arbitrary system file.")" 15 84
+            msg_info "$(t "robots.txt sem sitemap" "robots.txt without sitemap")" \
+                "$(t "robots.txt encontrado, mas sem referência ao sitemap.\n\nRecomendação:\n\nAdicionar uma linha semelhante a:\nSitemap: $sitemap_url\n\nA alteração deve ser feita na configuração correta do OPAC, e não em um arquivo aleatório do sistema." "robots.txt found, but without a sitemap reference.\n\nRecommendation:\n\nAdd a line similar to:\nSitemap: $sitemap_url\n\nThe change should be made in the correct OPAC configuration, not in an arbitrary system file.")" 15 84
         fi
     else
-        msg_info "$(t "robots.txt não respondeu." "robots.txt did not respond.")" \
-            "$(t "É recomendável disponibilizar robots.txt corretamente no OPAC público." "It is recommended to make robots.txt correctly available on the public OPAC.")" 10 78
+        msg_info "$(t "robots.txt ausente" "robots.txt missing")" \
+            "$(t "robots.txt não respondeu.\n\nÉ recomendável disponibilizar robots.txt corretamente no OPAC público." "robots.txt did not respond.\n\nIt is recommended to make robots.txt correctly available on the public OPAC.")" 10 78
     fi
 
     choice=$(whiptail \
@@ -3260,7 +3255,7 @@ fi
     msg_info "$(t "CHECKLIST FINAL — GOOGLE" "FINAL GOOGLE CHECKLIST")" \
         "$(t "AUTOMÁTICO PELO PAINEL:\n\n[✓] OPAC testado\n[✓] Configuração OpacMetaRobots verificada\n[✓] Sitemap do Koha localizado/gerado quando possível\n[✓] Sitemap público testado\n[✓] robots.txt testado\n\nMANUALMENTE NO GOOGLE:\n\n[ ] Propriedade adicionada\n[ ] Propriedade verificada\n[ ] Sitemap enviado\n[ ] Página principal testada na Inspeção de URL\n[ ] Solicitação de indexação feita, se necessário\n\nIMPORTANTE:\nO Search Console ajuda o Google a descobrir o catálogo, mas não garante que todas as páginas sejam indexadas ou que apareçam imediatamente nos resultados." "AUTOMATICALLY BY THE PANEL:\n\n[✓] OPAC checked\n[✓] OpacMetaRobots checked\n[✓] Koha sitemap located/generated when possible\n[✓] Public sitemap tested\n[✓] robots.txt tested\n\nMANUALLY IN GOOGLE:\n\n[ ] Property added\n[ ] Property verified\n[ ] Sitemap submitted\n[ ] Homepage tested with URL Inspection\n[ ] Indexing requested if necessary\n\nIMPORTANT:\nSearch Console helps Google discover the catalog, but it does not guarantee that every page will be indexed or appear immediately in search results.")" 25 92
 
-    log "Assistente Google Search Console executado para OPAC: $opac_url"
+    log "$(t "Assistente Google Search Console executado para OPAC:" "Google Search Console assistant executed for OPAC:") $opac_url"
 }
 
 # ======================================================================
@@ -3286,7 +3281,7 @@ function_configure_ssl() {
         msg_error "" "$(t "O Apache ficou com configuração inválida após o Certbot. Não vou recarregar o serviço." "Apache configuration is invalid after Certbot. The service will not be reloaded.")" 10 76
         return 1
     fi
-if ! systemctl restart apache2 >/dev/null 2>&1; then
+    if ! systemctl restart apache2 >/dev/null 2>&1; then
         msg_error "" "$(t "O certificado foi configurado, mas o Apache falhou ao reiniciar. Verifique o status do serviço." "The certificate was configured, but Apache failed to restart. Check the service status.")" 10 76
         return 1
     fi
@@ -3317,10 +3312,14 @@ function_interoperability() {
         sip_ok="sim"
     fi
 
+    local z39_status sip_status
+    [ "$z39_ok" = "sim" ] && z39_status="$(t "ativo" "active")" || z39_status="$(t "inativo" "inactive")"
+    [ "$sip_ok" = "sim" ] && sip_status="$(t "ativo" "active")" || sip_status="$(t "inativo" "inactive")"
+
     if [ "$z39_ok" = "sim" ] && [ "$sip_ok" = "sim" ]; then
         msg_ok "$(t "Z39.50 e SIP2 foram ativados com sucesso!\n\nPara o SIP2 funcionar ainda é preciso criar uma conta com\npermissão de circulação e preencher:\n/etc/koha/sites/${INSTANCE}/SIPconfig.xml" "Z39.50 and SIP2 were enabled successfully!\n\nFor SIP2 you still need a circulation account and\nto fill in:\n/etc/koha/sites/${INSTANCE}/SIPconfig.xml")" 12 76
     else
-        msg_error "" "$(t "A ativação foi parcial.\n\nZ39.50: ${z39_ok}\nSIP2:    ${sip_ok}\n\nVeja os serviços com: systemctl status koha-z3950-responder@${INSTANCE} koha-sip-daemon@${INSTANCE}" "Activation was partial.\n\nZ39.50: ${z39_ok}\nSIP2:    ${sip_ok}\n\nCheck: systemctl status koha-z3950-responder@${INSTANCE} koha-sip-daemon@${INSTANCE}")" 12 78
+        msg_error "" "$(t "A ativação foi parcial.\n\nZ39.50: ${z39_status}\nSIP2:    ${sip_status}\n\nVeja os serviços com: systemctl status koha-z3950-responder@${INSTANCE} koha-sip-daemon@${INSTANCE}" "Activation was partial.\n\nZ39.50: ${z39_status}\nSIP2:    ${sip_status}\n\nCheck: systemctl status koha-z3950-responder@${INSTANCE} koha-sip-daemon@${INSTANCE}")" 12 78
         return 1
     fi
 }
@@ -3388,7 +3387,7 @@ function_update_system() {
     DEBIAN_FRONTEND=noninteractive apt-get autoremove --purge -y >/dev/null 2>&1 || true
     journalctl --vacuum-time=14d >/dev/null 2>&1 || true
     restore_apt_timers
-    if validate_complete_system "atualização do sistema"; then
+    if validate_complete_system "$(t "atualização do sistema" "system update")"; then
         msg_ok "$(t "Atualização concluída sem erros críticos." "Update finished with no critical errors.")" 9 70
     else
         msg_info "$(t "Atualização com avisos" "Update with warnings")" "$(t "A atualização rodou, mas a validação achou $V_FAIL falha(s) e $V_WARN aviso(s).\n\nLog: $VALIDATION_LOG" "The update ran but validation found $V_FAIL failure(s) and $V_WARN warning(s).\n\nLog: $VALIDATION_LOG")" 11 76
@@ -3403,7 +3402,7 @@ function_update_system() {
 # ======================================================================
 function_validate_system() {
     clear
-    if validate_complete_system "validação manual"; then
+    if validate_complete_system "$(t "validação manual" "manual validation")"; then
         msg_ok "$(t "Nenhuma falha crítica.\n\nOK: $V_OK   Avisos: $V_WARN" "No critical failures.\n\nOK: $V_OK   Warnings: $V_WARN")" 10 70
     else
         msg_info "$(t "Problemas encontrados" "Issues found")" "$(t "Falhas: $V_FAIL   Avisos: $V_WARN   OK: $V_OK" "Failures: $V_FAIL   Warnings: $V_WARN   OK: $V_OK")" 10 70
@@ -3442,7 +3441,7 @@ $(t "BUSCA" "SEARCH")
 
 $(t "MÁQUINA" "MACHINE")
   $(t "Memória" "Memory")       : $(free -h 2>/dev/null | awk 'NR==2{print $3" / "$2}')
-  $(t "Disco (/)" "Disk (/)")     : $(df -h / 2>/dev/null | awk 'NR==2{print $4" livres de "$2}')
+  $(t "Disco (/)" "Disk (/)")     : $(df -h / 2>/dev/null | awk 'NR==2{print $4" '"$(t "livres de" "free of")"' "$2}')
   $(t "Ligado há" "Uptime")     : $(uptime -p 2>/dev/null)
   $(t "Fuso" "Timezone")         : $(timedatectl show -p Timezone --value 2>/dev/null)
   IP             : $(get_server_ip)
@@ -3461,7 +3460,6 @@ function_run_mc() {
         whiptail --title "$(t "Instalando" "Installing")" --infobox "$(t "Aguarde, instalando o Midnight Commander (mc)..." "Please wait, installing Midnight Commander (mc)...")" 8 60
         apt-get update -qq && apt-get install -y mc -qq
     fi
-    # Abre a interface de 2 painéis
     mc
 }
 
@@ -3526,7 +3524,6 @@ function_view_logs() {
     echo -e "\e[1;33m>>> $(t "Exibindo as últimas 50 linhas do log em tempo real..." "Displaying the last 50 log lines in real-time...")\e[0m"
     echo -e "\e[1;33m>>> $(t "Pressione [CTRL+C] a qualquer momento para sair e voltar ao menu." "Press [CTRL+C] at any time to exit and return to the menu.")\e[0m\n"
     
-    # Foi adicionado o --line-buffered para garantir que os logs apareçam instantaneamente
     if [ "$opc" = "1" ]; then
         tail -n 50 -f "/var/log/apache2/koha_${INSTANCE}_error.log" | grep --line-buffered --color=auto -iE "error|fatal|warn|denied|fail|$"
     elif [ "$opc" = "2" ]; then
@@ -3556,7 +3553,6 @@ function_autoupdate() {
     fi
     local size; size=$(stat -c %s "$tmp" 2>/dev/null || echo 0)
     
-# Validação de integridade atômica do script baixado
     if [ "$size" -lt 10240 ] || ! head -n1 "$tmp" | grep -q '^#!.*bash' || \
        ! grep -q 'KOHA EASY INSTALL & TOOLS' "$tmp" || ! grep -q '"31"' "$tmp"; then
         rm -f "$tmp"
@@ -3580,7 +3576,7 @@ function_autoupdate() {
     fi
 
     if mv -f "$tmp" "$target" && chmod 755 "$target" && chown root:root "$target"; then
-        log "painel atualizado a partir de $UPDATE_URL; backup=$backup"
+        log "$(t "painel atualizado a partir de" "panel updated from") $UPDATE_URL; backup=$backup"
         msg_ok "$(t "Painel atualizado com sucesso!\n\nBackup da versão anterior:\n${backup}\n\nFeche e abra de novo com: sudo options.sh" "Panel updated successfully!\n\nBackup of previous version:\n${backup}\n\nClose and reopen with: sudo options.sh")" 12 76
         rm -f "$PANEL_LOCK_FILE"
         exit 0
@@ -3601,7 +3597,7 @@ function_reboot_server() {
     prompt_yes_no "$(t "Reiniciar" "Reboot")" "$(t "Reiniciar o servidor agora?\nTodo mundo que estiver usando o catálogo será desconectado." "Reboot the server now?\nEveryone using the catalog will be disconnected.")" 10 74 || return 0
     clear
     echo "$(t "Reiniciando em 5 segundos..." "Rebooting in 5 seconds...")"
-    log "reboot solicitado pelo painel"
+    log "$(t "reboot solicitado pelo painel" "reboot requested by panel")"
     sleep 5
     reboot
 }
@@ -3754,7 +3750,7 @@ while true; do
                         koha-plack --restart "$INSTANCE" >/dev/null 2>&1
                         sleep 2
                         if validate_http "http://127.0.0.1:8080/" "Staff" >/dev/null 2>&1; then
-                            log "senha do banco rotacionada"
+                            log "$(t "senha do banco rotacionada" "database password rotated")"
                             msg_ok "$(t "Senha rotacionada e o Koha continua respondendo.\n\nNova senha: ${new_pass}\n(salva em /root/credenciais_koha.txt)" "Password rotated and Koha still responds.\n\nNew password: ${new_pass}\n(saved in /root/credenciais_koha.txt)")" 12 74
                         else
                             msg_error "" "$(t "A senha mudou, mas o Koha não respondeu no teste.\nCópia do XML anterior em ${KOHA_CONF}.bak-*" "Password changed but Koha did not answer the test.\nPrevious XML copy at ${KOHA_CONF}.bak-*")" 11 76
