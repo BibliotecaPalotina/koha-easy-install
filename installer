@@ -3487,8 +3487,8 @@ actbutton=black,brightcyan
 compactbutton=cyan,black
 title=brightcyan,black
 listbox=white,black
-actlistbox=black,brightcyan
-actsellistbox=black,brightcyan
+actlistbox=black,cyan
+actsellistbox=black,cyan
 '
 
 # ======================================================================
