@@ -1766,9 +1766,12 @@ EOF
         result_msg="$(t "INSTALAÇÃO CONCLUÍDA, MAS COM FALHAS ($V_FAIL).\nO sistema pode apresentar problemas.\n\n" "INSTALLATION COMPLETE, BUT WITH FAILURES ($V_FAIL).\nThe system may have issues.\n\n")"
     fi
 
-    msg_info "$(t "Instalação Concluída" "Installation Complete")" \
-"${result_msg}$(t "ACESSO:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENCIAIS (salvas em /root/credenciais_koha.txt):\n  Usuário: ${DB_NAME}\n  Senha:   ${db_pass}\n\nPASSO SEGUINTE: abra o Staff no navegador para o Web Installer (ou use a opção 3 se tiver backup).\n\nValidação: OK=$V_OK  Avisos=$V_WARN  Falhas=$V_FAIL" \
-"ACCESS:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENTIALS (saved in /root/credenciais_koha.txt):\n  User: ${DB_NAME}\n  Pass: ${db_pass}\n\nNEXT STEP: open Staff in browser for the Web Installer (or use option 3 with a backup).\n\nValidation: OK=$V_OK  Warnings=$V_WARN  Failures=$V_FAIL")" 26 78
+local report_text="${result_msg}"
+    report_text+="$(t "ACESSO:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENCIAIS (salvas em /root/credenciais_koha.txt):\n  Usuário: ${DB_NAME}\n  Senha:   ${db_pass}\n\nPASSO SEGUINTE: abra o Staff no navegador para o Web Installer (ou use a opção 3 se tiver backup).\n\nValidação: OK=$V_OK  Avisos=$V_WARN  Falhas=$V_FAIL" \
+"ACCESS:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENTIALS (saved in /root/credenciais_koha.txt):\n  User: ${DB_NAME}\n  Pass: ${db_pass}\n\nNEXT STEP: open Staff in browser for the Web Installer (or use option 3 with a backup).\n\nValidation: OK=$V_OK  Warnings=$V_WARN  Failures=$V_FAIL")"
+
+    whiptail --title "$(t "Instalação Concluída" "Installation Complete")" \
+        --scrolltext --msgbox "$report_text" 22 78 2>/dev/null || true
 
 if [ "$V_FAIL" -gt 0 ] || [ "$V_WARN" -gt 0 ]; then
         local diag_msg
