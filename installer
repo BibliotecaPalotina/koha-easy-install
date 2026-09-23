@@ -1963,6 +1963,7 @@ function_test_backup() {
 # 7. IDIOMAS DO KOHA / KOHA LANGUAGES
 # ======================================================================
 LANGUAGES_KOHA="pt-BR:Portugues (Brasil);pt-PT:Portugues (Portugal);es-ES:Espanol;en-GB:English (UK);en-NZ:English (NZ);fr-FR:Francais;fr-CA:Francais (Canada);it-IT:Italiano;de-DE:Deutsch;de-CH:Deutsch (Schweiz);nl-NL:Nederlands;nl-BE:Nederlands (BE);ca-ES:Catala;gl:Galego;eu:Euskara;ru-RU:Russian;uk-UA:Ukrainian;pl-PL:Polski;cs-CZ:Cestina;sk-SK:Slovencina;sl-SI:Slovenscina;hr-HR:Hrvatski;sr-Cyrl:Serbian;bg-Cyrl:Bulgarian;ro-RO:Romana;el-GR:Greek;tr-TR:Turkce;ar-Arab:Arabic;he-Hebr:Hebrew;fa-Arab:Persian;ku-Arab:Kurdish;ur-Arab:Urdu;hi:Hindi;bn-IN:Bengali;ta:Tamil;te:Telugu;ml:Malayalam;kn-Knda:Kannada;mr:Marathi;si:Sinhala;ne-NE:Nepali;th-TH:Thai;km-KH:Khmer;lo-Laoo:Lao;my:Burmese;vi-VN:Vietnamese;id-ID:Indonesian;ms-MY:Malay;tl-PH:Tagalog;zh-Hans-CN:Chinese (Simplified);zh-Hant-TW:Chinese (Traditional);ja-Jpan-JP:Japanese;ko-Kore-KP:Korean;sv-SE:Svenska;da-DK:Dansk;nb-NO:Norsk Bokmal;nn-NO:Norsk Nynorsk;fi-FI:Suomi;is-IS:Islenska;et:Estonian;lv:Latvian;hu-HU:Magyar;sq-AL:Albanian;hy-Armn:Armenian;ka:Georgian;kk-KZ:Kazakh;az-AZ:Azerbaijani;uz:Uzbek;be-BY:Belarusian;am-Ethi:Amharic;sw-KE:Swahili;rw-RW:Kinyarwanda;mi-NZ:Maori;cy-GB:Welsh;ga:Irish;gd:Scottish Gaelic;eo:Esperanto;ia:Interlingua"
+
 function_install_languages() {
     require_database || return 0
     local items=() pair code name choice
@@ -1975,8 +1976,30 @@ function_install_languages() {
         --cancel-button "$(t "Voltar" "Back")" \
         --menu "$(t "Escolha o pacote de idioma para instalar:" "Choose the language pack to install:")" 22 72 13 "${items[@]}" 3>&1 1>&2 2>&3) || return 0
     [ -z "$choice" ] && return 0
+    
     clear
-    display_explanation "Baixando e instalando: $choice" "Downloading and installing: $choice"
+    display_explanation "Preparando o sistema operacional para o idioma: $choice" "Preparing OS for language: $choice"
+    
+    local loc_prefix
+    loc_prefix=$(echo "$choice" | cut -d'-' -f1,2 | sed 's/-/_/')
+    
+    # Ajustes para mapear códigos do Koha para os locales nativos do Debian
+    case "$choice" in
+        zh-Hans-CN) loc_prefix="zh_CN" ;;
+        zh-Hant-TW) loc_prefix="zh_TW" ;;
+        ja-Jpan-JP) loc_prefix="ja_JP" ;;
+        ko-Kore-KP) loc_prefix="ko_KR" ;;
+        ar-Arab)    loc_prefix="ar_" ;;
+        fa-Arab)    loc_prefix="fa_IR" ;;
+        sr-Cyrl)    loc_prefix="sr_RS" ;;
+        bg-Cyrl)    loc_prefix="bg_BG" ;;
+    esac
+
+    # Ativa o locale correspondente no Debian antes de instalar no Koha
+    sed -i -E "s/^#[[:space:]]*(${loc_prefix}[^[:space:]]*\.UTF-8[[:space:]]+UTF-8)/\1/i" /etc/locale.gen
+    locale-gen >/dev/null 2>&1
+
+    display_explanation "Baixando e instalando no Koha: $choice" "Downloading and installing in Koha: $choice"
     if /usr/sbin/koha-translate --install "$choice"; then
         systemctl restart memcached >/dev/null 2>&1
         /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1
