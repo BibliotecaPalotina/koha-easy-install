@@ -2745,7 +2745,7 @@ function_configure_cloudflare() {
     fi
 
     local dominio opac_sub staff_sub
-    dominio=$(whiptail --title "$(t "Seu Domínio" "Your Domain")" --inputbox "$(t "Digite o domínio que você já ativou na Cloudflare (ex: bibliotecapalotina.org):" "Enter the domain you already activated in Cloudflare (e.g. bibliotecapalotina.org):")" 10 74 3>&1 1>&2 2>&3) || return 0
+    dominio=$(whiptail --title "$(t "Seu Domínio" "Your Domain")" --inputbox "$(t "Digite o domínio que você já ativou na Cloudflare (ex: bibliotecamunicipal.org):" "Enter the domain you already activated in Cloudflare (e.g. bibliotecapalotina.org):")" 10 74 3>&1 1>&2 2>&3) || return 0
     [ -z "$dominio" ] && return 0
 
     opac_sub=$(whiptail --title "OPAC" --inputbox "$(t "Subdomínio do Catálogo Público:" "Public Catalog subdomain:")" 10 60 "catalogo" 3>&1 1>&2 2>&3) || return 0
@@ -2786,11 +2786,19 @@ EOF
 # TAILSCALE FUNNEL / TAILSCALE FUNNEL CONFIGURATION
 # ======================================================================
 
-# Função auxiliar: descobre o hostname e monta/mostra os links ativos
+# Função auxiliar: descobre o hostname via Python e monta/mostra os links ativos
 mostrar_links_tailscale() {
     local ts_hostname opac_ativo=false staff_ativo=false funnel_status texto
 
-    ts_hostname=$(tailscale status --json 2>/dev/null | grep -oP '"DNSName":\s*"\K[^"]+' | head -n 1 | sed 's/\.$//')
+    ts_hostname=$(tailscale status --json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    name = data.get("Self", {}).get("DNSName", "")
+    print(name.rstrip("."))
+except Exception:
+    pass
+')
 
     if [ -z "$ts_hostname" ]; then
         msg_error "" "$(t "Não foi possível detectar o endereço do Tailscale. O servidor está autenticado?" "Could not detect the Tailscale address. Is the server authenticated?")" 9 70
@@ -2801,21 +2809,26 @@ mostrar_links_tailscale() {
     echo "$funnel_status" | grep -q '127\.0\.0\.1:80\b' && opac_ativo=true
     echo "$funnel_status" | grep -q '127\.0\.0\.1:8080\b' && staff_ativo=true
 
-    texto=$(t "SEU DOMÍNIO TAILSCALE:\nhttps://${ts_hostname}\n\n" "YOUR TAILSCALE DOMAIN:\nhttps://${ts_hostname}\n\n")
+    texto=$(t "SEU DOMÍNIO TAILSCALE:" "YOUR TAILSCALE DOMAIN:")
+    texto+=$'\n'
+    texto+="https://${ts_hostname}"
+    texto+=$'\n\n'
 
     if [ "$opac_ativo" = true ]; then
-        texto+=$(t "✅ Catálogo (OPAC):  https://${ts_hostname}\n" "✅ Catalog (OPAC):   https://${ts_hostname}\n")
+        texto+=$(t "✅ Catálogo (OPAC):   https://${ts_hostname}" "✅ Catalog (OPAC):   https://${ts_hostname}")
     else
-        texto+=$(t "⬜ Catálogo (OPAC):  não publicado\n" "⬜ Catalog (OPAC):   not published\n")
+        texto+=$(t "⬜ Catálogo (OPAC):   não publicado" "⬜ Catalog (OPAC):   not published")
     fi
+    texto+=$'\n'
 
     if [ "$staff_ativo" = true ]; then
-        texto+=$(t "✅ Administração:    https://${ts_hostname}:8443\n" "✅ Administration:   https://${ts_hostname}:8443\n")
+        texto+=$(t "✅ Administração:    https://${ts_hostname}:8443" "✅ Administration:    https://${ts_hostname}:8443")
     else
-        texto+=$(t "⬜ Administração:    não publicada\n" "⬜ Administration:   not published\n")
+        texto+=$(t "⬜ Administração:    não publicada" "⬜ Administration:    not published")
     fi
+    texto+=$'\n'
 
-    dialog --title "$(t "Links Publicados" "Published Links")" --msgbox "$texto" 14 76
+    whiptail --title "$(t "Links Publicados" "Published Links")" --msgbox "$texto" 14 76
 }
 
 function_configure_tailscale() {
@@ -2846,14 +2859,23 @@ function_configure_tailscale() {
     fi
 
     local ts_hostname
-    ts_hostname=$(tailscale status --json 2>/dev/null | grep -oP '"DNSName":\s*"\K[^"]+' | head -n 1 | sed 's/\.$//')
+    ts_hostname=$(tailscale status --json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    name = data.get("Self", {}).get("DNSName", "")
+    print(name.rstrip("."))
+except Exception:
+    pass
+')
+
     if [ -n "$ts_hostname" ]; then
         msg_ok "$(t "Servidor conectado!\n\nSeu domínio será:\nhttps://${ts_hostname}" "Server connected!\n\nYour domain will be:\nhttps://${ts_hostname}")" 11 70
     fi
 
     while true; do
         local choice
-        choice=$(dialog --title "$(t "Gerenciador do Tailscale Funnel" "Tailscale Funnel Manager")" \
+        choice=$(whiptail --title "$(t "Gerenciador do Tailscale Funnel" "Tailscale Funnel Manager")" \
             --cancel-button "$(t "Voltar" "Back")" \
             --menu "$(t "O que deseja fazer?" "What do you want to do?")" 18 76 5 \
             "1" "$(t "★ Publicar tudo automaticamente (OPAC + Staff)" "★ Publish everything automatically (OPAC + Staff)")" \
