@@ -605,6 +605,11 @@ validate_complete_system() {
 }
 
 validate_pre_installation() {
+    # 1. Boas-vindas
+    msg_info "$(t "Bem-vindo ao Koha Easy Install!" "Welcome to Koha Easy Install!")" \
+        "$(t "Este projeto democratiza a gestão de acervos, automatizando a configuração de uma infraestrutura robusta, rápida e gratuita para bibliotecas.\n\nO assistente vai instalar e afinar MariaDB, Apache, Memcached e Koha.\n\nTempo estimado: 10 a 30 minutos.\nPor favor, não feche o terminal durante a instalação." "This project democratizes collection management, automating the setup of a robust, fast and free infrastructure for libraries.\n\nThe wizard will install and tune MariaDB, Apache, Memcached and Koha.\n\nEstimated time: 10 to 30 minutes.\nPlease do not close the terminal during installation.")" 16 78
+
+    clear
     local free_disk p
     v_reset "pré-instalação"
     [ "$EUID" -eq 0 ] && v_ok "Root OK." || v_fail "Root: $(t "privilégios insuficientes" "insufficient privileges")."
@@ -642,17 +647,20 @@ validate_pre_installation() {
         fi
     done
 
+    # 2. Diagnóstico no pop-up
     if [ "$V_FAIL" -ne 0 ]; then
-        msg_error "" "$(t "A pré-validação encontrou $V_FAIL erro(s) crítico(s).\nAvisos: $V_WARN\n\nLog: $VALIDATION_LOG" "Pre-validation found $V_FAIL critical error(s).\nWarnings: $V_WARN\n\nLog: $VALIDATION_LOG")" 12 74
+        local err_list
+        # Extrai as 4 primeiras falhas direto do log
+        err_list=$(grep -E '\[(FALHA|FAIL)\]' "$VALIDATION_LOG" | sed -E 's/\[(FALHA|FAIL)\] //' | head -n 4)
+        
+        if prompt_yes_no "$(t "Pré-validação Falhou" "Pre-validation Failed")" \
+            "$(t "O sistema não atende aos requisitos mínimos ($V_FAIL erro crítico).\n\nMotivo(s):\n${err_list}\n\nDeseja abrir o relatório completo para mais detalhes?" "System does not meet minimum requirements ($V_FAIL critical error).\n\nReason(s):\n${err_list}\n\nDo you want to open the full report for more details?")" 16 78; then
+            show_validation_report
+        fi
         return 1
     fi
     prompt_yes_no "$(t "Pré-validação OK" "Pre-validation OK")" \
         "$(t "Nenhum erro crítico.\n\nOK: $V_OK   Avisos: $V_WARN\n\nIniciar a instalação agora?" "No critical errors.\n\nOK: $V_OK   Warnings: $V_WARN\n\nStart the installation now?")" 12 70
-}
-
-show_validation_report() {
-    [ -f "$VALIDATION_LOG" ] || { msg_info "$(t "Validação" "Validation")" "$(t "Nenhum relatório gerado ainda." "No report generated yet.")" 8 60; return; }
-    whiptail --title "$(t "Relatório" "Report")" --scrolltext --textbox "$VALIDATION_LOG" 30 100 2>/dev/null || true
 }
 
 # ======================================================================
@@ -1368,6 +1376,7 @@ EOF
     cp -f /etc/issue /etc/motd 2>/dev/null
 }
 
+# ======================================================================
 # 1. INSTALAÇÃO DO SERVIDOR / SERVER INSTALLATION
 # ======================================================================
 function_install_koha() {
