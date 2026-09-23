@@ -111,13 +111,16 @@ log "===== painel iniciado (v$PANEL_VERSION, usuario=$REAL_USER) ====="
 # ======================================================================
 # DEPENDÊNCIAS MÍNIMAS DO PRÓPRIO PAINEL / PANEL DEPENDENCIES
 # ======================================================================
-# Garante listas do APT populadas em imagens mínimas antes de checar comandos
-DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::ForceIPv4=true >/dev/null 2>&1
+# Força a sincronização do relógio para evitar rejeição de repositórios
+timedatectl set-ntp true >/dev/null 2>&1 || true
+
+# Garante listas do APT populadas mesmo com relógio defasado
+DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::ForceIPv4=true -o Acquire::Check-Valid-Until=false >/dev/null 2>&1
 
 for dep in whiptail curl python3 unzip gpg wget; do
     if ! command -v "$dep" >/dev/null 2>&1; then
         echo "$(t "Instalando dependência do painel: $dep" "Installing panel dependency: $dep")"
-        DEBIAN_FRONTEND=noninteractive apt-get install -y "$dep" >/dev/null 2>&1 || {
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -o Acquire::Check-Valid-Until=false "$dep" >/dev/null 2>&1 || {
             echo "$(t "Não foi possível instalar '$dep'. Abortando." "Could not install '$dep'. Aborting.")"
             rm -f "$PANEL_LOCK_FILE"
             exit 1
