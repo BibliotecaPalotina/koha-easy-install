@@ -556,7 +556,7 @@ validate_network_and_system() {
 }
 
 validate_complete_system() {
-    local engine
+    local engine tables
     v_reset "${1:-$(t "validação completa" "full validation")}"
     v_info "$(t "=== SISTEMA / REDE ===" "=== SYSTEM / NETWORK ===")"
     validate_network_and_system
@@ -565,10 +565,9 @@ validate_complete_system() {
     validate_service apache2      "Apache"
     validate_service memcached    "Memcached"
     validate_service koha-common  "Koha common"
-    validate_service cron          "Cron"
+    validate_service cron         "Cron"
     validate_service fail2ban     "Fail2ban" "nao"
     
-    # Validação do Plack com caminho absoluto
     if /usr/sbin/koha-plack --status "$INSTANCE" 2>/dev/null | grep -qi "running"; then
         v_ok "Plack (${INSTANCE}): $(t "em execução" "running")."
     else
@@ -579,7 +578,6 @@ validate_complete_system() {
     validate_mariadb
     validate_koha_instance
 
-    # Validação do socket Unix do Plack
     if [ -S "/var/run/koha/${INSTANCE}/plack.sock" ]; then
         v_ok "Plack Socket: /var/run/koha/${INSTANCE}/plack.sock OK."
     else
@@ -588,8 +586,17 @@ validate_complete_system() {
 
     validate_local_port 80   "OPAC"
     validate_local_port 8080 "Staff"
-    validate_http "http://127.0.0.1:80/"   "OPAC"
+    
+    # FIX: Inteligência para ignorar o erro 500 do OPAC se o banco estiver vazio
+    tables=$(run_sql "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}';")
+    if [ "${tables:-0}" -lt 50 ] 2>/dev/null; then
+        v_warn "OPAC: HTTP 500 $(t "esperado (banco vazio, aguardando Web Installer)" "expected (empty DB, waiting for Web Installer)")."
+    else
+        validate_http "http://127.0.0.1:80/"   "OPAC"
+    fi
+    
     validate_http "http://127.0.0.1:8080/" "Staff"
+    
     engine=$(get_search_engine)
     v_info "$(t "=== BUSCA ===" "=== SEARCH ===")"
     validate_zebra "$engine"
