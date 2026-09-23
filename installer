@@ -3493,39 +3493,9 @@ function_about() {
 "Koha Easy Install & Tools v${PANEL_VERSION}\n\nThis project was born from real-life experience facing technical barriers in collection management. It was specifically designed for libraries lacking financial resources for proprietary systems or specialized technical support, democratizing access to robust, free, and truly accessible technology.\n\nThe goal is to help other institutions facing the same struggles.\n\nIf this initiative helped you:\n⭐ Star the repository on GitHub!\n📢 Share it with friends and colleagues.\n\nRepository: github.com/BibliotecaPalotina/koha-easy-install\n\nCreated with dedication by Paulo F. Baldi FH.\nLibrary Assistant - Castro Alves Public Library\nPalotina, Paraná, Brazil")" 22 76 2>/dev/null || true
 }
 
-# Cores do Newt/Whiptail
-export NEWT_COLORS='
-root=black,darkgray
-window=white,black
-border=brightcyan,black
-textbox=white,black
-button=cyan,black
-actbutton=black,brightcyan
-compactbutton=cyan,black
-title=brightcyan,black
-listbox=white,black
-actlistbox=black,brightcyan
-actsellistbox=black,brightcyan
-'
-
 # ======================================================================
 # MENU PRINCIPAL / MAIN MENU (16 OPÇÕES)
 # ======================================================================
-# Garante que nenhum menu/função anterior tenha alterado as cores.
-export NEWT_COLORS='
-root=black,darkgray
-window=white,black
-border=brightcyan,black
-textbox=white,black
-button=cyan,black
-actbutton=black,brightcyan
-compactbutton=cyan,black
-title=brightcyan,black
-listbox=white,black
-actlistbox=black,brightcyan
-actsellistbox=black,brightcyan
-'
-
 while true; do
     restore_apt_timers
 
