@@ -1983,7 +1983,6 @@ function_install_languages() {
     local loc_prefix
     loc_prefix=$(echo "$choice" | cut -d'-' -f1,2 | sed 's/-/_/')
     
-    # Ajustes para mapear códigos do Koha para os locales nativos do Debian
     case "$choice" in
         zh-Hans-CN) loc_prefix="zh_CN" ;;
         zh-Hant-TW) loc_prefix="zh_TW" ;;
@@ -1995,22 +1994,35 @@ function_install_languages() {
         bg-Cyrl)    loc_prefix="bg_BG" ;;
     esac
 
-    # Ativa o locale correspondente no Debian antes de instalar no Koha
     sed -i -E "s/^#[[:space:]]*(${loc_prefix}[^[:space:]]*\.UTF-8[[:space:]]+UTF-8)/\1/i" /etc/locale.gen
     locale-gen >/dev/null 2>&1
 
-    display_explanation "Baixando e instalando no Koha: $choice" "Downloading and installing in Koha: $choice"
-    if /usr/sbin/koha-translate --install "$choice"; then
+    local cmd_status=0
+    
+    # Verifica se já está instalado para não causar erro ao tentar instalar por cima
+    if koha-translate --list 2>/dev/null | grep -qx "$choice"; then
+        display_explanation "O idioma já está instalado. Atualizando os templates..." "Language already installed. Updating templates..."
+        /usr/sbin/koha-translate --update "$choice" > /tmp/koha_lang.log 2>&1
+        cmd_status=$?
+    else
+        display_explanation "Compilando e instalando idioma no Koha (pode demorar): $choice" "Compiling and installing language in Koha (may take a while): $choice"
+        /usr/sbin/koha-translate --install "$choice" > /tmp/koha_lang.log 2>&1
+        cmd_status=$?
+    fi
+
+    if [ $cmd_status -eq 0 ]; then
         systemctl restart memcached >/dev/null 2>&1
         /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1
-        if prompt_yes_no "$(t "Ativar idioma" "Enable language")" "$(t "Pacote instalado.\n\nQuer ativá-lo já nas preferências (OPAC e Staff)?" "Package installed.\n\nEnable it right away in the preferences (OPAC and Staff)?")" 10 70; then
+        if prompt_yes_no "$(t "Ativar idioma" "Enable language")" "$(t "Pacote processado.\n\nQuer ativá-lo já nas preferências (OPAC e Staff)?" "Package processed.\n\nEnable it right away in the preferences (OPAC and Staff)?")" 10 70; then
             mysql -e "UPDATE ${DB_NAME}.systempreferences SET value=CONCAT(value,',','${choice}') WHERE variable IN ('language','OPACLanguages') AND value NOT LIKE '%${choice}%';" >/dev/null 2>&1
             systemctl restart memcached >/dev/null 2>&1
             /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1
         fi
-        msg_ok "$(t "Idioma '$choice' instalado.\nAjustes finos em: Administração > Preferências > I18N/L10N." "Language '$choice' installed.\nFine tuning in: Administration > Preferences > I18N/L10N.")" 10 74
+        msg_ok "$(t "Idioma '$choice' ativado com sucesso.\nAjustes finos em: Administração > Preferências > I18N/L10N." "Language '$choice' enabled successfully.\nFine tuning in: Administration > Preferences > I18N/L10N.")" 10 74
     else
-        msg_error "" "$(t "Falha ao baixar o idioma '$choice'. Verifique a internet." "Failed to download language '$choice'. Check your connection.")" 9 70
+        local err_msg
+        err_msg=$(tail -n 12 /tmp/koha_lang.log 2>/dev/null || echo "Log vazio.")
+        msg_error "" "$(t "Falha ao processar o idioma '$choice'.\n\nDetalhes do erro nativo do Koha:\n$err_msg" "Failed to process language '$choice'.\n\nKoha native error details:\n$err_msg")" 18 80
     fi
 }
 
