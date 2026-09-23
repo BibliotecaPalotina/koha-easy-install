@@ -3168,9 +3168,11 @@ ingress:
   - service: http_status:404
 EOF
 
-    display_explanation "Registrando os subdomínios no DNS..." "Registering subdomains in DNS..."
-    cloudflared tunnel route dns "$tunnel_name" "${opac_sub}.${dominio}" || true
-    cloudflared tunnel route dns "$tunnel_name" "${staff_sub}.${dominio}" || true
+display_explanation "Registrando os subdomínios no DNS..." "Registering subdomains in DNS..."
+    
+    # A flag -f (force) sobrescreve os registros caso eles já existam de uma instalação anterior
+    cloudflared tunnel route dns -f "$tunnel_name" "${opac_sub}.${dominio}" || true
+    cloudflared tunnel route dns -f "$tunnel_name" "${staff_sub}.${dominio}" || true
 
     display_explanation "Instalando o túnel como serviço..." "Installing tunnel as a service..."
     cloudflared service uninstall >/dev/null 2>&1 || true
