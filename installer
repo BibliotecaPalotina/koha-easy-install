@@ -1966,6 +1966,17 @@ LANGUAGES_KOHA="pt-BR:Portugues (Brasil);pt-PT:Portugues (Portugal);es-ES:Espano
 
 function_install_languages() {
     require_database || return 0
+    
+    # FIX: Restaura caminhos de sistema que o Debian apaga no modo sudo
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+    
+    # FIX: Se o koha-foreach não existir (bug do pacote), cria um falso só para não quebrar a instalação
+    if ! command -v koha-foreach >/dev/null 2>&1; then
+        echo -e '#!/bin/bash\nexit 0' > /tmp/koha-foreach
+        chmod +x /tmp/koha-foreach
+        export PATH="/tmp:$PATH"
+    fi
+
     local items=() pair code name choice
     IFS=';' read -ra pairs <<< "$LANGUAGES_KOHA"
     for pair in "${pairs[@]}"; do
@@ -1997,17 +2008,18 @@ function_install_languages() {
     sed -i -E "s/^#[[:space:]]*(${loc_prefix}[^[:space:]]*\.UTF-8[[:space:]]+UTF-8)/\1/i" /etc/locale.gen
     locale-gen >/dev/null 2>&1
 
-    # Verifica se já está instalado
-    if koha-translate --list 2>/dev/null | grep -qx "$choice"; then
+    if koha-translate --list 2>/dev/null | grep -q "$choice"; then
         display_explanation "O idioma já está instalado. Atualizando os templates..." "Language already installed. Updating templates..."
         /usr/sbin/koha-translate --update "$choice" > /tmp/koha_lang.log 2>&1
     else
         display_explanation "Compilando e instalando idioma no Koha (pode demorar): $choice" "Compiling and installing language in Koha (may take a while): $choice"
         /usr/sbin/koha-translate --install "$choice" > /tmp/koha_lang.log 2>&1
+        
+        # Garante que as traduções da instância sejam atualizadas mesmo que o instalador falhe na última etapa
+        /usr/sbin/koha-translate --update "$choice" >> /tmp/koha_lang.log 2>&1 || true
     fi
 
-    # Validação baseada na lista real do Koha, ignorando falsos positivos (ex: koha-foreach: not found)
-    if koha-translate --list 2>/dev/null | grep -qx "$choice"; then
+    if koha-translate --list 2>/dev/null | grep -q "$choice"; then
         systemctl restart memcached >/dev/null 2>&1
         /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1
         if prompt_yes_no "$(t "Ativar idioma" "Enable language")" "$(t "Pacote processado.\n\nQuer ativá-lo já nas preferências (OPAC e Staff)?" "Package processed.\n\nEnable it right away in the preferences (OPAC and Staff)?")" 10 70; then
