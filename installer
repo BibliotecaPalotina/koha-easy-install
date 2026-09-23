@@ -612,20 +612,21 @@ validate_complete_system() {
 }
 
 show_validation_report() {
-    clear
-    echo -e "\n======================================================================"
-    echo -e "             RELATÓRIO DE DIAGNÓSTICO / DIAGNOSTIC REPORT"
-    echo -e "======================================================================\n"
-    
-    if [ -f "$VALIDATION_LOG" ]; then
-        cat "$VALIDATION_LOG"
-    else
-        echo "$(t "O arquivo de log de diagnóstico não foi encontrado." "Diagnostic log file not found.")"
+    if [ ! -f "$VALIDATION_LOG" ] || [ ! -s "$VALIDATION_LOG" ]; then
+        msg_error "" "$(t "O arquivo de log de diagnóstico não foi encontrado ou está vazio.\nExecute a validação primeiro." "Diagnostic log file not found or is empty.\nPlease run validation first.")" 10 74
+        return 0
     fi
-    
-    echo -e "\n======================================================================"
-    read -p "$(t "Pressione [ENTER] para fechar o diagnóstico..." "Press [ENTER] to close diagnostics...")"
-    clear
+
+    # Exibe no visual do Whiptail com barra de rolagem interativa
+    whiptail --title "$(t "Relatório de Diagnóstico" "Diagnostic Report")" \
+        --scrolltext --textbox "$VALIDATION_LOG" 22 78 3>&1 1>&2 2>&3 || {
+            # Fallback seguro caso o terminal seja pequeno demais para a caixa
+            clear
+            cat "$VALIDATION_LOG"
+            echo -e "\n======================================================================"
+            read -p "$(t "Pressione [ENTER] para fechar o diagnóstico..." "Press [ENTER] to close diagnostics...")"
+            clear
+        }
 }
 
 validate_pre_installation() {
@@ -1783,7 +1784,7 @@ if [ "$V_FAIL" -gt 0 ] || [ "$V_WARN" -gt 0 ]; then
         fi
     fi
 
-    if prompt_yes_no "$(t "Reiniciar Servidor (Recomendado)" "Reboot Server (Recommended)")" \
+if prompt_yes_no "$(t "Reiniciar Servidor (Recomendado)" "Reboot Server (Recommended)")" \
 "$(t "Para ativar a aceleração total do Plack, carregar a SWAP e garantir o desempenho máximo do catálogo, é altamente recomendado reiniciar a máquina agora.\n\nAs credenciais já foram guardadas em /root/credenciais_koha.txt.\n\nDeseja reiniciar o servidor imediatamente?" \
 "To enable full Plack speed, initialize SWAP, and ensure peak catalog performance, rebooting the system now is strongly recommended.\n\nCredentials have been saved to /root/credenciais_koha.txt.\n\nDo you want to reboot the server immediately?")" 15 76; then
         clear
@@ -1793,8 +1794,8 @@ if [ "$V_FAIL" -gt 0 ] || [ "$V_WARN" -gt 0 ]; then
         reboot
     else
         msg_info "$(t "Reinicialização Pendente" "Pending Reboot")" \
-"$(t "Tudo certo! Você optou por reiniciar mais tarde.\n\nLembre-se: se o catálogo parecer lento, reinicie o servidor através da opção 25 do painel antes de realizar cadastros pesados." \
-"All set! You chose to reboot later.\n\nRemember: if the catalog feels sluggish, restart the server via option 25 in the panel before heavy indexing.")" 11 74
+"$(t "Tudo certo! Você optou por reiniciar mais tarde.\n\nLembre-se: se o catálogo parecer lento, reinicie o servidor através da opção 15 do painel antes de realizar cadastros pesados." \
+"All set! You chose to reboot later.\n\nRemember: if the catalog feels sluggish, restart the server via option 15 in the panel before heavy indexing.")" 11 74
     fi
 }
 
@@ -1965,7 +1966,7 @@ function_restore_database() {
         systemctl restart "koha-zebra-daemon@${INSTANCE}" >/dev/null 2>&1 || true
     fi
 
-    backup_lock_release
+backup_lock_release
     systemctl restart memcached >/dev/null 2>&1 || true
     /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
     systemctl reload apache2 >/dev/null 2>&1 || true
@@ -1975,10 +1976,22 @@ function_restore_database() {
 
     if [ "$rebuild_ok" = "no" ]; then
         msg_error "" "$(t "O banco foi restaurado, mas a reconstrução do índice falhou.\nConsulte /var/log/koha-easy-install/zebra-rebuild.log" "The database was restored, but index rebuilding failed.\nCheck /var/log/koha-easy-install/zebra-rebuild.log")" 11 78
+        if prompt_yes_no "$(t "Ver Relatório" "View Report")" \
+            "$(t "Deseja ver o relatório de validação para investigar as falhas agora?" \
+                  "Do you want to see the validation report to investigate the issues now?")" 10 72; then
+            show_validation_report
+        fi
         return 1
     fi
 
     msg_ok "$(t "Acervo restaurado e indexado com sucesso!\n\nMotor de busca: ${engine}\nTabelas: ${tables}" "Catalog restored and indexed successfully!\n\nSearch engine: ${engine}\nTables: ${tables}")" 12 74
+
+    if prompt_yes_no "$(t "Ver Relatório" "View Report")" \
+        "$(t "Deseja ver o relatório detalhado de validação do sistema agora?" \
+              "Do you want to see the detailed system validation report now?")" 10 70; then
+        show_validation_report
+    fi
+
     return 0
 }
 
@@ -2119,14 +2132,21 @@ LANGUAGES_KOHA="pt-BR:Portugues (Brasil);pt-PT:Portugues (Portugal);es-ES:Espano
 function_install_languages() {
     require_database || return 0
     
-    # FIX: Restaura caminhos de sistema que o Debian apaga no modo sudo
+    # FIX: Restaura caminhos de sistema que o Debian/Ubuntu apaga no modo sudo
     export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
     
-    # FIX: Se o koha-foreach não existir (bug do pacote), cria um falso só para não quebrar a instalação
+    local sudo_cmd=""
+    [ "$EUID" -ne 0 ] && sudo_cmd="sudo"
+
+    # FIX: Se o koha-foreach não existir (bug de empacotamento), cria um mock temporário
+    local created_mock=0
     if ! command -v koha-foreach >/dev/null 2>&1; then
-        echo -e '#!/bin/bash\nexit 0' > /tmp/koha-foreach
-        chmod +x /tmp/koha-foreach
-        export PATH="/tmp:$PATH"
+        echo -e '#!/bin/bash\nexit 0' | $sudo_cmd tee /usr/local/bin/koha-foreach >/dev/null 2>&1 || {
+            echo -e '#!/bin/bash\nexit 0' > /tmp/koha-foreach
+            chmod +x /tmp/koha-foreach
+            export PATH="/tmp:$PATH"
+        }
+        created_mock=1
     fi
 
     local items=() pair code name choice
@@ -2135,10 +2155,17 @@ function_install_languages() {
         code="${pair%%:*}"; name="${pair#*:}"
         items+=("$code" "$name")
     done
+
     choice=$(whiptail --title "$(t "Idiomas do Koha" "Koha Languages")" \
         --cancel-button "$(t "Voltar" "Back")" \
-        --menu "$(t "Escolha o pacote de idioma para instalar:" "Choose the language pack to install:")" 22 72 13 "${items[@]}" 3>&1 1>&2 2>&3) || return 0
-    [ -z "$choice" ] && return 0
+        --menu "$(t "Escolha o pacote de idioma para instalar:" "Choose the language pack to install:")" 22 72 13 "${items[@]}" 3>&1 1>&2 2>&3) || {
+        [ "$created_mock" -eq 1 ] && rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
+        return 0
+    }
+    [ -z "$choice" ] && {
+        [ "$created_mock" -eq 1 ] && rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
+        return 0
+    }
     
     clear
     display_explanation "Preparando o sistema operacional para o idioma: $choice" "Preparing OS for language: $choice"
@@ -2151,38 +2178,56 @@ function_install_languages() {
         zh-Hant-TW) loc_prefix="zh_TW" ;;
         ja-Jpan-JP) loc_prefix="ja_JP" ;;
         ko-Kore-KP) loc_prefix="ko_KR" ;;
-        ar-Arab)    loc_prefix="ar_" ;;
+        ar-Arab)    loc_prefix="ar_.*" ;;
         fa-Arab)    loc_prefix="fa_IR" ;;
         sr-Cyrl)    loc_prefix="sr_RS" ;;
         bg-Cyrl)    loc_prefix="bg_BG" ;;
+        hi)         loc_prefix="hi_IN" ;;
+        ta)         loc_prefix="ta_IN" ;;
+        te)         loc_prefix="te_IN" ;;
+        ml)         loc_prefix="ml_IN" ;;
+        kn-Knda)    loc_prefix="kn_IN" ;;
+        mr)         loc_prefix="mr_IN" ;;
+        bn-IN)      loc_prefix="bn_IN" ;;
+        gl)         loc_prefix="gl_ES" ;;
+        eu)         loc_prefix="eu_ES" ;;
+        my)         loc_prefix="my_MM" ;;
     esac
 
-    sed -i -E "s/^#[[:space:]]*(${loc_prefix}[^[:space:]]*\.UTF-8[[:space:]]+UTF-8)/\1/i" /etc/locale.gen
-    locale-gen >/dev/null 2>&1
-
-    if koha-translate --list 2>/dev/null | grep -q "$choice"; then
-        display_explanation "O idioma já está instalado. Atualizando os templates..." "Language already installed. Updating templates..."
-        /usr/sbin/koha-translate --update "$choice" > /tmp/koha_lang.log 2>&1
-    else
-        display_explanation "Compilando e instalando idioma no Koha (pode demorar): $choice" "Compiling and installing language in Koha (may take a while): $choice"
-        /usr/sbin/koha-translate --install "$choice" > /tmp/koha_lang.log 2>&1
-        
-        # Garante que as traduções da instância sejam atualizadas mesmo que o instalador falhe na última etapa
-        /usr/sbin/koha-translate --update "$choice" >> /tmp/koha_lang.log 2>&1 || true
+    if [ -f /etc/locale.gen ]; then
+        $sudo_cmd sed -i -E "s/^#[[:space:]]*(${loc_prefix}[^[:space:]]*\.UTF-8[[:space:]]+UTF-8)/\1/i" /etc/locale.gen 2>/dev/null || true
+        $sudo_cmd locale-gen >/dev/null 2>&1 || true
     fi
 
-    if koha-translate --list 2>/dev/null | grep -q "$choice"; then
-        systemctl restart memcached >/dev/null 2>&1
-        /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1
+    local koha_trans_cmd
+    koha_trans_cmd="$(command -v koha-translate || echo "/usr/sbin/koha-translate")"
+
+    if $sudo_cmd "$koha_trans_cmd" --list 2>/dev/null | grep -q "$choice"; then
+        display_explanation "O idioma já está instalado. Atualizando os templates..." "Language already installed. Updating templates..."
+        $sudo_cmd "$koha_trans_cmd" --update "$choice" > /tmp/koha_lang.log 2>&1
+    else
+        display_explanation "Compilando e instalando idioma no Koha (pode demorar): $choice" "Compiling and installing language in Koha (may take a while): $choice"
+        $sudo_cmd "$koha_trans_cmd" --install "$choice" > /tmp/koha_lang.log 2>&1
+        $sudo_cmd "$koha_trans_cmd" --update "$choice" >> /tmp/koha_lang.log 2>&1 || true
+    fi
+
+    if $sudo_cmd "$koha_trans_cmd" --list 2>/dev/null | grep -q "$choice"; then
+        $sudo_cmd systemctl restart memcached >/dev/null 2>&1 || true
+        $sudo_cmd /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
+        
         if prompt_yes_no "$(t "Ativar idioma" "Enable language")" "$(t "Pacote processado.\n\nQuer ativá-lo já nas preferências (OPAC e Staff)?" "Package processed.\n\nEnable it right away in the preferences (OPAC and Staff)?")" 10 70; then
             
-            # Correção: Injeção à prova de falhas para as interfaces Staff (language) e OPAC (opaclanguages)
+            local mysql_runner="mysql"
+            if ! mysql -e "SELECT 1" >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1; then
+                mysql_runner="sudo mysql"
+            fi
+
             for pref in "language" "opaclanguages"; do
-                mysql -e "INSERT INTO ${DB_NAME}.systempreferences (variable, value, type) VALUES ('$pref', '${choice}', 'Free') ON DUPLICATE KEY UPDATE value = IF(value = '' OR value IS NULL, '${choice}', IF(value LIKE '%${choice}%', value, CONCAT(value, ',', '${choice}')));" >/dev/null 2>&1
+                $mysql_runner -e "INSERT INTO ${DB_NAME}.systempreferences (variable, value, type) VALUES ('$pref', '${choice}', 'Free') ON DUPLICATE KEY UPDATE value = IF(value = '' OR value IS NULL, '${choice}', IF(value LIKE '%${choice}%', value, CONCAT(value, ',', '${choice}')));" >/dev/null 2>&1
             done
             
-            systemctl restart memcached >/dev/null 2>&1
-            /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1
+            $sudo_cmd systemctl restart memcached >/dev/null 2>&1 || true
+            $sudo_cmd /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
         fi
         msg_ok "$(t "Idioma '$choice' ativado com sucesso.\nAjustes finos em: Administração > Preferências > I18N/L10N." "Language '$choice' enabled successfully.\nFine tuning in: Administration > Preferences > I18N/L10N.")" 10 74
     else
@@ -2190,6 +2235,8 @@ function_install_languages() {
         err_msg=$(tail -n 12 /tmp/koha_lang.log 2>/dev/null || echo "$(t "Log vazio." "Empty log.")")
         msg_error "" "$(t "Falha ao processar o idioma '$choice'.\n\nDetalhes do erro nativo do Koha:\n$err_msg" "Failed to process language '$choice'.\n\nKoha native error details:\n$err_msg")" 18 80
     fi
+
+    [ "$created_mock" -eq 1 ] && rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
 }
 
 # ======================================================================
@@ -2247,12 +2294,24 @@ function_toggle_search_engine() {
         if ! /usr/sbin/koha-rebuild-zebra -f -v -b -a -r "$INSTANCE"; then
             backup_lock_release
             msg_error "" "$(t "A reconstrução do Zebra falhou. O sistema continuará em Zebra; use a opção de reparar." "Zebra rebuild failed. The system will remain on Zebra; use the repair option.")" 11 76
+            if prompt_yes_no "$(t "Ver Relatório" "View Report")" \
+                "$(t "Deseja ver o relatório de validação para investigar as falhas agora?" \
+                      "Do you want to see the validation report to investigate the issues now?")" 10 72; then
+                show_validation_report
+            fi
             return 1
         fi
         backup_lock_release
         /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
         validate_complete_system "$(t "troca para Zebra" "switch to Zebra")"
         msg_ok "$(t "Sistema operando com ZEBRA.\nA indexação incremental roda a cada 2 minutos." "System now running on ZEBRA.\nIncremental indexing runs every 2 minutes.")" 10 70
+
+        if prompt_yes_no "$(t "Ver Relatório" "View Report")" \
+            "$(t "Deseja ver o relatório detalhado de validação do sistema agora?" \
+                  "Do you want to see the detailed system validation report now?")" 10 70; then
+            show_validation_report
+        fi
+
         return 0
     fi
 
@@ -2373,11 +2432,28 @@ function_toggle_search_engine() {
     validate_complete_system "$(t "ativação do Elasticsearch" "Elasticsearch activation")"
     if [ "$indexer_ok" = "yes" ] && [ "$rebuild_ok" = "yes" ] && is_koha_indexer_running; then
         msg_ok "$(t "Sistema operando com ELASTICSEARCH.\n\nO indexador tem reinício automático e o vigia confere a fila a cada 5 minutos." "System now running on ELASTICSEARCH.\n\nThe indexer has automatic recovery and the watchdog checks the queue every 5 minutes.")" 12 78
+
+        if prompt_yes_no "$(t "Ver Relatório" "View Report")" \
+            "$(t "Deseja ver o relatório detalhado de validação do sistema agora?" \
+                  "Do you want to see the detailed system validation report now?")" 10 70; then
+            show_validation_report
+        fi
+        return 0
     elif [ "$indexer_ok" = "no" ]; then
         msg_error "" "$(t "O Elasticsearch está ativo, mas o indexador não subiu. Use a opção de reparar." "Elasticsearch is active but the indexer did not start. Use the repair option.")" 11 76
+        if prompt_yes_no "$(t "Ver Relatório" "View Report")" \
+            "$(t "Deseja ver o relatório de validação para investigar as falhas agora?" \
+                  "Do you want to see the validation report to investigate the issues now?")" 10 72; then
+            show_validation_report
+        fi
         return 1
     else
         msg_error "" "$(t "O Elasticsearch está ativo, mas a reindexação falhou. Use a opção de Reparar Indexação." "Elasticsearch is active but rebuilding failed. Use Repair Indexing option.")" 11 78
+        if prompt_yes_no "$(t "Ver Relatório" "View Report")" \
+            "$(t "Deseja ver o relatório de validação para investigar as falhas agora?" \
+                  "Do you want to see the validation report to investigate the issues now?")" 10 72; then
+            show_validation_report
+        fi
         return 1
     fi
 }
@@ -2433,20 +2509,35 @@ $(t "Fila crescendo + índice menor que o banco = indexador parado." "Growing qu
         systemctl restart memcached koha-common >/dev/null 2>&1
         manage_koha_indexers start
         /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1
+        local rebuild_ok="yes"
         if prompt_yes_no "$(t "Reindexar" "Reindex")" "$(t "Reconstruir o índice inteiro do zero?\nEm acervos grandes pode levar vários minutos." "Rebuild the whole index from scratch?\nOn large catalogs this can take several minutes.")" 10 74; then
             clear
             local cut_time; cut_time=$(date '+%Y-%m-%d %H:%M:%S')
-            rebuild_koha_elasticsearch "$cut_time"
+            rebuild_koha_elasticsearch "$cut_time" || rebuild_ok="no"
         fi
-        v_reset "$(t "reparo da indexação" "indexing repair")"
-        validate_elasticsearch "Elasticsearch"
-        if is_koha_indexer_running; then
-            msg_ok "$(t "Indexador ativo.\nCadastre um registro de teste e busque em ~10 segundos." "Indexer is running.\nAdd a test record and search for it after ~10 seconds.")" 10 74
+
+        validate_complete_system "$(t "reparo da indexação Elasticsearch" "Elasticsearch indexing repair")"
+
+        if is_koha_indexer_running && [ "$rebuild_ok" = "yes" ]; then
+            msg_ok "$(t "Indexador ativo e acervo sincronizado.\nCadastre um registro de teste e busque em ~10 segundos." "Indexer is running and catalog synchronized.\nAdd a test record and search for it after ~10 seconds.")" 11 76
+
+            if prompt_yes_no "$(t "Ver Relatório" "View Report")" \
+                "$(t "Deseja ver o relatório detalhado de validação do sistema agora?" \
+                      "Do you want to see the detailed system validation report now?")" 10 70; then
+                show_validation_report
+            fi
+            return 0
         else
-            msg_error "" "$(t "O indexador não subiu. Veja:\njournalctl -u koha-es-indexer@${INSTANCE} -n 50\ntail -n 50 /var/log/koha/${INSTANCE}/es-indexer-output.log" "The indexer did not start. Check:\njournalctl -u koha-es-indexer@${INSTANCE} -n 50\ntail -n 50 /var/log/koha/${INSTANCE}/es-indexer-output.log")" 12 78
+            msg_error "" "$(t "Falha no reparo do Elasticsearch (indexador parado ou erro na reconstrução).\nVeja:\njournalctl -u koha-es-indexer@${INSTANCE} -n 50" "Elasticsearch repair failed (indexer stopped or rebuild error).\nCheck:\njournalctl -u koha-es-indexer@${INSTANCE} -n 50")" 12 78
+            if prompt_yes_no "$(t "Ver Relatório" "View Report")" \
+                "$(t "Deseja ver o relatório de validação para investigar as falhas agora?" \
+                      "Do you want to see the validation report to investigate the issues now?")" 10 72; then
+                show_validation_report
+            fi
+            return 1
         fi
-        return 0
     fi
+
     prompt_yes_no "$(t "Reparar Zebra" "Repair Zebra")" "$(t "Destravar o Zebra e reconstruir os índices do zero?" "Unlock Zebra and rebuild the indices from scratch?")" 10 70 || return 0
     clear
     display_explanation "Destravando o Zebra..." "Unlocking Zebra..."
@@ -2461,9 +2552,30 @@ $(t "Fila crescendo + índice menor que o banco = indexador parado." "Growing qu
     write_cron_zebra
     systemctl restart memcached koha-common >/dev/null 2>&1
     display_explanation "Reconstruindo os índices..." "Rebuilding the indices..."
-    /usr/sbin/koha-rebuild-zebra -f -v -b -a -r "$INSTANCE"
+    local zebra_ok="yes"
+    /usr/sbin/koha-rebuild-zebra -f -v -b -a -r "$INSTANCE" || zebra_ok="no"
     /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1
-    msg_ok "$(t "Zebra destravado e acervo reindexado." "Zebra unlocked and catalog reindexed.")" 9 66
+
+    validate_complete_system "$(t "reparo da indexação Zebra" "Zebra indexing repair")"
+
+    if [ "$zebra_ok" = "yes" ]; then
+        msg_ok "$(t "Zebra destravado e acervo reindexado com sucesso." "Zebra unlocked and catalog reindexed successfully.")" 9 68
+
+        if prompt_yes_no "$(t "Ver Relatório" "View Report")" \
+            "$(t "Deseja ver o relatório detalhado de validação do sistema agora?" \
+                  "Do you want to see the detailed system validation report now?")" 10 70; then
+            show_validation_report
+        fi
+        return 0
+    else
+        msg_error "" "$(t "A reconstrução dos índices do Zebra encontrou erros.\nConsulte os logs em /var/log/koha/${INSTANCE}." "Zebra index rebuild encountered errors.\nCheck logs at /var/log/koha/${INSTANCE}.")" 11 76
+        if prompt_yes_no "$(t "Ver Relatório" "View Report")" \
+            "$(t "Deseja ver o relatório de validação para investigar as falhas agora?" \
+                  "Do you want to see the validation report to investigate the issues now?")" 10 72; then
+            show_validation_report
+        fi
+        return 1
+    fi
 }
 
 # ======================================================================
@@ -3662,7 +3774,7 @@ function_autoupdate() {
     local size; size=$(stat -c %s "$tmp" 2>/dev/null || echo 0)
     
     if [ "$size" -lt 10240 ] || ! head -n1 "$tmp" | grep -q '^#!.*bash' || \
-       ! grep -q 'KOHA EASY INSTALL & TOOLS' "$tmp" || ! grep -q '"31"' "$tmp"; then
+       ! grep -q 'KOHA EASY INSTALL & TOOLS' "$tmp" || ! grep -q '"16"' "$tmp"; then
         rm -f "$tmp"
         msg_error "" "$(t "O arquivo baixado está incompleto, não parece ser o painel correto ou está inválido ($size bytes). Atualização cancelada." "The downloaded file is incomplete, not the expected panel, or invalid ($size bytes). Update cancelled.")" 11 78
         return 1
@@ -3795,15 +3907,17 @@ while true; do
             esac
             ;;
         7)
-            SUB_OPT=$(whiptail --title "$(t "Central de Diagnóstico e Manutenção" "Diagnostics & Maintenance Center")" --cancel-button "$(t "Voltar" "Back")" \
-                --menu "$(t "Escolha uma ferramenta:" "Choose a tool:")" 17 76 3 \
+SUB_OPT=$(whiptail --title "$(t "Central de Diagnóstico e Manutenção" "Diagnostics & Maintenance Center")" --cancel-button "$(t "Voltar" "Back")" \
+                --menu "$(t "Escolha uma ferramenta:" "Choose a tool:")" 18 76 4 \
                 "1" "$(t "Status detalhado do servidor e Koha" "Detailed server & Koha status")" \
                 "2" "$(t "Validação geral de integridade (Health Check)" "Full system health check")" \
-                "3" "$(t "Auditoria de logs do Apache em tempo real" "Real-time Apache log auditing")" 3>&1 1>&2 2>&3) || continue
+                "3" "$(t "Ver último relatório de validação" "View latest validation report")" \
+                "4" "$(t "Auditoria de logs do Apache em tempo real" "Real-time Apache log auditing")" 3>&1 1>&2 2>&3) || continue
             case "$SUB_OPT" in
                 1) function_detailed_status ;;
                 2) function_validate_system ;;
-                3) function_view_logs ;;
+                3) show_validation_report ;;
+                4) function_view_logs ;;
             esac
             ;;
         8)
