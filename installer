@@ -1298,59 +1298,96 @@ write_cron_tasks() {
         email_block=$(sed -n '/^# BEGIN KOHA EMAIL NOTICES$/,/^# END KOHA EMAIL NOTICES$/p' "$CRON_TASKS")
     fi
 
-    cat > "$CRON_TASKS" << EOF
+    if [ "$SYS_LANG" = "pt" ]; then
+        cat > "$CRON_TASKS" << EOF
 # ======================================================================
-# KOHA EASY INSTALL & TOOLS - TAREFAS AUTOMÁTICAS / SCHEDULED TASKS
+# KOHA EASY INSTALL & TOOLS - TAREFAS AUTOMÁTICAS AGENDADAS
 # ======================================================================
-# [PT] Este arquivo controla as manutenções automáticas periódicas do Koha.
-# [EN] This file controls Koha's periodic automated maintenance routines.
+# Este arquivo controla as manutenções automáticas periódicas do Koha.
 #
-# Formato / Format:
+# Formato dos agendamentos:
 # MIN HORA DIA_MES MES DIA_SEMANA(0=domingo) USUÁRIO COMANDO
 # ======================================================================
 $CRON_PATH
 MAILTO=""
 
-# [PT] Limpeza de logs do sistema antigos (mantém os últimos 14 dias) - Diário às 00:30
-# [EN] System log cleanup (keeps last 14 days) - Daily at 00:30
+# Limpeza de logs do sistema antigos (mantém os últimos 14 dias) - Diário às 00:30
 30 0 * * * root /usr/bin/journalctl --vacuum-time=14d >/dev/null 2>&1
 
-# [PT] Verificação preventiva de integridade das tabelas do banco - Dia 5 de cada mês à 01:00
-# [EN] Database table integrity check - 5th day of every month at 01:00
+# Verificação preventiva de integridade das tabelas do banco - Dia 5 de cada mês à 01:00
 0 1 5 * * root /usr/bin/mysqlcheck --check --databases ${DB_NAME} >/dev/null 2>&1
 
-# [PT] Reinicialização do acelerador Plack para liberar memória acumulada - Diário às 05:00
-# [EN] Plack accelerator restart to flush accumulated memory - Daily at 05:00
+# Reinicialização do acelerador Plack para liberar memória acumulada - Diário às 05:00
 0 5 * * * root /usr/sbin/koha-plack --restart ${INSTANCE} >/dev/null 2>&1
 
-# [PT] Backup completo do banco de dados (SQL comprimido) - Diário às 23:00
-# [EN] Full database backup (compressed SQL) - Daily at 23:00
+# Backup completo do banco de dados (SQL comprimido) - Diário às 23:00
 0 23 * * * root /bin/bash /root/backup_sql.sh >/dev/null 2>&1
 
-# [PT] Backup dos registros bibliográficos e autoridades em MARC21 - Domingos às 03:00
-# [EN] MARC21 bibliographic and authority records backup - Sundays at 03:00
+# Backup dos registros bibliográficos e autoridades em MARC21 - Domingos às 03:00
 0 3 * * 0 root /bin/bash /root/backup_marc.sh >/dev/null 2>&1
 
-# [PT] Limpeza de sessões inativas e fila do Zebra - Diário às 01:30
-# [EN] Clear old user sessions and Zebra queue - Daily at 01:30
+# Limpeza de sessões inativas e fila do Zebra - Diário às 01:30
 30 1 * * * root /usr/sbin/koha-shell ${INSTANCE} -c "/usr/share/koha/bin/cronjobs/cleanup_database.pl --sessions --sessdays 2 --zebraqueue 10" >/dev/null 2>&1
 EOF
+    else
+        cat > "$CRON_TASKS" << EOF
+# ======================================================================
+# KOHA EASY INSTALL & TOOLS - SCHEDULED AUTOMATED TASKS
+# ======================================================================
+# This file controls Koha's periodic automated maintenance routines.
+#
+# Schedule format:
+# MIN HOUR DAY_OF_MONTH MONTH DAY_OF_WEEK(0=Sunday) USER COMMAND
+# ======================================================================
+$CRON_PATH
+MAILTO=""
+
+# System log cleanup (keeps last 14 days) - Daily at 00:30
+30 0 * * * root /usr/bin/journalctl --vacuum-time=14d >/dev/null 2>&1
+
+# Database table integrity check - 5th day of every month at 01:00
+0 1 5 * * root /usr/bin/mysqlcheck --check --databases ${DB_NAME} >/dev/null 2>&1
+
+# Plack accelerator restart to flush accumulated memory - Daily at 05:00
+0 5 * * * root /usr/sbin/koha-plack --restart ${INSTANCE} >/dev/null 2>&1
+
+# Full database backup (compressed SQL) - Daily at 23:00
+0 23 * * * root /bin/bash /root/backup_sql.sh >/dev/null 2>&1
+
+# MARC21 bibliographic and authority records backup - Sundays at 03:00
+0 3 * * 0 root /bin/bash /root/backup_marc.sh >/dev/null 2>&1
+
+# Clear old user sessions and Zebra queue - Daily at 01:30
+30 1 * * * root /usr/sbin/koha-shell ${INSTANCE} -c "/usr/share/koha/bin/cronjobs/cleanup_database.pl --sessions --sessdays 2 --zebraqueue 10" >/dev/null 2>&1
+EOF
+    fi
 
     if [ -n "$email_block" ]; then
         printf '%s\n' "$email_block" >> "$CRON_TASKS"
     else
-        cat >> "$CRON_TASKS" << EOF
+        if [ "$SYS_LANG" = "pt" ]; then
+            cat >> "$CRON_TASKS" << EOF
 
 # BEGIN KOHA EMAIL NOTICES
-# [PT] Processa regras de atraso e gera notificações aos leitores - Diário às 08:00
-# [EN] Triggers overdue rules and generates patron notices - Daily at 08:00
+# Processa regras de atraso e gera notificações aos leitores - Diário às 08:00
 0 8 * * * root /usr/sbin/koha-shell ${INSTANCE} -c "/usr/share/koha/bin/cronjobs/overdue_notices.pl -v -t" >/dev/null 2>&1
 
-# [PT] Dispara os e-mails pendentes na fila de saída - Diário às 08:05
-# [EN] Dispatches pending emails from message queue - Daily at 08:05
+# Dispara os e-mails pendentes na fila de saída - Diário às 08:05
 5 8 * * * root /usr/sbin/koha-shell ${INSTANCE} -c "/usr/share/koha/bin/cronjobs/process_message_queue.pl -v" >/dev/null 2>&1
 # END KOHA EMAIL NOTICES
 EOF
+        else
+            cat >> "$CRON_TASKS" << EOF
+
+# BEGIN KOHA EMAIL NOTICES
+# Triggers overdue rules and generates patron notices - Daily at 08:00
+0 8 * * * root /usr/sbin/koha-shell ${INSTANCE} -c "/usr/share/koha/bin/cronjobs/overdue_notices.pl -v -t" >/dev/null 2>&1
+
+# Dispatches pending emails from message queue - Daily at 08:05
+5 8 * * * root /usr/sbin/koha-shell ${INSTANCE} -c "/usr/share/koha/bin/cronjobs/process_message_queue.pl -v" >/dev/null 2>&1
+# END KOHA EMAIL NOTICES
+EOF
+        fi
     fi
 
     chmod 644 "$CRON_TASKS"
@@ -1622,7 +1659,7 @@ function_install_koha() {
     /usr/sbin/koha-worker --start "$INSTANCE" >/dev/null 2>&1
     /usr/sbin/koha-worker --start --queue long_tasks "$INSTANCE" >/dev/null 2>&1
 
-    display_explanation "Criando backups automáticos e credenciais..." "Creating automatic backups and credentials..."
+display_explanation "Criando backups automáticos e credenciais..." "Creating automatic backups and credentials..."
     local db_pass ip
     db_pass=$(get_database_password)
     ip=$(get_server_ip)
@@ -2508,17 +2545,19 @@ function_configure_rclone() {
     local choice
     choice=$(whiptail --title "$(t "Backup em Nuvem" "Cloud Backup")" \
         --cancel-button "$(t "Voltar" "Back")" \
-        --menu "$(t "Como deseja configurar o envio automático de Backups?" "How do you want to configure auto cloud backups?")" 15 76 2 \
-        "1" "$(t "Expresso (Google Drive)" "Express (Google Drive)")" \
-        "2" "$(t "Manual (Qualquer serviço - Assistente do Rclone)" "Manual (Any service - Rclone Wizard)")" 3>&1 1>&2 2>&3) || return 0
+        --menu "$(t "Como deseja configurar o envio automático de Backups?" "How do you want to configure auto cloud backups?")" 16 76 3 \
+        "1" "$(t "Expresso: Gerar token em outro PC (SSH / Headless)" "Express: Generate token on another PC (SSH / Headless)")" \
+        "2" "$(t "Expresso: Autenticar diretamente neste servidor" "Express: Authenticate directly on this server")" \
+        "3" "$(t "Manual: Assistente padrão do Rclone (Outros serviços)" "Manual: Standard Rclone Wizard (Other services)")" 3>&1 1>&2 2>&3) || return 0
     [ -z "$choice" ] && return 0
+
     if [ "$choice" = "1" ]; then
         clear
         echo "======================================================================"
-        echo -e "\e[1;36m$(t "CONFIGURAÇÃO EXPRESSA DO GOOGLE DRIVE (TERMINAL PURO)" "EXPRESS GOOGLE DRIVE CONFIGURATION (PURE TERMINAL)")\e[0m"
+        echo -e "\e[1;36m$(t "CONFIGURAÇÃO EXPRESSA DO GOOGLE DRIVE (VIA COMPUTADOR PESSOAL)" "EXPRESS GOOGLE DRIVE CONFIGURATION (VIA PERSONAL PC)")\e[0m"
         echo "======================================================================"
         echo ""
-        echo "$(t "Como este servidor não possui navegador web, você deve autorizar" "Because this server has no web browser, you must authorize")"
+        echo "$(t "Como este servidor não possui navegador web direto, você pode autorizar" "Because this server has no direct web browser, you can authorize")"
         echo "$(t "a conexão a partir do seu próprio computador pessoal (Windows/Mac/Linux)." "the connection from your personal computer (Windows/Mac/Linux).")"
         echo ""
         echo "----------------------------------------------------------------------"
@@ -2570,6 +2609,49 @@ function_configure_rclone() {
             read -r -p "$(t "Pressione [ENTER] para voltar ao menu..." "Press [ENTER] to return to menu...")"
         fi
         return 0
+
+    elif [ "$choice" = "2" ]; then
+        clear
+        echo "======================================================================"
+        echo -e "\e[1;36m$(t "AUTENTICAÇÃO DIRETA NO SERVIDOR (LOCAL / COM NAVEGADOR OU TUNEL)" "DIRECT SERVER AUTHENTICATION (LOCAL / WITH BROWSER OR TUNNEL)")\e[0m"
+        echo "======================================================================"
+        echo ""
+        echo "$(t "O Rclone vai iniciar um servidor de autenticação nesta máquina na porta 53682." "Rclone will start an authentication server on this machine on port 53682.")"
+        echo "$(t "Um link de autorização será gerado abaixo." "An authorization link will be printed below.")"
+        echo ""
+        echo "$(t "1. Abra o link gerado em qualquer navegador que tenha acesso à rede deste servidor." "1. Open the generated link in any browser with network access to this server.")"
+        echo "$(t "2. Faça login na conta Google e autorize o aplicativo." "2. Log in with your Google account and authorize the app.")"
+        echo "$(t "3. O terminal capturará o token automaticamente sem precisar copiar e colar nada!" "3. The terminal will capture the token automatically without copy-pasting!")"
+        echo ""
+        echo "----------------------------------------------------------------------"
+        echo -e "\e[1;33m$(t "Aguardando autorização no navegador (Pressione CTRL+C se desejar cancelar)..." "Waiting for browser authorization (Press CTRL+C to cancel)...")\e[0m"
+        echo "----------------------------------------------------------------------"
+        echo ""
+
+        local token_output
+        token_output=$(rclone authorize "drive" --auth-no-open-browser 2>&1)
+        local extracted_token
+        extracted_token=$(echo "$token_output" | grep -o '{.*}' | head -n 1)
+
+        if [ -n "$extracted_token" ] && python3 -c 'import sys, json; json.loads(sys.argv[1])' "$extracted_token" 2>/dev/null; then
+            echo ""
+            echo -e "\e[1;32m[OK] $(t "Token capturado automaticamente com sucesso!" "Token captured automatically!")\e[0m"
+            rclone config delete gdrive >/dev/null 2>&1 || true
+            if rclone config create gdrive drive config_is_local false token "$extracted_token" --non-interactive < /dev/null >/dev/null 2>&1; then
+                echo -e "\e[1;32m[OK] $(t "Conexão 'gdrive' criada com sucesso!" "'gdrive' remote successfully created!")\e[0m"
+                validate_and_register_rclone "gdrive"
+            else
+                msg_error "" "$(t "Falha ao registrar a conexão gdrive no Rclone." "Failed to register gdrive remote in Rclone.")" 8 66
+            fi
+        else
+            echo ""
+            echo -e "\e[1;31m[ERRO] $(t "Não foi possível capturar o token automaticamente. Tente a Opção 1." "Could not capture token automatically. Try Option 1.")\e[0m"
+            echo "$token_output" | tail -n 10
+            echo ""
+            pause_terminal
+        fi
+        return 0
+
     else
         clear
         rclone config
@@ -3727,7 +3809,7 @@ while true; do
                         msg_error "" "$(t "Não consegui criar o backup do koha-conf.xml. A senha não foi alterada." "Could not back up koha-conf.xml. Password was not changed.")" 9 74
                         continue
                     }
-                    if mysql -e "ALTER USER '${DB_NAME}'@'localhost' IDENTIFIED BY '${new_pass}'; FLUSH PRIVILEGES;"; then
+if mysql -e "ALTER USER '${DB_NAME}'@'localhost' IDENTIFIED BY '${new_pass}'; FLUSH PRIVILEGES;"; then
                         sed -i "s|<pass>[^<]*</pass>|<pass>${new_pass}</pass>|g" "$KOHA_CONF"
                         if ! xmllint --noout "$KOHA_CONF" >/dev/null 2>&1; then
                             cp -f "$xml_bak" "$KOHA_CONF"
@@ -3735,7 +3817,7 @@ while true; do
                             msg_error "" "$(t "A nova senha foi desfeita porque o koha-conf.xml ficou inválido.\nNada foi reiniciado." "The new password was rolled back because koha-conf.xml became invalid.\nNothing was restarted.")" 11 76
                             continue
                         fi
-                        sed -i "s|Senha   / Password    : .*|Senha   / Password    : ${new_pass}|" /root/credenciais_koha.txt 2>/dev/null
+                        sed -i -E "s|^([[:space:]]*Senha[[:space:]]*:[[:space:]]*).*|\1${new_pass}|; s|^([[:space:]]*Password[[:space:]]*:[[:space:]]*).*|\1${new_pass}|" /root/credenciais_koha.txt 2>/dev/null
                         systemctl restart memcached koha-common >/dev/null 2>&1
                         koha-plack --restart "$INSTANCE" >/dev/null 2>&1
                         sleep 2
