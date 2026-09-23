@@ -1508,8 +1508,12 @@ function_install_koha() {
     fi
 
     display_explanation "Criando a instância '${INSTANCE}' do Koha..." "Creating the '${INSTANCE}' Koha instance..."
-    if ! /usr/sbin/koha-create --create-db "$INSTANCE"; then
-        msg_error "" "$(t "Falha ao criar a instância do Koha.\nVeja o terminal para o erro exato." "Failed to create the Koha instance.\nSee the terminal for the exact error.")" 9 70
+    
+    # FIX: Agora o script captura erros silenciosos de criação de instância e os mostra em um pop-up
+    if ! /usr/sbin/koha-create --create-db "$INSTANCE" > /tmp/koha_create.log 2>&1; then
+        local err_msg
+        err_msg=$(tail -n 15 /tmp/koha_create.log 2>/dev/null || echo "Log vazio.")
+        msg_error "" "$(t "Falha ao criar a instância do Koha.\n\nDetalhes:\n$err_msg" "Failed to create the Koha instance.\n\nDetails:\n$err_msg")" 18 80
         return 1
     fi
 
@@ -1580,9 +1584,25 @@ EOF
     validate_complete_system "instalação concluída"
     log "instalacao concluida (ok=$V_OK warn=$V_WARN fail=$V_FAIL)"
 
+    local result_msg
+    if [ "$V_FAIL" -eq 0 ]; then
+        result_msg="$(t "INSTALAÇÃO CONCLUÍDA SEM ERROS CRÍTICOS.\n\n" "INSTALLATION COMPLETE WITH NO CRITICAL ERRORS.\n\n")"
+    else
+        result_msg="$(t "INSTALAÇÃO CONCLUÍDA, MAS COM FALHAS ($V_FAIL).\nO sistema pode apresentar problemas.\n\n" "INSTALLATION COMPLETE, BUT WITH FAILURES ($V_FAIL).\nThe system may have issues.\n\n")"
+    fi
+
     msg_info "$(t "Instalação Concluída" "Installation Complete")" \
-"$(t "INSTALAÇÃO CONCLUÍDA.\n\nACESSO:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENCIAIS (salvas em /root/credenciais_koha.txt):\n  Usuário: ${DB_NAME}\n  Senha:   ${db_pass}\n\nPASSO SEGUINTE: abra o Staff no navegador para o Web Installer (ou use a opção 3 se tiver backup).\n\nValidação: OK=$V_OK  Avisos=$V_WARN  Falhas=$V_FAIL" \
-"INSTALLATION COMPLETE.\n\nACCESS:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENTIALS (saved in /root/credenciais_koha.txt):\n  User: ${DB_NAME}\n  Pass: ${db_pass}\n\nNEXT STEP: open Staff in browser for the Web Installer (or use option 3 with a backup).\n\nValidation: OK=$V_OK  Warnings=$V_WARN  Failures=$V_FAIL")" 24 78
+"${result_msg}$(t "ACESSO:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENCIAIS (salvas em /root/credenciais_koha.txt):\n  Usuário: ${DB_NAME}\n  Senha:   ${db_pass}\n\nPASSO SEGUINTE: abra o Staff no navegador para o Web Installer (ou use a opção 3 se tiver backup).\n\nValidação: OK=$V_OK  Avisos=$V_WARN  Falhas=$V_FAIL" \
+"ACCESS:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENTIALS (saved in /root/credenciais_koha.txt):\n  User: ${DB_NAME}\n  Pass: ${db_pass}\n\nNEXT STEP: open Staff in browser for the Web Installer (or use option 3 with a backup).\n\nValidation: OK=$V_OK  Warnings=$V_WARN  Failures=$V_FAIL")" 26 78
+
+    # FIX: Prompt visual para exibir o relatório de diagnóstico imediatamente se houver falhas ou avisos
+    if [ "$V_FAIL" -gt 0 ] || [ "$V_WARN" -gt 0 ]; then
+        if prompt_yes_no "$(t "Ver Diagnóstico" "View Diagnostics")" \
+            "$(t "A validação final encontrou problemas (Falhas: $V_FAIL | Avisos: $V_WARN).\n\nDeseja ver o relatório detalhado agora para saber o que falhou?" \
+            "Final validation found issues (Failures: $V_FAIL | Warnings: $V_WARN).\n\nDo you want to see the detailed report now to know what failed?")" 12 76; then
+            show_validation_report
+        fi
+    fi
 
     if prompt_yes_no "$(t "Reiniciar Servidor (Recomendado)" "Reboot Server (Recommended)")" \
 "$(t "Para ativar a aceleração total do Plack, carregar a SWAP e garantir o desempenho máximo do catálogo, é altamente recomendado reiniciar a máquina agora.\n\nAs credenciais já foram guardadas em /root/credenciais_koha.txt.\n\nDeseja reiniciar o servidor imediatamente?" \
@@ -1597,53 +1617,6 @@ EOF
 "$(t "Tudo certo! Você optou por reiniciar mais tarde.\n\nLembre-se: se o catálogo parecer lento, reinicie o servidor através da opção 25 do painel antes de realizar cadastros pesados." \
 "All set! You chose to reboot later.\n\nRemember: if the catalog feels sluggish, restart the server via option 25 in the panel before heavy indexing.")" 11 74
     fi
-}
-
-define_koha_sites_conf() {
-    local f="/etc/koha/koha-sites.conf"
-    [ -f "$f" ] || return 0
-    cp -f "$f" "${f}.bak-$(date +%s)" 2>/dev/null
-    set_conf() {
-        local key="$1" val="$2"
-        if grep -qE "^[[:space:]]*#?[[:space:]]*${key}=" "$f"; then
-            sed -i -E "s|^[[:space:]]*#?[[:space:]]*${key}=.*|${key}=\"${val}\"|" "$f"
-        else
-            echo "${key}=\"${val}\"" >> "$f"
-        fi
-    }
-    set_conf INTRAPORT 8080
-    set_conf OPACPORT 80
-    set_conf USE_MEMCACHED yes
-    set_conf MEMCACHED_SERVERS "127.0.0.1:11211"
-    set_conf MEMCACHED_PREFIX "koha_"
-    set_conf ZEBRA_MARC_FORMAT marc21
-    set_conf ZEBRA_LANGUAGE en
-    if [ -f /etc/koha/koha-conf-site.xml.in ]; then
-        sed -i 's/__MEMCACHED_SERVERS__/127.0.0.1:11211/g; s/__MEMCACHED_PREFIX__/koha_/g' /etc/koha/koha-conf-site.xml.in
-    fi
-}
-
-choose_timezone() {
-    local current choice
-    current=$(timedatectl show -p Timezone --value 2>/dev/null)
-    choice=$(whiptail --title "$(t "Fuso Horário" "Timezone")" \
-        --cancel-button "$(t "Manter" "Keep")" \
-        --menu "$(t "Atual:" "Current:") ${current:-UTC}\n\n$(t "Escolha o fuso do servidor:" "Choose the server timezone:")" 20 72 9 \
-        "America/Sao_Paulo"  "Brasil - Brasilia/SP/RJ/PR/SC/RS/MG" \
-        "America/Manaus"     "Brasil - Amazonas / Mato Grosso" \
-        "America/Belem"      "Brasil - Para / Amapa" \
-        "America/Fortaleza"  "Brasil - Nordeste" \
-        "America/Rio_Branco" "Brasil - Acre" \
-        "Europe/Lisbon"      "Portugal" \
-        "UTC"                "UTC" \
-        "OUTRO"              "$(t "Outro (lista completa)" "Other (full list)")" 3>&1 1>&2 2>&3) || return 1
-    [ -z "$choice" ] && return 1
-    if [ "$choice" = "OUTRO" ]; then
-        clear
-        dpkg-reconfigure tzdata
-        return 1
-    fi
-    printf '%s' "$choice"
 }
 
 # ======================================================================
