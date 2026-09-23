@@ -15,7 +15,7 @@ set -o pipefail
 umask 022
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
-PANEL_VERSION=" β-0.73"
+PANEL_VERSION=" β-0.74"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
