@@ -13,7 +13,7 @@
 set -o pipefail
 umask 022
 
-PANEL_VERSION="1.0"
+PANEL_VERSION="V. β0.8"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
