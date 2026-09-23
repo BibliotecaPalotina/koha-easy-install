@@ -15,7 +15,7 @@ set -o pipefail
 umask 022
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
-PANEL_VERSION=" β-0.72"
+PANEL_VERSION=" β-0.73"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
@@ -2252,12 +2252,21 @@ function_install_languages() {
                 mysql_runner="sudo mysql"
             fi
 
+            # Habilita o idioma nas listas de seleção do Staff (language) e do catálogo (opaclanguages)
             for pref in "language" "opaclanguages"; do
                 $mysql_runner -e "INSERT INTO ${DB_NAME}.systempreferences (variable, value, type) VALUES ('$pref', '${choice}', 'Free') ON DUPLICATE KEY UPDATE value = IF(value = '' OR value IS NULL, '${choice}', IF(value LIKE '%${choice}%', value, CONCAT(value, ',', '${choice}')));" >/dev/null 2>&1
             done
+
+            # Ativa diretamente como idioma padrão primário do Staff
+            $mysql_runner -e "INSERT INTO ${DB_NAME}.systempreferences (variable, value, type) VALUES ('StaffLanguage', '${choice}', 'Free') ON DUPLICATE KEY UPDATE value = '${choice}';" >/dev/null 2>&1 || true
+
+            # Limpa as sessões ativas para que navegadores logados recebam os novos templates imediatamente
+            $mysql_runner -e "DELETE FROM ${DB_NAME}.sessions;" >/dev/null 2>&1 || true
             
+            # Limpeza completa de cache de templates
             $sudo_cmd systemctl restart memcached >/dev/null 2>&1 || true
             $sudo_cmd /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
+            $sudo_cmd systemctl reload apache2 >/dev/null 2>&1 || true
         fi
         msg_ok "$(t "Idioma '$choice' ativado com sucesso.\nAjustes finos em: Administração > Preferências > I18N/L10N." "Language '$choice' enabled successfully.\nFine tuning in: Administration > Preferences > I18N/L10N.")" 10 74
     else
@@ -2268,7 +2277,6 @@ function_install_languages() {
 
     [ "$created_mock" -eq 1 ] && rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
 }
-
 # ======================================================================
 # 8. ALTERNAR MOTOR DE BUSCA / TOGGLE SEARCH ENGINE
 # ======================================================================
@@ -3107,13 +3115,21 @@ function_configure_cloudflare() {
     local tunnel_name="koha-library"
     display_explanation "Verificando túnel na Cloudflare..." "Checking Cloudflare tunnel..."
     
-    # Se o túnel já existe, apenas avisa e continua; se não existe, cria
-    if cloudflared tunnel list 2>/dev/null | grep -q "$tunnel_name"; then
-        log "$(t "Túnel '$tunnel_name' já existe; reaproveitando..." "Tunnel '$tunnel_name' already exists; reusing...")"
+    local tunnel_id_check
+    tunnel_id_check=$(cloudflared tunnel list 2>/dev/null | awk -v n="$tunnel_name" '$0 ~ n {print $1; exit}')
+
+    # Verifica se o túnel existe E se o arquivo .json correspondente está presente nesta máquina
+    if [ -n "$tunnel_id_check" ] && { [ -f "$REAL_HOME/.cloudflared/${tunnel_id_check}.json" ] || [ -f "/root/.cloudflared/${tunnel_id_check}.json" ]; }; then
+        log "$(t "Túnel '$tunnel_name' já existe e tem credenciais; reaproveitando..." "Tunnel '$tunnel_name' already exists with credentials; reusing...")"
     else
         display_explanation "Criando o túnel '$tunnel_name'..." "Creating tunnel '$tunnel_name'..."
+        # Se o túnel existe na nuvem mas não tem o arquivo .json local, remove da nuvem para recriar do zero
+        if [ -n "$tunnel_id_check" ]; then
+            cloudflared tunnel delete -f "$tunnel_name" >/dev/null 2>&1 || true
+        fi
+
         if ! cloudflared tunnel create "$tunnel_name"; then
-            msg_error "" "$(t "Falha ao criar o túnel. Ele pode já existir na sua conta cloudflare com outro ID." "Failed to create tunnel. It might already exist in your account.")" 10 74
+            msg_error "" "$(t "Falha ao criar o túnel." "Failed to create tunnel.")" 10 74
             return 1
         fi
     fi
