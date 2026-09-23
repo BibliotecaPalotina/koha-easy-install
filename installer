@@ -1374,25 +1374,25 @@ write_banner() {
 \S
 
 
-               __________________________________________________
-             //=================================================\\\\
-            //          .-----------------------------.          \\\\
-           //           |   K O H A   L I B R A R Y   |           \\\\
-          //       .----'-----------------------------'----.       \\\\
-        _//_======[     PUBLIC CATALOG & AUTOMATION SUITE   ]======_\\\\_
-       |____|____________________________________________________|_____|
-        |--|  PAINEL DE CONTROLE / CONTROL DASHBOARD:             |--|
-        |--|  sudo options.sh                                     |--|
-        |  |  ==================================================  |  |
-        |  |  ENDEREÇOS / URLS:                                   |  |
-        |  |  - Staff (Intranet): $(printf "%-31s" "$url_staff") |  |
-        |  |  - OPAC (Public):    $(printf "%-31s" "$url_opac") |  |
-        |  |  --------------------------------------------------  |  |
-        |  |  - Usuário/User:     $(printf "%-31s" "$user") |  |
-        |  |  - Senha/Pass:       cat /root/credenciais_koha.txt  |  |
-        |  |======================================================|  |
-       /===/=======================================================\\==\\
-      /___/_________________________________________________________\\__\\
+               __________________________________________________    
+             //=================================================\\\\    
+            //          .-----------------------------.          \\\\    
+           //           |   K O H A   L I B R A R Y   |           \\\\    
+          //       .----'-----------------------------'----.       \\\\    
+        _//_======[     PUBLIC CATALOG & AUTOMATION SUITE   ]======_\\\\_    
+       |____|____________________________________________________|_____|    
+        |--|  PAINEL DE CONTROLE / CONTROL DASHBOARD:             |--|    
+        |--|  options.sh                                          |--|    
+        |  |  ==================================================  |  |    
+        |  |  ENDEREÇOS / URLS:                                   |  |    
+        |  |  - Staff (Intranet): $(printf "%-31s" "$url_staff") |  |    
+        |  |  - OPAC (Public):    $(printf "%-31s" "$url_opac") |  |    
+        |  |  --------------------------------------------------  |  |    
+        |  |  - Usuário/User:     $(printf "%-31s" "$user") |  |    
+        |  |  - Senha/Pass:       cat /root/credenciais_koha.txt  |  |    
+        |  |======================================================|  |    
+       /===/=======================================================\\==\\    
+      /___/_________________________________________________________\\__\\    
 
 
 EOF
@@ -1404,9 +1404,6 @@ EOF
 # 1. INSTALAÇÃO DO SERVIDOR / SERVER INSTALLATION
 # ======================================================================
 function_install_koha() {
-    msg_info "$(t "Instalação" "Installation")" \
-        "$(t "Este assistente vai instalar MariaDB, Apache, Memcached e o Koha (motor de busca Zebra por padrão).\n\nPode levar de 10 a 30 minutos. Não feche o terminal." "This wizard installs MariaDB, Apache, Memcached and Koha (Zebra search engine by default).\n\nIt can take 10 to 30 minutes. Do not close the terminal.")" 13 74
-    clear
     validate_pre_installation || return 0
 
     local tz
@@ -1550,17 +1547,20 @@ function_install_koha() {
         return 1
     fi
 
-    sed -i 's/__MEMCACHED_SERVERS__/127.0.0.1:11211/g; s/__MEMCACHED_PREFIX__/koha_library:/g' "$KOHA_CONF" 2>/dev/null
+sed -i 's/__MEMCACHED_SERVERS__/127.0.0.1:11211/g; s/__MEMCACHED_PREFIX__/koha_library:/g' "$KOHA_CONF" 2>/dev/null
 
-    a2dissite 000-default >/dev/null 2>&1
+    # FIX: Desativa explicitamente os confs padrão do Debian/Ubuntu e apaga o index default
+    a2dissite 000-default 000-default.conf default-ssl default-ssl.conf >/dev/null 2>&1
+    rm -f /var/www/html/index.html
+
     a2enmod headers proxy proxy_http >/dev/null 2>&1
-    a2ensite "$INSTANCE" >/dev/null 2>&1
+    a2ensite "$INSTANCE" "${INSTANCE}.conf" >/dev/null 2>&1
     systemctl enable --now memcached >/dev/null 2>&1
     systemctl restart apache2 memcached koha-common >/dev/null 2>&1
 
     [ "$SYS_LANG" = "pt" ] && /usr/sbin/koha-translate --install pt-BR >/dev/null 2>&1
     /usr/sbin/koha-plack --enable "$INSTANCE" >/dev/null 2>&1
-    /usr/sbin/koha-plack --start  "$INSTANCE" >/dev/null 2>&1
+    /usr/sbin/koha-plack --start "$INSTANCE" >/dev/null 2>&1
     systemctl restart apache2 >/dev/null 2>&1
 
     display_explanation "Ativando o Zebra e a indexação incremental..." "Enabling Zebra and incremental indexing..."
