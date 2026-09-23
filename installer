@@ -2023,7 +2023,12 @@ function_install_languages() {
         systemctl restart memcached >/dev/null 2>&1
         /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1
         if prompt_yes_no "$(t "Ativar idioma" "Enable language")" "$(t "Pacote processado.\n\nQuer ativá-lo já nas preferências (OPAC e Staff)?" "Package processed.\n\nEnable it right away in the preferences (OPAC and Staff)?")" 10 70; then
-            mysql -e "UPDATE ${DB_NAME}.systempreferences SET value=CONCAT(value,',','${choice}') WHERE variable IN ('language','OPACLanguages') AND value NOT LIKE '%${choice}%';" >/dev/null 2>&1
+            
+            # Correção: Injeção à prova de falhas para as interfaces Staff (language) e OPAC (opaclanguages)
+            for pref in "language" "opaclanguages"; do
+                mysql -e "INSERT INTO ${DB_NAME}.systempreferences (variable, value, type) VALUES ('$pref', '${choice}', 'Free') ON DUPLICATE KEY UPDATE value = IF(value = '' OR value IS NULL, '${choice}', IF(value LIKE '%${choice}%', value, CONCAT(value, ',', '${choice}')));" >/dev/null 2>&1
+            done
+            
             systemctl restart memcached >/dev/null 2>&1
             /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1
         fi
