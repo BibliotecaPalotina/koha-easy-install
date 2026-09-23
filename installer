@@ -1342,10 +1342,10 @@ write_banner() {
 \S
 
 
-              __________________________________________________
-            //=================================================\\\\
-           //          .-----------------------------.          \\\\
-          //           |   K O H A   L I B R A R Y   |           \\\\
+               __________________________________________________
+             //=================================================\\\\
+            //          .-----------------------------.          \\\\
+           //           |   K O H A   L I B R A R Y   |           \\\\
           //       .----'-----------------------------'----.       \\\\
         _//_======[     PUBLIC CATALOG & AUTOMATION SUITE   ]======_\\\\_
        |____|____________________________________________________|_____|
@@ -1997,20 +1997,17 @@ function_install_languages() {
     sed -i -E "s/^#[[:space:]]*(${loc_prefix}[^[:space:]]*\.UTF-8[[:space:]]+UTF-8)/\1/i" /etc/locale.gen
     locale-gen >/dev/null 2>&1
 
-    local cmd_status=0
-    
-    # Verifica se já está instalado para não causar erro ao tentar instalar por cima
+    # Verifica se já está instalado
     if koha-translate --list 2>/dev/null | grep -qx "$choice"; then
         display_explanation "O idioma já está instalado. Atualizando os templates..." "Language already installed. Updating templates..."
         /usr/sbin/koha-translate --update "$choice" > /tmp/koha_lang.log 2>&1
-        cmd_status=$?
     else
         display_explanation "Compilando e instalando idioma no Koha (pode demorar): $choice" "Compiling and installing language in Koha (may take a while): $choice"
         /usr/sbin/koha-translate --install "$choice" > /tmp/koha_lang.log 2>&1
-        cmd_status=$?
     fi
 
-    if [ $cmd_status -eq 0 ]; then
+    # Validação baseada na lista real do Koha, ignorando falsos positivos (ex: koha-foreach: not found)
+    if koha-translate --list 2>/dev/null | grep -qx "$choice"; then
         systemctl restart memcached >/dev/null 2>&1
         /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1
         if prompt_yes_no "$(t "Ativar idioma" "Enable language")" "$(t "Pacote processado.\n\nQuer ativá-lo já nas preferências (OPAC e Staff)?" "Package processed.\n\nEnable it right away in the preferences (OPAC and Staff)?")" 10 70; then
