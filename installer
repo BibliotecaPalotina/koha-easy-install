@@ -15,7 +15,7 @@ set -o pipefail
 umask 022
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
-PANEL_VERSION="β 0.7"
+PANEL_VERSION=" β-0.72"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
@@ -1416,53 +1416,61 @@ write_banner() {
     local url_staff="http://${ip}:8080"
     local url_opac="http://${ip}:80"
 
+    # Define o usuário e comando SSH
+    local ssh_user="${REAL_USER:-servidor}"
+    [ "$ssh_user" = "root" ] && ssh_user="servidor"
+    local str_ssh="ACESSO SSH        : ssh ${ssh_user}@${ip}"
+
     local t_head t_suite l_ctrl l_urls l_user l_pass
     if [ "$SYS_LANG" = "pt" ]; then
-        t_head="  B I B L I O T E C A   K O H A  "       # 29 chars
-        t_suite="  CATALOGO PUBLICO & AUTOMACAO   "      # 33 chars
-        l_ctrl="PAINEL DE CONTROLE : options.sh           " # 41 chars
-        l_urls="ENDERECOS / ACESSO WEB:                   " # 41 chars
-        l_user="- Usuario (Admin)  : "                      # 21 chars
-        l_pass="- Senha (Root)     : "                      # 21 chars
+        t_head="    B I B L I O T E C A   K O H A    "  # 37 chars
+        t_suite="   CATALOGO PUBLICO & AUTOMACAO   "   # 34 chars
+        l_ctrl="PAINEL DE CONTROLE: options.sh"
+        l_urls="ENDERECOS / ACESSO WEB:"
+        l_user="- Usuario (Admin) : "
+        l_pass="- Senha (Root)    : "
     else
-        t_head="   K O H A   L I B R A R Y   "           # 29 chars
-        t_suite="PUBLIC CATALOG & AUTOMATION SUITE"      # 33 chars
-        l_ctrl="CONTROL DASHBOARD  : options.sh           " # 41 chars
-        l_urls="URLS / WEB ACCESS     :                   " # 41 chars
-        l_user="- User (Admin)     : "                      # 21 chars
-        l_pass="- Password (Root)  : "                      # 21 chars
+        t_head="     K O H A   L I B R A R Y     "  # 37 chars
+        t_suite=" PUBLIC CATALOG & AUTOMATION SUITE"   # 34 chars
+        l_ctrl="CONTROL DASHBOARD : options.sh"
+        l_urls="URLS / WEB ACCESS   :"
+        l_user="- User (Admin)    : "
+        l_pass="- Password (Root) : "
     fi
 
-    # Formata os campos variáveis em exatamente 27 caracteres para fechar 48 úteis + bordas
-    local f_staff f_opac f_user f_pass
-    f_staff=$(printf "%-27.27s" "$url_staff")
-    f_opac=$(printf "%-27.27s" "$url_opac")
-    f_user=$(printf "%-27.27s" "$user")
-    f_pass=$(printf "%-27.27s" "cat /root/credenciais_koha.txt")
+    # Formata rigorosamente para 50 caracteres úteis entre as colunas |  |
+    local f_ctrl f_ssh f_urls f_staff f_opac f_user f_pass
+    f_ctrl=$(printf "%-50.50s" "$l_ctrl")
+    f_ssh=$(printf "%-50.50s" "$str_ssh")
+    f_urls=$(printf "%-50.50s" "$l_urls")
+    f_staff=$(printf "%-50.50s" "- Staff (Intranet): $url_staff")
+    f_opac=$(printf "%-50.50s" "- OPAC  (Public)  : $url_opac")
+    f_user=$(printf "%-50.50s" "${l_user}${user}")
+    f_pass=$(printf "%-50.50s" "${l_pass}cat /root/credenciais_koha.txt")
 
     cat > /etc/issue << EOF
 \S
 
 
-                __________________________________________________    
-              //=================================================\\\\    
-             //         .--------------------------------.          \\\\    
-            //           ${t_head}||   \\\\    
-           //       .-------------------------------------'----.        \\\\    
-         _//_======[     ${t_suite}    ]======_\\\\_    
-        |____|___________________________________________________|_____|    
-         |--|  ${l_ctrl}        |--|    
-         |  |  ssh ${USER_NAME}@${IP_ADDR}   |  |
-         |  | ==============================================++==== |  |    
-         |  |  ${l_urls}        |  |    
-         |  |  - Staff (Intranet) : ${f_staff}  |  |    
-         |  |  - OPAC  (Public)   : ${f_opac}  |  |    
-         |  |  --------------------------------------------------  |  |    
-         |  |  ${l_user}${f_user}   |  |    
-         |  |  ${l_pass}${f_pass}   |  |    
-         |  |======================================================|  |    
-        /===/=======================================================\\==\\    
-       /___/_________________________________________________________\\__\\    
+                __________________________________________________
+              //==================================================\\\\
+             //         .--------------------------------.         \\\\
+            //         | ${t_head}|         \\\\
+           //       .-------------------------------------'----.        \\\\
+         _//_======[  ${t_suite}  ]======_\\\\_
+        |____|____________________________________________________|____|
+         |--|  ${f_ctrl}  |--|
+         |  |  ${f_ssh}  |  |
+         |  | ================================================== |  |
+         |  |  ${f_urls}  |  |
+         |  |  ${f_staff}  |  |
+         |  |  ${f_opac}  |  |
+         |  |  --------------------------------------------------  |  |
+         |  |  ${f_user}  |  |
+         |  |  ${f_pass}  |  |
+         |  |====================================================|  |
+        /===/======================================================\\==\\
+       /___/________________________________________________________\\__\\
 
 
 EOF
@@ -1830,14 +1838,20 @@ show_ip_discovery_help() {
     echo ""
     echo "$(t "Execute no terminal/PowerShell da máquina de DESTINO:" "Run in the DESTINATION machine terminal/PowerShell:")"
     echo ""
-    echo "$(t "Windows (PowerShell):" "Windows (PowerShell):")"
-    echo 'Write-Host "IP: $((Get-NetRoute -DestinationPrefix '"'"'0.0.0.0/0'"'"' | Get-NetIPAddress -AddressFamily IPv4).IPAddress) | Usuario: $env:USERNAME"'
+    echo "$(t "Windows (PowerShell ou Prompt de Comando):" "Windows (PowerShell or Command Prompt):")"
+    cat << 'EOF'
+powershell -Command "Write-Host ('IP: ' + (Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias (Get-NetRoute -DestinationPrefix '0.0.0.0/0').InterfaceAlias | Select-Object -ExpandProperty IPAddress) + ' | Usuario: ' + $env:USERNAME)"
+EOF
     echo ""
     echo "Linux:"
-    echo 'echo "IP: $(ip route get 1.1.1.1 2>/dev/null | awk '"'"'{print $7; exit}'"'"') | Usuario: $(whoami)"'
+    cat << 'EOF'
+echo "IP: $(ip route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}') | Usuario: $(whoami)"
+EOF
     echo ""
     echo "macOS:"
-    echo 'echo "IP: $(ipconfig getifaddr $(route -n get default 2>/dev/null | awk '"'"'/interface:/{print $2}'"'"')) | Usuario: $(whoami)"'
+    cat << 'EOF'
+echo "IP: $(ipconfig getifaddr $(route -n get default 2>/dev/null | awk '/interface:/{print $2}')) | Usuario: $(whoami)"
+EOF
     echo ""
     echo "======================================================================"
     pause_terminal
@@ -2049,7 +2063,7 @@ function_send_manual_scp_backup() {
         fi
     fi
 
-    if [ "$use_saved" = "no" ]; then
+if [ "$use_saved" = "no" ]; then
         show_ip_discovery_help
 
         host=$(whiptail --title "$(t "Enviar Backup via SCP" "Send Backup via SCP")" \
@@ -2059,7 +2073,7 @@ function_send_manual_scp_backup() {
         [ -z "$user" ] && return 0
         port=$(whiptail --title "$(t "Porta SSH" "SSH Port")" --inputbox "$(t "Porta SSH:" "SSH port:")" 9 60 "22" 3>&1 1>&2 2>&3) || return 0
         [ -z "$port" ] && port="22"
-        folder=$(whiptail --title "$(t "Pasta de Destino" "Destination Folder")" --inputbox "$(t "Pasta no destino (deve existir):" "Folder on the destination (must exist):")" 10 70 "/home/${user}/Desktop" 3>&1 1>&2 2>&3) || return 0
+        folder=$(whiptail --title "$(t "Pasta de Destino" "Destination Folder")" --inputbox "$(t "Pasta no destino (deve existir):" "Folder on the destination (must exist):")" 10 70 "C:/Users/${user}/Documents" 3>&1 1>&2 2>&3) || return 0
         [ -z "$folder" ] && return 0
         key=""
     fi
