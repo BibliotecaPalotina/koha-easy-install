@@ -1466,6 +1466,24 @@ EOF
 # ======================================================================
 # 1. INSTALAÇÃO DO SERVIDOR / SERVER INSTALLATION
 # ======================================================================
+detect_koha_locale() {
+    local sys_loc="${LC_ALL:-${LANG:-en}}"
+    case "$sys_loc" in
+        pt_BR*) echo "pt-BR" ;;
+        pt_PT*) echo "pt-PT" ;;
+        it_IT*|it_*) echo "it-IT" ;;
+        es_ES*|es_*) echo "es-ES" ;;
+        fr_FR*|fr_*) echo "fr-FR" ;;
+        de_DE*|de_*) echo "de-DE" ;;
+        ru_RU*|ru_*) echo "ru-RU" ;;
+        pl_PL*|pl_*) echo "pl-PL" ;;
+        zh_CN*) echo "zh-Hans-CN" ;;
+        zh_TW*) echo "zh-Hant-TW" ;;
+        ja_JP*) echo "ja-Jpan-JP" ;;
+        *)      echo "" ;;
+    esac
+}
+
 define_koha_sites_conf() {
     local conf="/etc/koha/koha-sites.conf"
     mkdir -p /etc/koha 2>/dev/null
@@ -1646,7 +1664,18 @@ function_install_koha() {
     systemctl enable --now memcached >/dev/null 2>&1
     systemctl restart apache2 memcached koha-common >/dev/null 2>&1
 
-    [ "$SYS_LANG" = "pt" ] && /usr/sbin/koha-translate --install pt-BR >/dev/null 2>&1
+    # Detecção e compilação automática do idioma do sistema operacional no Koha
+    local auto_lang
+    auto_lang=$(detect_koha_locale)
+    if [ -n "$auto_lang" ] && [ "$auto_lang" != "en-US" ]; then
+        display_explanation "Instalando idioma do Koha correspondente ao sistema ($auto_lang)..." "Installing Koha system language pack ($auto_lang)..."
+        local sys_loc_clean
+        sys_loc_clean=$(echo "$auto_lang" | sed 's/-/_/').UTF-8
+        sed -i -E "s/^#[[:space:]]*(${sys_loc_clean}[[:space:]]+UTF-8)/\1/i" /etc/locale.gen 2>/dev/null || true
+        locale-gen "$sys_loc_clean" >/dev/null 2>&1 || true
+        /usr/sbin/koha-translate --install "$auto_lang" >/dev/null 2>&1 || true
+    fi
+
     /usr/sbin/koha-plack --enable "$INSTANCE" >/dev/null 2>&1
     /usr/sbin/koha-plack --start "$INSTANCE" >/dev/null 2>&1
     systemctl restart apache2 >/dev/null 2>&1
@@ -1659,7 +1688,7 @@ function_install_koha() {
     /usr/sbin/koha-worker --start "$INSTANCE" >/dev/null 2>&1
     /usr/sbin/koha-worker --start --queue long_tasks "$INSTANCE" >/dev/null 2>&1
 
-display_explanation "Criando backups automáticos e credenciais..." "Creating automatic backups and credentials..."
+    display_explanation "Criando backups automáticos e credenciais..." "Creating automatic backups and credentials..."
     local db_pass ip
     db_pass=$(get_database_password)
     ip=$(get_server_ip)
