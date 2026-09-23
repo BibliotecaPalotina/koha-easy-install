@@ -2676,8 +2676,8 @@ SQLEOF
 # ======================================================================
 function_configure_cloudflare() {
     msg_info "$(t "Passo 1: Domínio e Nameservers" "Step 1: Domain & Nameservers")" \
-"$(t "COMO ASSOCIAR SEU DOMÍNIO À CLOUDFLARE:\n\n1. OBTENHA UM DOMÍNIO GRATUITO:\n   - Digital Plat (rápido/automático): https://domain.digitalplat.org/\n   - nic.eu.org (manual, demora de 14 a 45 dias): https://nic.eu.org\n   - Ou solicite à TI um CNAME oficial (ex: catalogo.palotina.pr.gov.br)\n\n2. ADICIONE NA CLOUDFLARE (dash.cloudflare.com):\n   - Clique em 'Add a site/domain', digite o domínio e selecione Free.\n   - A Cloudflare exibirá DOIS Nameservers. Copie os dois.\n\n3. ATUALIZE ONDE REGISTROU O DOMÍNIO:\n   - No Digital Plat ou nic.eu.org, vá em DNS / Nameservers.\n   - Substitua os servidores existentes pelos DOIS da Cloudflare.\n   - Na Cloudflare, clique em 'Check nameservers' até o status ficar Ativo.\n\nEsta parte não dá pra automatizar, mas o resto do processo é todo automático." \
-"HOW TO LINK YOUR DOMAIN TO CLOUDFLARE:\n\n1. GET A FREE DOMAIN:\n   - Digital Plat (fast/automated): https://domain.digitalplat.org/\n   - nic.eu.org (manual, takes 14 to 45 days): https://nic.eu.org\n   - Or ask local IT for an official CNAME (e.g. catalog.city.gov.br)\n\n2. ADD TO CLOUDFLARE (dash.cloudflare.com):\n   - Click 'Add a site/domain', type your domain and select Free.\n   - Cloudflare provides TWO Nameservers. Copy both.\n\n3. UPDATE AT YOUR DOMAIN REGISTRAR:\n   - Replace existing servers with the TWO from Cloudflare.\n   - In Cloudflare, click 'Check nameservers' until status is Active.\n\nThis part can't be automated, but everything from here on is fully automatic.")" 22 78
+"$(t "COMO ASSOCIAR SEU DOMÍNIO À CLOUDFLARE:\n\n1. OBTENHA UM DOMÍNIO GRATUITO:\n    - Digital Plat (rápido/automático): https://domain.digitalplat.org/\n    - nic.eu.org (manual, demora de 14 a 45 dias): https://nic.eu.org\n    - Ou solicite à TI um CNAME oficial (ex: catalogo.palotina.pr.gov.br)\n\n2. ADICIONE NA CLOUDFLARE (dash.cloudflare.com):\n    - Clique em 'Add a site/domain', digite o domínio e selecione Free.\n    - A Cloudflare exibirá DOIS Nameservers. Copie os dois.\n\n3. ATUALIZE ONDE REGISTROU O DOMÍNIO:\n    - No Digital Plat ou nic.eu.org, vá em DNS / Nameservers.\n    - Substitua os servidores existentes pelos DOIS da Cloudflare.\n    - Na Cloudflare, clique em 'Check nameservers' até o status ficar Ativo.\n\nEsta parte não dá pra automatizar, mas o resto do processo é todo automático." \
+"HOW TO LINK YOUR DOMAIN TO CLOUDFLARE:\n\n1. GET A FREE DOMAIN:\n    - Digital Plat (fast/automated): https://domain.digitalplat.org/\n    - nic.eu.org (manual, takes 14 to 45 days): https://nic.eu.org\n    - Or ask local IT for an official CNAME (e.g. catalog.city.gov.br)\n\n2. ADD TO CLOUDFLARE (dash.cloudflare.com):\n    - Click 'Add a site/domain', type your domain and select Free.\n    - Cloudflare provides TWO Nameservers. Copy both.\n\n3. UPDATE AT YOUR DOMAIN REGISTRAR:\n    - Replace existing servers with the TWO from Cloudflare.\n    - In Cloudflare, click 'Check nameservers' until status is Active.\n\nThis part can't be automated, but everything from here on is fully automatic.")" 22 78
 
     clear
     display_explanation "Instalando o cloudflared..." "Installing cloudflared..."
@@ -2717,10 +2717,15 @@ function_configure_cloudflare() {
     fi
 
     local tunnel_name="koha-library"
-    if ! cloudflared tunnel list 2>/dev/null | grep -q "$tunnel_name"; then
+    display_explanation "Verificando túnel na Cloudflare..." "Checking Cloudflare tunnel..."
+    
+    # Se o túnel já existe, apenas avisa e continua; se não existe, cria
+    if cloudflared tunnel list 2>/dev/null | grep -q "$tunnel_name"; then
+        log "Túnel '$tunnel_name' já existe; reaproveitando..."
+    else
         display_explanation "Criando o túnel '$tunnel_name'..." "Creating tunnel '$tunnel_name'..."
         if ! cloudflared tunnel create "$tunnel_name"; then
-            msg_error "" "$(t "Falha ao criar o túnel." "Failed to create the tunnel.")" 8 66
+            msg_error "" "$(t "Falha ao criar o túnel. Ele pode já existir na sua conta cloudflare com outro ID." "Failed to create tunnel. It might already exist in your account.")" 10 74
             return 1
         fi
     fi
@@ -2728,12 +2733,16 @@ function_configure_cloudflare() {
     local tunnel_id
     tunnel_id=$(cloudflared tunnel list 2>/dev/null | awk -v n="$tunnel_name" '$0 ~ n {print $1; exit}')
     if [ -z "$tunnel_id" ]; then
-        msg_error "" "$(t "Não consegui identificar o ID do túnel criado." "Could not identify the created tunnel's ID.")" 8 66
+        msg_error "" "$(t "Não consegui identificar o ID do túnel." "Could not identify the tunnel ID.")" 8 66
         return 1
     fi
 
     local cred_file
     cred_file=$(find "$REAL_HOME/.cloudflared" /root/.cloudflared -name "${tunnel_id}.json" 2>/dev/null | head -n1)
+    if [ -z "$cred_file" ]; then
+        msg_error "" "$(t "Arquivo de credenciais (.json) do túnel não encontrado." "Tunnel credentials file (.json) not found.")" 9 70
+        return 1
+    fi
 
     local dominio opac_sub staff_sub
     dominio=$(whiptail --title "$(t "Seu Domínio" "Your Domain")" --inputbox "$(t "Digite o domínio que você já ativou na Cloudflare (ex: bibliotecapalotina.org):" "Enter the domain you already activated in Cloudflare (e.g. bibliotecapalotina.org):")" 10 74 3>&1 1>&2 2>&3) || return 0
@@ -2767,7 +2776,7 @@ EOF
     sleep 3
 
     if systemctl is-active --quiet cloudflared; then
-        msg_ok "$(t "TÚNEL ATIVO E ROTAS CRIADAS AUTOMATICAMENTE!\n\nCatálogo (OPAC): https://${opac_sub}.${dominio}\nAdministração:   https://${staff_sub}.${dominio}\n\nPode levar alguns minutos até o DNS propagar." "TUNNEL ACTIVE AND ROUTES CREATED AUTOMATICALLY!\n\nCatalog (OPAC): https://${opac_sub}.${dominio}\nAdministration: https://${staff_sub}.${dominio}\n\nMay take a few minutes for DNS to propagate.")" 12 78
+        msg_ok "$(t "TÚNEL ATIVO E ROTAS CRIADAS AUTOMATICAMENTE!\n\nCatálogo (OPAC): https://${opac_sub}.${dominio}\nAdministração:    https://${staff_sub}.${dominio}\n\nPode levar alguns minutos até o DNS propagar." "TUNNEL ACTIVE AND ROUTES CREATED AUTOMATICALLY!\n\nCatalog (OPAC): https://${opac_sub}.${dominio}\nAdministration: https://${staff_sub}.${dominio}\n\nMay take a few minutes for DNS to propagate.")" 12 78
     else
         msg_error "" "$(t "O serviço não ficou ativo. Veja: journalctl -u cloudflared -n 30" "The service is not active. Check: journalctl -u cloudflared -n 30")" 9 74
     fi
