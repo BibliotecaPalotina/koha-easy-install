@@ -3480,16 +3480,18 @@ function_about() {
 # ======================================================================
 # Tema
 # ======================================================================
-# Configura o visual do Whiptail: Fundo preto, letras e bordas brancas
 export NEWT_COLORS='
 root=black,black
 window=black,black
-border=white,black
+border=cyan,black
 textbox=white,black
-button=black,white
-compactbutton=black,white
-title=white,black
+button=cyan,black
+activebutton=black,cyan
+compactbutton=cyan,black
+title=cyan,black
 listbox=white,black
+actlistbox=black,cyan
+actsellistbox=black,cyan
 '
 
 # ======================================================================
