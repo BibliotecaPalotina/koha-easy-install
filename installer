@@ -2832,6 +2832,22 @@ except Exception:
 }
 
 function_configure_tailscale() {
+    # Garante que nenhuma função anterior tenha deixado NEWT_COLORS incompleto,
+    # sem isso os botões Yes/No do prompt_yes_no ficam indistinguíveis.
+    export NEWT_COLORS='
+root=black,darkgray
+window=white,black
+border=brightcyan,black
+textbox=white,black
+button=cyan,black
+actbutton=black,brightcyan
+compactbutton=cyan,black
+title=brightcyan,black
+listbox=white,black
+actlistbox=black,brightcyan
+actsellistbox=black,brightcyan
+'
+
     msg_info "Tailscale Funnel" \
         "$(t "O Tailscale Funnel publica o Koha na internet automaticamente,\ncom domínio e HTTPS prontos, sem precisar de Cloudflare nem domínio próprio." "Tailscale Funnel publishes Koha to the internet automatically,\nwith domain and HTTPS ready, no Cloudflare or custom domain needed.")" 12 76
 
