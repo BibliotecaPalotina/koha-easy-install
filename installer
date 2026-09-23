@@ -53,16 +53,6 @@ REAL_HOME="$(getent passwd "$REAL_USER" 2>/dev/null | cut -d: -f6)"
 [ -d "$REAL_HOME" ] || REAL_HOME="/root"
 
 # ======================================================================
-# IDIOMA / LANGUAGE
-# ======================================================================
-case "${LANG:-}${LC_ALL:-}" in
-    pt*|*pt_BR*) SYS_LANG="pt" ;;
-    *)           SYS_LANG="en" ;;
-esac
-
-t() { if [ "$SYS_LANG" = "pt" ]; then printf '%b' "$1"; else printf '%b' "$2"; fi; }
-
-# ======================================================================
 # TRAVAS DE EXECUÇÃO / EXECUTION LOCKS (PID BASED)
 # ======================================================================
 PANEL_LOCK_FILE="/var/run/koha_easy_install.pid"
