@@ -1440,17 +1440,17 @@ write_banner() {
 
                 __________________________________________________    
               //=================================================\\\\    
-             //          .-----------------------------.          \\\\    
-            //           |${t_head}|           \\\\    
-           //        .----'-----------------------------'----.        \\\\    
+             //         .--------------------------------.          \\\\    
+            //           ${t_head}|   |      \\\\    
+           //       .-------------------------------------'----.        \\\\    
          _//_======[  ${t_suite}  ]======_\\\\_    
         |____|____________________________________________________|_____|    
          |--|  ${l_ctrl}        |--|    
-         |  |  ==================================================  |  |    
+         |  | ==================================================  |  |    
          |  |  ${l_urls}        |  |    
          |  |  - Staff (Intranet) : ${f_staff}  |  |    
          |  |  - OPAC  (Public)   : ${f_opac}  |  |    
-         |  |  --------------------------------------------------  |  |    
+         |  |  -------------------------------------------------  |  |    
          |  |  ${l_user}${f_user}  |  |    
          |  |  ${l_pass}${f_pass}  |  |    
          |  |======================================================|  |    
@@ -1768,10 +1768,17 @@ EOF
 "${result_msg}$(t "ACESSO:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENCIAIS (salvas em /root/credenciais_koha.txt):\n  Usuário: ${DB_NAME}\n  Senha:   ${db_pass}\n\nPASSO SEGUINTE: abra o Staff no navegador para o Web Installer (ou use a opção 3 se tiver backup).\n\nValidação: OK=$V_OK  Avisos=$V_WARN  Falhas=$V_FAIL" \
 "ACCESS:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENTIALS (saved in /root/credenciais_koha.txt):\n  User: ${DB_NAME}\n  Pass: ${db_pass}\n\nNEXT STEP: open Staff in browser for the Web Installer (or use option 3 with a backup).\n\nValidation: OK=$V_OK  Warnings=$V_WARN  Failures=$V_FAIL")" 26 78
 
-    if [ "$V_FAIL" -gt 0 ] || [ "$V_WARN" -gt 0 ]; then
-        if prompt_yes_no "$(t "Ver Diagnóstico" "View Diagnostics")" \
-            "$(t "A validação final encontrou problemas (Falhas: $V_FAIL | Avisos: $V_WARN).\n\nDeseja ver o relatório detalhado agora para saber o que falhou?" \
-            "Final validation found issues (Failures: $V_FAIL | Warnings: $V_WARN).\n\nDo you want to see the detailed report now to know what failed?")" 12 76; then
+if [ "$V_FAIL" -gt 0 ] || [ "$V_WARN" -gt 0 ]; then
+        local diag_msg
+        if [ "$V_FAIL" -gt 0 ]; then
+            diag_msg="$(t "A validação final encontrou problemas (Falhas: $V_FAIL | Avisos: $V_WARN).\n\nDeseja ver o relatório detalhado agora para saber o que falhou?" \
+                          "Final validation found issues (Failures: $V_FAIL | Warnings: $V_WARN).\n\nDo you want to see the detailed report now to know what failed?")"
+        else
+            diag_msg="$(t "A validação final foi concluída com apontamentos (Falhas: 0 | Avisos: $V_WARN).\n\nDeseja ver o relatório detalhado agora?" \
+                          "Final validation completed with notices (Failures: 0 | Warnings: $V_WARN).\n\nDo you want to see the detailed report now?")"
+        fi
+
+        if prompt_yes_no "$(t "Ver Diagnóstico" "View Diagnostics")" "$diag_msg" 12 76; then
             show_validation_report
         fi
     fi
@@ -3699,8 +3706,13 @@ function_reboot_server() {
     clear
     echo "$(t "Reiniciando em 5 segundos..." "Rebooting in 5 seconds...")"
     log "$(t "reboot solicitado pelo painel" "reboot requested by panel")"
+    rm -f "$PANEL_LOCK_FILE"
     sleep 5
-    reboot
+    if [ "$EUID" -ne 0 ]; then
+        sudo /sbin/reboot || sudo /bin/systemctl reboot || sudo shutdown -r now
+    else
+        /sbin/reboot || /bin/systemctl reboot || shutdown -r now
+    fi
 }
 
 # ======================================================================
