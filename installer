@@ -360,11 +360,11 @@ v_reset() {
         echo "KOHA EASY INSTALL & Tools - RELATORIO DE VALIDACAO / VALIDATION REPORT"
         echo "Contexto/Context: ${1:-geral}"
         echo "Data/Date: $(date '+%Y-%m-%d %H:%M:%S %Z')"
-        echo "Host: $(hostname)   Painel: v${PANEL_VERSION}"
+        echo "Host: $(hostname)    Painel: v${PANEL_VERSION}"
         echo "======================================================================"
     } > "$VALIDATION_LOG"
 }
-v_ok()   { V_OK=$((V_OK+1));     printf '[ OK ] %s\n' "$1" | tee -a "$VALIDATION_LOG"; }
+v_ok()   { V_OK=$((V_OK+1));    printf '[ OK ] %s\n' "$1" | tee -a "$VALIDATION_LOG"; }
 v_warn() { V_WARN=$((V_WARN+1)); printf '[%s] %s\n' "$(t "AVISO" "WARN")" "$1" | tee -a "$VALIDATION_LOG"; }
 v_fail() { V_FAIL=$((V_FAIL+1)); printf '[%s] %s\n' "$(t "FALHA" "FAIL")" "$1" | tee -a "$VALIDATION_LOG"; }
 v_info() { printf '[INFO] %s\n' "$1" | tee -a "$VALIDATION_LOG"; }
@@ -388,7 +388,7 @@ validate_service() {
     fi
     if systemctl is-active --quiet "$s"; then v_ok "$d: $(t "ativo" "active") ($s)."; return 0; fi
     if [ "$req" = "sim" ]; then v_fail "$d: $(t "INATIVO" "INACTIVE") ($s)."
-    else v_warn "$d: $(t "opcional, inativo" "optional, inactive") ($s)."; fi
+        else v_warn "$d: $(t "opcional, inativo" "optional, inactive") ($s)."; fi
     return 1
 }
 
@@ -604,11 +604,28 @@ validate_complete_system() {
     [ "$V_FAIL" -eq 0 ]
 }
 
+show_validation_report() {
+    clear
+    echo -e "\n======================================================================"
+    echo -e "             RELATÓRIO DE DIAGNÓSTICO / DIAGNOSTIC REPORT"
+    echo -e "======================================================================\n"
+    
+    if [ -f "$VALIDATION_LOG" ]; then
+        cat "$VALIDATION_LOG"
+    else
+        echo "$(t "O arquivo de log de diagnóstico não foi encontrado." "Diagnostic log file not found.")"
+    fi
+    
+    echo -e "\n======================================================================"
+    read -p "$(t "Pressione [ENTER] para fechar o diagnóstico..." "Press [ENTER] to close diagnostics...")"
+    clear
+}
+
 validate_pre_installation() {
     # 1. Boas-vindas
     msg_info "$(t "Bem-vindo ao Koha Easy Install!" "Welcome to Koha Easy Install!")" \
         "$(t "Este projeto democratiza a gestão de acervos, automatizando a configuração de uma infraestrutura robusta, rápida e gratuita para bibliotecas.\n\nO assistente vai instalar e afinar MariaDB, Apache, Memcached e Koha.\n\nTempo estimado: 10 a 30 minutos.\nPor favor, não feche o terminal durante a instalação." "This project democratizes collection management, automating the setup of a robust, fast and free infrastructure for libraries.\n\nThe wizard will install and tune MariaDB, Apache, Memcached and Koha.\n\nEstimated time: 10 to 30 minutes.\nPlease do not close the terminal during installation.")" 16 78
-
+        
     clear
     local free_disk p
     v_reset "pré-instalação"
