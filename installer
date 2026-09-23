@@ -9,6 +9,7 @@
 # Single, self-sufficient file. Updates via "Update this panel" option.
 # ======================================================================
 # TESTE_SYNC_PALOTINA_OK=1
+DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::ForceIPv4=true >/dev/null 2>&1
 
 set -o pipefail
 umask 022
