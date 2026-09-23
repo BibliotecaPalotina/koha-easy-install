@@ -1403,6 +1403,32 @@ EOF
 # ======================================================================
 # 1. INSTALAÇÃO DO SERVIDOR / SERVER INSTALLATION
 # ======================================================================
+define_koha_sites_conf() {
+    local conf="/etc/koha/koha-sites.conf"
+    mkdir -p /etc/koha 2>/dev/null
+    if [ -f "$conf" ]; then
+        sed -i -E 's/^[[:space:]]*OPACPORT=.*/OPACPORT="80"/' "$conf"
+        sed -i -E 's/^[[:space:]]*INTRAPORT=.*/INTRAPORT="8080"/' "$conf"
+        grep -q '^OPACPORT=' "$conf" || echo 'OPACPORT="80"' >> "$conf"
+        grep -q '^INTRAPORT=' "$conf" || echo 'INTRAPORT="8080"' >> "$conf"
+    else
+        cat << 'EOF' > "$conf"
+OPACPORT="80"
+INTRAPORT="8080"
+DEFAULTSOPACMAIL="library@localhost"
+DEFAULTSINTRAMAIL="library@localhost"
+DEFAULTSOPACURL=""
+DEFAULTSINTRAURL=""
+OPACPREFIX=""
+INTRAPREFIX=""
+DOMAIN=""
+ZEBRA_MARC_FORMAT="marc21"
+ZEBRA_LANGUAGE="en"
+BIBLIOS_INDEXER="zebra"
+EOF
+    fi
+}
+
 function_install_koha() {
     validate_pre_installation || return 0
 
@@ -1539,7 +1565,6 @@ function_install_koha() {
 
     display_explanation "Criando a instância '${INSTANCE}' do Koha..." "Creating the '${INSTANCE}' Koha instance..."
     
-    # FIX: Agora o script captura erros silenciosos de criação de instância e os mostra em um pop-up
     if ! /usr/sbin/koha-create --create-db "$INSTANCE" > /tmp/koha_create.log 2>&1; then
         local err_msg
         err_msg=$(tail -n 15 /tmp/koha_create.log 2>/dev/null || echo "Log vazio.")
@@ -1547,7 +1572,7 @@ function_install_koha() {
         return 1
     fi
 
-sed -i 's/__MEMCACHED_SERVERS__/127.0.0.1:11211/g; s/__MEMCACHED_PREFIX__/koha_library:/g' "$KOHA_CONF" 2>/dev/null
+    sed -i 's/__MEMCACHED_SERVERS__/127.0.0.1:11211/g; s/__MEMCACHED_PREFIX__/koha_library:/g' "$KOHA_CONF" 2>/dev/null
 
     # FIX: Desativa explicitamente os confs padrão do Debian/Ubuntu e apaga o index default
     a2dissite 000-default 000-default.conf default-ssl default-ssl.conf >/dev/null 2>&1
@@ -1581,7 +1606,7 @@ sed -i 's/__MEMCACHED_SERVERS__/127.0.0.1:11211/g; s/__MEMCACHED_PREFIX__/koha_l
     cat > /root/credenciais_koha.txt << EOF
 ======================================================================
  CREDENCIAIS DO KOHA / KOHA CREDENTIALS  (instancia: ${INSTANCE})
- Gerado em / Generated on: $(date '+%F %T')
+ Gerado em / Generated on: \$(date '+%F %T')
 ======================================================================
  Staff (administracao) : http://${ip}:8080
  OPAC  (catalogo)      : http://${ip}:80
@@ -1628,7 +1653,6 @@ EOF
 "${result_msg}$(t "ACESSO:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENCIAIS (salvas em /root/credenciais_koha.txt):\n  Usuário: ${DB_NAME}\n  Senha:   ${db_pass}\n\nPASSO SEGUINTE: abra o Staff no navegador para o Web Installer (ou use a opção 3 se tiver backup).\n\nValidação: OK=$V_OK  Avisos=$V_WARN  Falhas=$V_FAIL" \
 "ACCESS:\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\nCREDENTIALS (saved in /root/credenciais_koha.txt):\n  User: ${DB_NAME}\n  Pass: ${db_pass}\n\nNEXT STEP: open Staff in browser for the Web Installer (or use option 3 with a backup).\n\nValidation: OK=$V_OK  Warnings=$V_WARN  Failures=$V_FAIL")" 26 78
 
-    # FIX: Prompt visual para exibir o relatório de diagnóstico imediatamente se houver falhas ou avisos
     if [ "$V_FAIL" -gt 0 ] || [ "$V_WARN" -gt 0 ]; then
         if prompt_yes_no "$(t "Ver Diagnóstico" "View Diagnostics")" \
             "$(t "A validação final encontrou problemas (Falhas: $V_FAIL | Avisos: $V_WARN).\n\nDeseja ver o relatório detalhado agora para saber o que falhou?" \
