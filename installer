@@ -2399,6 +2399,14 @@ function_configure_rclone() {
         echo ""
         echo '  rclone authorize "drive"'
         echo ""
+        echo "$(t "Caso o comando acima dê erro de soquete/porta no Windows, execute como Administrador:" "If the above command gives a socket/port error on Windows, run as Administrator:")"
+        echo ""
+        echo "  wsl --shutdown"
+        echo "  net stop winnat"
+        echo "  net stop hns"
+        echo "  netsh int ipv4 set dynamic tcp start=49152 num=16384"
+        echo "  netsh int ipv6 set dynamic tcp start=49152 num=16384"
+        echo '  rclone authorize "drive"'
         echo "----------------------------------------------------------------------"
         echo "$(t "PASSO 2: O navegador abrirá. Faça login na conta Google da biblioteca e autorize." "STEP 2: Your browser will open. Log in with the library Google account and authorize.")"
         echo "$(t "PASSO 3: O seu computador exibirá um código extenso iniciando com '{\"' e terminando com '}'.'" "STEP 3: Your PC will print a long token string starting with '{\"' and ending with '}'.")"
