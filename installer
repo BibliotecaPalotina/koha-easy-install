@@ -3480,27 +3480,16 @@ function_about() {
 # ======================================================================
 # Tema
 # ======================================================================
+# Configura o visual do Whiptail: Fundo preto, letras e bordas brancas
 export NEWT_COLORS='
-    root=brightcyan,black
-    window=brightcyan,black
-    border=brightcyan,black
-    shadow=black,black
-    title=white,black
-    button=black,brightcyan
-    actbutton=black,white
-    compactbutton=brightcyan,black
-    checkbox=brightcyan,black
-    actcheckbox=black,brightcyan
-    entry=brightcyan,black
-    label=brightcyan,black
-    listbox=brightcyan,black
-    actlistbox=black,white
-    sellistbox=brightcyan,black
-    actsellistbox=black,white
-    textbox=brightcyan,black
-    acttextbox=black,brightcyan
-    helpline=brightcyan,black
-    roottext=brightcyan,black
+root=black,black
+window=black,black
+border=white,black
+textbox=white,black
+button=black,white
+compactbutton=black,white
+title=white,black
+listbox=white,black
 '
 
 # ======================================================================
@@ -3512,22 +3501,22 @@ while true; do
     MAIN_OPT=$(whiptail --title "Koha Easy Install & Tools v${PANEL_VERSION} - $(t "Painel de Controle" "Control Dashboard")" \
         --cancel-button "$(t "Sair" "Exit")" \
         --menu "$(t "Selecione uma opção:" "Select an option:")" 25 80 16 \
-        "1"  "$(t "🚀 Instalar o servidor Koha" "🚀 Install Koha server")" \
-        "2"  "$(t "🔑 Ver credenciais de primeiro acesso" "🔑 View first-access credentials")" \
-        "3"  "$(t "📥 Restaurar banco de dados" "📥 Restore database")" \
-        "4"  "$(t "💾 Central de backups" "💾 Backup center")" \
-        "5"  "$(t "🔍 Motor de busca e indexação" "🔍 Search engine & indexing")" \
-        "6"  "$(t "🌐 Publicar o sistema na internet" "🌐 Publish system to internet")" \
-        "7"  "$(t "🩺 Central de diagnóstico e manutenção" "🩺 Diagnostics & maintenance center")" \
-        "8"  "$(t "🛡️ Central de segurança" "🛡️ Security center")" \
-        "9"  "$(t "⚙️ Configurações e parâmetros do Koha" "⚙️ Koha settings & parameters")" \
-        "10" "$(t "🛠️ Ferramentas gerais" "🛠️ General tools")" \
-        "11" "$(t "⏱️ Cronogramas e tarefas agendadas" "⏱️ Schedules & cron tasks")" \
-        "12" "$(t "🌍 Idiomas do Koha" "🌍 Koha languages")" \
-        "13" "$(t "🔄 Central de atualizações" "🔄 Update center")" \
-        "14" "$(t "ℹ️ Sobre o programa e apoio" "ℹ️ About the program & support")" \
-        "15" "$(t "⚡ Reiniciar o servidor" "⚡ Reboot server")" \
-        "16" "$(t "🚪 Sair" "🚪 Exit")" 3>&1 1>&2 2>&3) || { clear; rm -f "$PANEL_LOCK_FILE"; exit 0; }
+        "1"  "$(t "Instalar o servidor Koha" "Install Koha server")" \
+        "2"  "$(t "Ver credenciais de primeiro acesso" "View first-access credentials")" \
+        "3"  "$(t "Restaurar banco de dados" "Restore database")" \
+        "4"  "$(t "Central de backups" "Backup center")" \
+        "5"  "$(t "Motor de busca e indexação" "Search engine & indexing")" \
+        "6"  "$(t "Publicar o sistema na internet" "Publish system to internet")" \
+        "7"  "$(t "Central de diagnóstico e manutenção" "Diagnostics & maintenance center")" \
+        "8"  "$(t "Central de segurança" "Security center")" \
+        "9"  "$(t "Configurações e parâmetros do Koha" "Koha settings & parameters")" \
+        "10" "$(t "Ferramentas gerais" "General tools")" \
+        "11" "$(t "Cronogramas e tarefas agendadas" "Schedules & cron tasks")" \
+        "12" "$(t "Idiomas do Koha" "Koha languages")" \
+        "13" "$(t "Central de atualizações" "Update center")" \
+        "14" "$(t "Sobre o programa e apoio" "About the program & support")" \
+        "15" "$(t "Reiniciar o servidor" "Reboot server")" \
+        "16" "$(t "Sair" "Exit")" 3>&1 1>&2 2>&3) || { clear; rm -f "$PANEL_LOCK_FILE"; exit 0; }
 
     case "$MAIN_OPT" in
         1) function_install_koha ;;
