@@ -17,13 +17,23 @@ PANEL_VERSION="1.0"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
+# IDIOMA / LANGUAGE
+# ======================================================================
+case "${LANG:-}${LC_ALL:-}" in
+    pt*|*pt_BR*) SYS_LANG="pt" ;;
+    *)           SYS_LANG="en" ;;
+esac
+
+t() { if [ "$SYS_LANG" = "pt" ]; then printf '%b' "$1"; else printf '%b' "$2"; fi; }
+
+# ======================================================================
 # ELEVAÇÃO DE PRIVILÉGIOS / PRIVILEGE ESCALATION
 # ======================================================================
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
     echo ""
     echo "+---------------------------------------------------------------+"
-    echo "| Privilegios de administrador (root) necessarios.              |"
-    echo "| Root privileges required. Please enter your password:         |"
+    printf "| %-61.61s |\n" "$(t "Privilégios de administrador (root) necessários." "Root privileges required.")"
+    printf "| %-61.61s |\n" "$(t "Por favor, digite sua senha de administrador:" "Please enter your administrative password:")"
     echo "+---------------------------------------------------------------+"
     echo ""
     if [ -f "$0" ]; then
@@ -33,7 +43,7 @@ if [ "${EUID:-$(id -u)}" -ne 0 ]; then
             exec su -c "bash '$0' $*"
         fi
     fi
-    echo "ERRO/ERROR: rode como root / run as root: su -c 'bash $0'"
+    echo "$(t "ERRO: execute como root: su -c 'bash $0'" "ERROR: run as root: su -c 'bash $0'")"
     exit 1
 fi
 
@@ -388,7 +398,7 @@ validate_service() {
     fi
     if systemctl is-active --quiet "$s"; then v_ok "$d: $(t "ativo" "active") ($s)."; return 0; fi
     if [ "$req" = "sim" ]; then v_fail "$d: $(t "INATIVO" "INACTIVE") ($s)."
-        else v_warn "$d: $(t "opcional, inativo" "optional, inactive") ($s)."; fi
+    else v_warn "$d: $(t "opcional, inativo" "optional, inactive") ($s)."; fi
     return 1
 }
 
@@ -422,7 +432,7 @@ validate_mariadb() {
     local charset
     charset=$(run_sql "SELECT default_character_set_name FROM information_schema.schemata WHERE schema_name='${DB_NAME}';")
     case "$charset" in
-        utf8mb4) v_ok "${DB_NAME}: charset utf8mb4." ;;
+        utf8mb4) v_ok "${DB_NAME}: $(t "charset utf8mb4" "utf8mb4 charset")." ;;
         "")      : ;;
         *)       v_warn "${DB_NAME}: charset '$charset' ($(t "o recomendado é utf8mb4" "utf8mb4 is recommended"))." ;;
     esac
@@ -488,8 +498,8 @@ validate_cron() {
     grep -q '^PATH=' "$CRON_TASKS" 2>/dev/null \
         && v_ok "Cron: PATH $(t "declarado" "declared")." \
         || v_fail "Cron: $(t "sem linha PATH (koha-shell não é encontrado e as tarefas falham em silêncio)" "no PATH line (koha-shell is not found and tasks fail silently)")."
-    grep -q 'backup_sql.sh'  "$CRON_TASKS" 2>/dev/null && v_ok "Cron: backup SQL." || v_warn "Cron: backup SQL $(t "ausente" "missing")."
-    grep -q 'backup_marc.sh' "$CRON_TASKS" 2>/dev/null && v_ok "Cron: backup MARC21." || v_warn "Cron: backup MARC21 $(t "ausente" "missing")."
+    grep -q 'backup_sql.sh'  "$CRON_TASKS" 2>/dev/null && v_ok "Cron: $(t "backup SQL" "SQL backup")." || v_warn "Cron: backup SQL $(t "ausente" "missing")."
+    grep -q 'backup_marc.sh' "$CRON_TASKS" 2>/dev/null && v_ok "Cron: $(t "backup MARC21" "MARC21 backup")." || v_warn "Cron: backup MARC21 $(t "ausente" "missing")."
     validate_service cron "Cron"
 }
 
@@ -647,7 +657,7 @@ validate_pre_installation() {
     validate_command apt-get   "APT"
     validate_command dpkg      "DPKG"
     validate_command systemctl "Systemd"
-    validate_command ss        "Rede"
+    validate_command ss        "$(t "Rede" "Network")"
     validate_command wget      "Download"
     validate_command gpg       "GPG"
 
@@ -659,7 +669,7 @@ validate_pre_installation() {
         || v_fail "HTTPS: $(t "repositório Koha não respondeu" "Koha repository did not respond")."
 
     free_disk=$(get_free_space_mb /)
-    if [ "${free_disk:-0}" -ge 10240 ] 2>/dev/null; then v_ok "Disco: ${free_disk} MB."
+    if [ "${free_disk:-0}" -ge 10240 ] 2>/dev/null; then v_ok "Disco: ${free_disk} MB $(t "livres" "free")."
     elif [ "${free_disk:-0}" -ge 5120 ] 2>/dev/null; then v_warn "Disco: ${free_disk} MB ($(t "apertado para Elasticsearch" "tight for Elasticsearch"))."
     else v_fail "Disco: ${free_disk:-0} MB ($(t "mínimo recomendado: 5 GB" "recommended minimum: 5 GB"))."; fi
 
@@ -848,7 +858,7 @@ if [ ! -r "/etc/koha/sites/\${INST}/koha-conf.xml" ] || \
 fi
 
 if ! curl -sS --max-time 5 http://127.0.0.1:9200/ >/dev/null 2>&1; then
-    logger -t koha-es-watchdog "Elasticsearch API indisponível; indexador não será reiniciado nesta rodada"
+    logger -t koha-es-watchdog "Elasticsearch API unavailable; indexer will not restart this round"
     exit 0
 fi
 
@@ -860,30 +870,30 @@ if [ -r /usr/share/koha/bin/koha-functions.sh ]; then
 fi
 
 if [ "\$INDEXER_UP" != "sim" ]; then
-    logger -t koha-es-watchdog "indexador Elasticsearch parado; recuperando \$INST"
+    logger -t koha-es-watchdog "Elasticsearch indexer down; recovering \$INST"
     if ! systemctl restart "\$UNIT" >/dev/null 2>&1; then
         /usr/sbin/koha-es-indexer --restart --quiet "\$INST" >/dev/null 2>&1 || true
     fi
     sleep 2
     if [ -r /usr/share/koha/bin/koha-functions.sh ] && \
        /bin/bash -c '. /usr/share/koha/bin/koha-functions.sh; is_es_indexer_running "$1"' _ "\$INST" >/dev/null 2>&1; then
-        logger -t koha-es-watchdog "indexador Elasticsearch recuperado com sucesso"
+        logger -t koha-es-watchdog "Elasticsearch indexer recovered successfully"
     else
-        logger -t koha-es-watchdog "falha ao recuperar o indexador Elasticsearch"
+        logger -t koha-es-watchdog "failed to recover Elasticsearch indexer"
     fi
     exit 0
 fi
 
 PEND=\$(mysql -Nse "SELECT COUNT(*) FROM \${DB}.background_jobs WHERE type='update_elastic_index' AND status IN ('new','started') AND enqueued_on < DATE_SUB(NOW(), INTERVAL 5 MINUTE);" 2>/dev/null || echo 0)
 if [ "\${PEND:-0}" -gt 0 ] 2>/dev/null; then
-    logger -t koha-es-watchdog "\$PEND job(s) de Elasticsearch presos há mais de 5 minutos; reiniciando \$UNIT"
+    logger -t koha-es-watchdog "\$PEND Elasticsearch job(s) stuck over 5 min; restarting \$UNIT"
     if systemctl restart "\$UNIT" >/dev/null 2>&1; then
         sleep 2
         if [ -r /usr/share/koha/bin/koha-functions.sh ] && \
            /bin/bash -c '. /usr/share/koha/bin/koha-functions.sh; is_es_indexer_running "$1"' _ "\$INST" >/dev/null 2>&1; then
-            logger -t koha-es-watchdog "indexador reiniciado após fila presa"
+            logger -t koha-es-watchdog "indexer restarted after queue bottleneck"
         else
-            logger -t koha-es-watchdog "indexador não confirmou recuperação após fila presa"
+            logger -t koha-es-watchdog "indexer did not confirm recovery after queue bottleneck"
         fi
     else
         /usr/sbin/koha-es-indexer --restart --quiet "\$INST" >/dev/null 2>&1 || true
@@ -895,7 +905,8 @@ EOF
 
     {
         echo "$CRON_PATH"
-        echo "# Vigia do indexador Elasticsearch (a cada 5 minutos)"
+        echo "# [PT] Vigia do indexador Elasticsearch (a cada 5 minutos)"
+        echo "# [EN] Elasticsearch indexer watchdog (every 5 minutes)"
         echo "*/5 * * * * root /usr/local/bin/koha-es-watchdog.sh >/dev/null 2>&1"
     } > "$CRON_ES"
     chmod 644 "$CRON_ES"
@@ -994,13 +1005,13 @@ rebuild_koha_elasticsearch() {
         exec 7>"$ES_REBUILD_LOCK_FILE"
         chmod 600 "$ES_REBUILD_LOCK_FILE" 2>/dev/null || true
         if ! flock -n 7; then
-            log "Rebuild Elasticsearch ignorado: outro rebuild já está em execução."
+            log "$(t "Rebuild Elasticsearch ignorado: outro rebuild já está em execução." "Elasticsearch rebuild skipped: another rebuild is already in progress.")"
             exit 75
         fi
         printf '%s\n' "${BASHPID:-$$}" > "$ES_REBUILD_MARKER" || exit 1
         trap 'rm -f "$ES_REBUILD_MARKER"' EXIT HUP INT TERM
         if ! command -v koha-elasticsearch >/dev/null 2>&1; then
-            log "koha-elasticsearch não encontrado."
+            log "$(t "koha-elasticsearch não encontrado." "koha-elasticsearch not found.")"
             exit 1
         fi
         koha-elasticsearch --rebuild -d "$INSTANCE"
@@ -1140,6 +1151,7 @@ write_backup_scripts() {
     cat > /root/backup_sql.sh << EOF
 #!/bin/bash
 # Backup do banco do Koha. Gerado pelo Koha Easy Install & Tools.
+# Koha database backup. Generated by Koha Easy Install & Tools.
 set -o pipefail
 umask 077
 CONF="${BACKUP_CONF}"
@@ -1154,7 +1166,7 @@ case "\${KEEP_DAYS}" in ''|*[!0-9]*) KEEP_DAYS=7;; esac
 log_backup() { mkdir -p "\$(dirname "\$LOG")" "\$DIR"; printf '%s | %s\\n' "\$(date '+%F %T')" "\$*" >> "\$LOG"; }
 exec 9>"\$LOCK_FILE"
 if ! flock -n 9; then
-    log_backup "INFO: backup SQL ignorado porque outro backup/restauracao esta em andamento"
+    log_backup "INFO: backup SQL ignorado porque outro backup/restauracao esta em andamento / SQL backup skipped because another backup/restore is running"
     exit 0
 fi
 mkdir -p "\$DIR"
@@ -1163,20 +1175,20 @@ FILE="\$DIR/\${DB}_\$(date +%Y-%m-%d_%Hh%M).sql.gz"
 
 if ! mysqldump --single-transaction --quick --routines --triggers \\
         --default-character-set=utf8mb4 "\$DB" 2>>"\$LOG" | gzip > "\$FILE"; then
-    log_backup "FALHA ao gerar \$FILE"
+    log_backup "FALHA ao gerar \$FILE / FAILED to generate \$FILE"
     rm -f "\$FILE"
     exit 1
 fi
 
 if ! gzip -t "\$FILE" 2>/dev/null; then
-    log_backup "FALHA: arquivo corrompido, removido: \$FILE"
+    log_backup "FALHA: arquivo corrompido, removido: \$FILE / FAILED: corrupt file removed: \$FILE"
     rm -f "\$FILE"
     exit 1
 fi
 
 SIZE=\$(stat -c %s "\$FILE" 2>/dev/null || echo 0)
 if [ "\$SIZE" -lt 10240 ]; then
-    log_backup "FALHA: backup suspeito (\$SIZE bytes), removido: \$FILE"
+    log_backup "FALHA: backup suspeito (\$SIZE bytes), removido: \$FILE / FAILED: suspicious backup (\$SIZE bytes), removed: \$FILE"
     rm -f "\$FILE"
     exit 1
 fi
@@ -1185,15 +1197,15 @@ log_backup "OK: \$FILE (\$SIZE bytes)"
 RCLONE_REMOTE="\$(printf '%s' "\$RCLONE_REMOTE" | xargs)"
 if [ -n "\$RCLONE_REMOTE" ] && [ -f /root/.config/rclone/rclone.conf ]; then
     if ! rclone listremotes --config /root/.config/rclone/rclone.conf 2>/dev/null | grep -qx "\${RCLONE_REMOTE}:"; then
-        log_backup "AVISO: RCLONE_REMOTE='\${RCLONE_REMOTE}' não existe no rclone.conf; upload pulado"
+        log_backup "AVISO: RCLONE_REMOTE='\${RCLONE_REMOTE}' não existe no rclone.conf; upload pulado / WARN: RCLONE_REMOTE='\${RCLONE_REMOTE}' does not exist in rclone.conf; skipping upload"
     elif /usr/bin/rclone --config /root/.config/rclone/rclone.conf copy "\$FILE" "\${RCLONE_REMOTE}:\${RCLONE_SQL_FOLDER}/" >>"\$LOG" 2>&1; then
-        log_backup "Nuvem OK: \${RCLONE_REMOTE}:\${RCLONE_SQL_FOLDER}/"
+        log_backup "Nuvem OK / Cloud OK: \${RCLONE_REMOTE}:\${RCLONE_SQL_FOLDER}/"
     else
-        log_backup "AVISO: envio para a nuvem falhou (cópia local preservada)"
+        log_backup "AVISO: envio para a nuvem falhou (cópia local preservada) / WARN: cloud upload failed (local copy preserved)"
     fi
 fi
 
-# Envio via SCP direto (sem rclone), se configurado
+# Envio via SCP direto (sem rclone), se configurado / Direct SCP transfer (without rclone), if configured
 SCP_CONF="${CONF_DIR}/scp_backup.conf"
 SCP_HOST=""; SCP_USER=""; SCP_PORT="22"; SCP_FOLDER=""; SCP_KEY=""
 [ -f "\$SCP_CONF" ] && . "\$SCP_CONF"
@@ -1202,7 +1214,7 @@ if [ -n "\$SCP_HOST" ] && [ -n "\$SCP_USER" ] && [ -n "\$SCP_FOLDER" ]; then
            -o StrictHostKeyChecking=accept-new "\$FILE" "\${SCP_USER}@\${SCP_HOST}:\${SCP_FOLDER%/}/" >>"\$LOG" 2>&1; then
         log_backup "SCP OK: \${SCP_USER}@\${SCP_HOST}:\${SCP_FOLDER}"
     else
-        log_backup "AVISO: envio via SCP falhou (copia local preservada)"
+        log_backup "AVISO: envio via SCP falhou (copia local preservada) / WARN: SCP transfer failed (local copy preserved)"
     fi
 fi
 
@@ -1213,6 +1225,7 @@ EOF
     cat > /root/backup_marc.sh << EOF
 #!/bin/bash
 # Backup dos registros MARC21 (bibliográficos e autoridades).
+# Koha MARC21 records backup (bibliographic and authority).
 set -o pipefail
 umask 077
 CONF="${BACKUP_CONF}"
@@ -1227,14 +1240,14 @@ case "\${KEEP_DAYS}" in ''|*[!0-9]*) KEEP_DAYS=7;; esac
 log_backup() { mkdir -p "\$(dirname "\$LOG")" "\$DIR"; printf '%s | %s\\n' "\$(date '+%F %T')" "\$*" >> "\$LOG"; }
 exec 9>"\$LOCK_FILE"
 if ! flock -n 9; then
-    log_backup "INFO: backup MARC ignorado porque outro backup/restauracao esta em andamento"
+    log_backup "INFO: backup MARC ignorado porque outro backup/restauracao esta em andamento / MARC backup skipped because another backup/restore is running"
     exit 0
 fi
 mkdir -p "\$DIR"
 
 EXPORT_CMD="/usr/share/koha/bin/export_records.pl"
 [ -f "\$EXPORT_CMD" ] || EXPORT_CMD="\$(find /usr/share/koha -name export_records.pl 2>/dev/null | head -n1)"
-if [ -z "\$EXPORT_CMD" ]; then log_backup "FALHA: export_records.pl nao encontrado"; exit 1; fi
+if [ -z "\$EXPORT_CMD" ]; then log_backup "FALHA: export_records.pl nao encontrado / FAILED: export_records.pl not found"; exit 1; fi
 
 DATE=\$(date '+%Y-%m-%d_%H%M')
 BIB_FILE="\$DIR/biblios_\${DATE}.mrc"
@@ -1242,29 +1255,29 @@ AUTH_FILE="\$DIR/authorities_\${DATE}.mrc"
 PACKAGE="\$DIR/koha_marc_\${DATE}.tar.gz"
 
 if ! /usr/sbin/koha-shell "\$INST" -c "perl \$EXPORT_CMD --record-type=bibs --format=marc --filename=\$BIB_FILE" >>"\$LOG" 2>&1; then
-    log_backup "FALHA: exportacao bibliografica"; rm -f "\$BIB_FILE" "\$AUTH_FILE"; exit 1
+    log_backup "FALHA: exportacao bibliografica / FAILED: bibliographic export"; rm -f "\$BIB_FILE" "\$AUTH_FILE"; exit 1
 fi
 if ! /usr/sbin/koha-shell "\$INST" -c "perl \$EXPORT_CMD --record-type=auths --format=marc --filename=\$AUTH_FILE" >>"\$LOG" 2>&1; then
-    log_backup "FALHA: exportacao de autoridades"; rm -f "\$BIB_FILE" "\$AUTH_FILE"; exit 1
+    log_backup "FALHA: exportacao de autoridades / FAILED: authority export"; rm -f "\$BIB_FILE" "\$AUTH_FILE"; exit 1
 fi
 
 if [ ! -s "\$BIB_FILE" ]; then
-    log_backup "FALHA: exportacao bibliografica vazia"
+    log_backup "FALHA: exportacao bibliografica vazia / FAILED: empty bibliographic export"
     rm -f "\$BIB_FILE" "\$AUTH_FILE"
     exit 1
 fi
 if [ ! -s "\$AUTH_FILE" ]; then
-    log_backup "AVISO: exportacao de authorities vazia"
+    log_backup "AVISO: exportacao de authorities vazia / WARN: empty authority export"
 fi
 
 if ! tar -czf "\$PACKAGE" -C "\$DIR" "\$(basename "\$BIB_FILE")" "\$(basename "\$AUTH_FILE")" 2>>"\$LOG"; then
-    log_backup "FALHA: criacao do pacote MARC"
+    log_backup "FALHA: criacao do pacote MARC / FAILED: creating MARC package"
     rm -f "\$PACKAGE" "\$BIB_FILE" "\$AUTH_FILE"
     exit 1
 fi
 rm -f "\$BIB_FILE" "\$AUTH_FILE"
 if ! tar -tzf "\$PACKAGE" >/dev/null 2>&1; then
-    log_backup "FALHA: pacote MARC não passou no teste tar.gz"
+    log_backup "FALHA: pacote MARC não passou no teste tar.gz / FAILED: MARC package failed tar.gz test"
     rm -f "\$PACKAGE"
     exit 1
 fi
@@ -1273,11 +1286,11 @@ log_backup "OK: \$PACKAGE (\$(stat -c %s "\$PACKAGE" 2>/dev/null) bytes)"
 RCLONE_REMOTE="\$(printf '%s' "\$RCLONE_REMOTE" | xargs)"
 if [ -n "\$RCLONE_REMOTE" ] && [ -f /root/.config/rclone/rclone.conf ]; then
     if ! rclone listremotes --config /root/.config/rclone/rclone.conf 2>/dev/null | grep -qx "\${RCLONE_REMOTE}:"; then
-        log_backup "AVISO: RCLONE_REMOTE='\${RCLONE_REMOTE}' não existe no rclone.conf; upload pulado"
+        log_backup "AVISO: RCLONE_REMOTE='\${RCLONE_REMOTE}' não existe no rclone.conf; upload pulado / WARN: RCLONE_REMOTE='\${RCLONE_REMOTE}' does not exist in rclone.conf; skipping upload"
     elif /usr/bin/rclone --config /root/.config/rclone/rclone.conf copy "\$PACKAGE" "\${RCLONE_REMOTE}:\${RCLONE_MARC_FOLDER}/" >>"\$LOG" 2>&1; then
-        log_backup "Nuvem OK: \${RCLONE_REMOTE}:\${RCLONE_MARC_FOLDER}/"
+        log_backup "Nuvem OK / Cloud OK: \${RCLONE_REMOTE}:\${RCLONE_MARC_FOLDER}/"
     else
-        log_backup "AVISO: envio para a nuvem falhou"
+        log_backup "AVISO: envio para a nuvem falhou / WARN: cloud upload failed"
     fi
 fi
 
@@ -1361,7 +1374,7 @@ configure_firewall() {
     for p in $(get_ssh_ports); do ufw allow "${p}/tcp" >/dev/null 2>&1; done
     for p in 80 443 8080 587 53682; do ufw allow "${p}/tcp" >/dev/null 2>&1; done
     if ! ufw --force enable >/dev/null 2>&1; then
-        log "UFW nao pode ser ativado (provavel WSL/container)"
+        log "$(t "UFW não pôde ser ativado (provável WSL/container)." "UFW could not be enabled (likely WSL/container).")"
     fi
 }
 
@@ -1370,29 +1383,52 @@ write_banner() {
     local url_staff="http://${ip}:8080"
     local url_opac="http://${ip}:80"
 
+    local t_head t_suite l_ctrl l_urls l_user l_pass
+    if [ "$SYS_LANG" = "pt" ]; then
+        t_head="  B I B L I O T E C A   K O H A  "       # 29 chars
+        t_suite="  CATALOGO PUBLICO & AUTOMACAO   "      # 33 chars
+        l_ctrl="PAINEL DE CONTROLE : options.sh           " # 41 chars
+        l_urls="ENDERECOS / ACESSO WEB:                   " # 41 chars
+        l_user="- Usuario (Admin)  : "                      # 21 chars
+        l_pass="- Senha (Root)     : "                      # 21 chars
+    else
+        t_head="   K O H A   L I B R A R Y   "           # 29 chars
+        t_suite="PUBLIC CATALOG & AUTOMATION SUITE"      # 33 chars
+        l_ctrl="CONTROL DASHBOARD  : options.sh           " # 41 chars
+        l_urls="URLS / WEB ACCESS     :                   " # 41 chars
+        l_user="- User (Admin)     : "                      # 21 chars
+        l_pass="- Password (Root)  : "                      # 21 chars
+    fi
+
+    # Formata os campos variáveis em exatamente 27 caracteres para fechar 48 úteis + bordas
+    local f_staff f_opac f_user f_pass
+    f_staff=$(printf "%-27.27s" "$url_staff")
+    f_opac=$(printf "%-27.27s" "$url_opac")
+    f_user=$(printf "%-27.27s" "$user")
+    f_pass=$(printf "%-27.27s" "cat /root/credenciais_koha.txt")
+
     cat > /etc/issue << EOF
 \S
 
 
-               __________________________________________________    
-             //=================================================\\\\    
-            //          .-----------------------------.          \\\\    
-           //           |   K O H A   L I B R A R Y   |           \\\\    
-          //       .----'-----------------------------'----.       \\\\    
-        _//_======[     PUBLIC CATALOG & AUTOMATION SUITE   ]======_\\\\_    
-       |____|____________________________________________________|_____|    
-        |--|  PAINEL DE CONTROLE / CONTROL DASHBOARD:             |--|    
-        |--|  options.sh                                          |--|    
-        |  |  ==================================================  |  |    
-        |  |  ENDEREÇOS / URLS:                                   |  |    
-        |  |  - Staff (Intranet): $(printf "%-31s" "$url_staff") |  |    
-        |  |  - OPAC (Public):    $(printf "%-31s" "$url_opac") |  |    
-        |  |  --------------------------------------------------  |  |    
-        |  |  - Usuário/User:     $(printf "%-31s" "$user") |  |    
-        |  |  - Senha/Pass:       cat /root/credenciais_koha.txt  |  |    
-        |  |======================================================|  |    
-       /===/=======================================================\\==\\    
-      /___/_________________________________________________________\\__\\    
+                __________________________________________________    
+              //=================================================\\\\    
+             //          .-----------------------------.          \\\\    
+            //           |${t_head}|           \\\\    
+           //        .----'-----------------------------'----.        \\\\    
+         _//_======[  ${t_suite}  ]======_\\\\_    
+        |____|____________________________________________________|_____|    
+         |--|  ${l_ctrl}        |--|    
+         |  |  ==================================================  |  |    
+         |  |  ${l_urls}        |  |    
+         |  |  - Staff (Intranet) : ${f_staff}  |  |    
+         |  |  - OPAC  (Public)   : ${f_opac}  |  |    
+         |  |  --------------------------------------------------  |  |    
+         |  |  ${l_user}${f_user}  |  |    
+         |  |  ${l_pass}${f_pass}  |  |    
+         |  |======================================================|  |    
+        /===/=======================================================\\==\\    
+       /___/_________________________________________________________\\__\\    
 
 
 EOF
@@ -1567,7 +1603,7 @@ function_install_koha() {
     
     if ! /usr/sbin/koha-create --create-db "$INSTANCE" > /tmp/koha_create.log 2>&1; then
         local err_msg
-        err_msg=$(tail -n 15 /tmp/koha_create.log 2>/dev/null || echo "Log vazio.")
+        err_msg=$(tail -n 15 /tmp/koha_create.log 2>/dev/null || echo "$(t "Log vazio." "Empty log.")")
         msg_error "" "$(t "Falha ao criar a instância do Koha.\n\nDetalhes:\n$err_msg" "Failed to create the Koha instance.\n\nDetails:\n$err_msg")" 18 80
         return 1
     fi
@@ -1603,26 +1639,49 @@ function_install_koha() {
     write_backup_scripts
     write_cron_tasks
 
-    cat > /root/credenciais_koha.txt << EOF
+    if [ "$SYS_LANG" = "pt" ]; then
+        cat > /root/credenciais_koha.txt << EOF
 ======================================================================
- CREDENCIAIS DO KOHA / KOHA CREDENTIALS  (instancia: ${INSTANCE})
- Gerado em / Generated on: \$(date '+%F %T')
+ CREDENCIAIS DO KOHA (instância: ${INSTANCE})
+ Gerado em: $(date '+%F %T')
 ======================================================================
- Staff (administracao) : http://${ip}:8080
- OPAC  (catalogo)      : http://${ip}:80
+ Staff (administração): http://${ip}:8080
+ OPAC  (catálogo)     : http://${ip}:80
 
- Usuario / Username    : ${DB_NAME}
- Senha   / Password    : ${db_pass}
+ Usuário              : ${DB_NAME}
+ Senha                : ${db_pass}
 
- Esta senha e a do banco de dados e serve para o primeiro acesso
- (Web Installer). Depois crie um superbibliotecario proprio
- (opcao 15 do painel) e guarde este arquivo em local seguro.
+ Esta senha é a do banco de dados e serve para o primeiro acesso
+ (Web Installer). Depois crie um superbibliotecário próprio
+ (opção 15 do painel) e guarde este arquivo em local seguro.
 
- Configuracao : ${KOHA_CONF}
- Backups      : ${DIR_SQL} e ${DIR_MARC}
- Painel       : sudo options.sh
+ Configuração         : ${KOHA_CONF}
+ Backups              : ${DIR_SQL} e ${DIR_MARC}
+ Painel               : sudo options.sh
 ======================================================================
 EOF
+    else
+        cat > /root/credenciais_koha.txt << EOF
+======================================================================
+ KOHA CREDENTIALS (instance: ${INSTANCE})
+ Generated on: $(date '+%F %T')
+======================================================================
+ Staff (administration): http://${ip}:8080
+ OPAC  (catalog)       : http://${ip}:80
+
+ Username              : ${DB_NAME}
+ Password              : ${db_pass}
+
+ This password belongs to the database user for initial access
+ (Web Installer). Afterwards, create a dedicated superlibrarian
+ (option 15 in the panel) and store this file safely.
+
+ Configuration         : ${KOHA_CONF}
+ Backups               : ${DIR_SQL} and ${DIR_MARC}
+ Dashboard             : sudo options.sh
+======================================================================
+EOF
+    fi
     chmod 600 /root/credenciais_koha.txt
 
     configure_firewall
@@ -1639,8 +1698,8 @@ EOF
     restore_apt_timers
 
     clear
-    validate_complete_system "instalação concluída"
-    log "instalacao concluida (ok=$V_OK warn=$V_WARN fail=$V_FAIL)"
+    validate_complete_system "$(t "instalação concluída" "installation complete")"
+    log "$(t "instalação concluída" "installation complete") (ok=$V_OK warn=$V_WARN fail=$V_FAIL)"
 
     local result_msg
     if [ "$V_FAIL" -eq 0 ]; then
@@ -1666,7 +1725,7 @@ EOF
 "To enable full Plack speed, initialize SWAP, and ensure peak catalog performance, rebooting the system now is strongly recommended.\n\nCredentials have been saved to /root/credenciais_koha.txt.\n\nDo you want to reboot the server immediately?")" 15 76; then
         clear
         echo "$(t "Reiniciando em 5 segundos para consolidar os serviços..." "Rebooting in 5 seconds to consolidate services...")"
-        log "reboot automatico pós-instalacao solicitado pelo usuario"
+        log "$(t "reboot automático pós-instalação solicitado pelo usuário" "post-install automatic reboot requested by user")"
         sleep 5
         reboot
     else
@@ -1684,7 +1743,7 @@ function_view_credentials() {
     local ip; ip=$(get_server_ip)
     msg_info "$(t "Credenciais" "Credentials")" \
 "$(t "ACESSO AO KOHA\n\n  Staff (administração): http://${ip}:8080\n  OPAC  (catálogo):      http://${ip}:80\n\n  Usuário: ${DB_NAME}\n  Senha:   $(get_database_password)\n\nEsta é a senha do banco, usada no primeiro acesso.\nArquivo completo: /root/credenciais_koha.txt" \
-"KOHA ACCESS\n\n  Staff: http://${ip}:8080\n  OPAC:  http://${ip}:80\n\n  User: ${DB_NAME}\n  Pass: $(get_database_password)\n\nThis is the database password, used for first login.\nFull file: /root/credenciais_koha.txt")" 18 74
+"KOHA ACCESS\n\n  Staff (administration): http://${ip}:8080\n  OPAC  (catalog):        http://${ip}:80\n\n  User: ${DB_NAME}\n  Pass: $(get_database_password)\n\nThis is the database password, used for first login.\nFull file: /root/credenciais_koha.txt")" 18 74
 }
 
 # ======================================================================
@@ -1843,13 +1902,13 @@ function_restore_database() {
         systemctl restart "koha-zebra-daemon@${INSTANCE}" >/dev/null 2>&1 || true
     fi
 
-backup_lock_release
+    backup_lock_release
     systemctl restart memcached >/dev/null 2>&1 || true
     /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
     systemctl reload apache2 >/dev/null 2>&1 || true
 
-    validate_complete_system "restauração do banco"
-    log "restauracao concluida a partir de $file (motor=$engine rebuild=$rebuild_ok)"
+    validate_complete_system "$(t "restauração do banco" "database restore")"
+    log "$(t "restauração concluída a partir de" "restore completed from") $file (motor=$engine rebuild=$rebuild_ok)"
 
     if [ "$rebuild_ok" = "no" ]; then
         msg_error "" "$(t "O banco foi restaurado, mas a reconstrução do índice falhou.\nConsulte /var/log/koha-easy-install/zebra-rebuild.log" "The database was restored, but index rebuilding failed.\nCheck /var/log/koha-easy-install/zebra-rebuild.log")" 11 78
