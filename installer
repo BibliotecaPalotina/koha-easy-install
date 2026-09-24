@@ -1379,6 +1379,25 @@ write_banner() {
         cf_staff=$(grep -B1 "localhost:8080$" /etc/cloudflared/config.yml | grep "hostname:" | awk '{print $NF}' 2>/dev/null)
     fi
 
+    local url_staff="http://${ip}:8080"
+    local url_opac="http://${ip}:80"
+
+    local staff_cf_text opac_cf_text
+    if [ "$SYS_LANG" = "pt" ]; then
+        staff_cf_text="(Configure no painel)"
+        opac_cf_text="(Configure no painel)"
+    else
+        staff_cf_text="(Configure in panel)"
+        opac_cf_text="(Configure in panel)"
+    fi
+
+    if [ -n "$cf_staff" ]; then
+        staff_cf_text="https://${cf_staff}"
+    fi
+    if [ -n "$cf_opac" ]; then
+        opac_cf_text="https://${cf_opac}"
+    fi
+
     # Define o usuário e comando SSH
     local ssh_user="${REAL_USER:-servidor}"
     [ "$ssh_user" = "root" ] && ssh_user="servidor"
@@ -1401,49 +1420,19 @@ write_banner() {
         l_pass="- Password (Root) : "
     fi
 
-    # Formata rigorosamente para 50 caracteres úteis entre as colunas |  |
-    local f_ctrl f_ssh f_urls f_staff_local f_opac_local f_staff_loc f_opac_loc f_staff_pub f_opac_pub f_user f_pass
+    # Formata rigorosamente para exatamente 50 caracteres úteis entre as colunas |  |
+    local f_ctrl f_ssh f_urls f_staff f_opac f_staff_loc f_opac_loc f_staff_cf f_opac_cf f_user f_pass
     f_ctrl=$(printf "%-50.50s" "$l_ctrl")
     f_ssh=$(printf "%-50.50s" "$str_ssh")
     f_urls=$(printf "%-50.50s" "$l_urls")
-    
-    f_staff_local=$(printf "%-50.50s" "- Staff (IP)      : http://${ip}:8080")
-    f_opac_local=$(printf "%-50.50s" "- OPAC  (IP)      : http://${ip}:80")
-    f_staff_loc=$(printf "%-50.50s" "- Staff (Localhost): http://127.0.0.1:8080")
-    f_opac_loc=$(printf "%-50.50s" "- OPAC  (Localhost): http://127.0.0.1:80")
-
-    if [ -n "$cf_staff" ]; then
-        f_staff_pub=$(printf "%-50.50s" "- Staff (Public)  : https://${cf_staff}")
-    fi
-    if [ -n "$cf_opac" ]; then
-        f_opac_pub=$(printf "%-50.50s" "- OPAC  (Public)  : https://${cf_opac}")
-    fi
-
+    f_staff=$(printf "%-50.50s" "- Staff (Rede/IP) : $url_staff")
+    f_opac=$(printf "%-50.50s" "- OPAC  (Rede/IP) : $url_opac")
+    f_staff_loc=$(printf "%-50.50s" "- Staff (Local)   : http://127.0.0.1:8080")
+    f_opac_loc=$(printf "%-50.50s" "- OPAC  (Local)   : http://127.0.0.1:80")
+    f_staff_cf=$(printf "%-50.50s" "- Staff (Cloudfl) : $staff_cf_text")
+    f_opac_cf=$(printf "%-50.50s" "- OPAC  (Cloudfl)  : $opac_cf_text")
     f_user=$(printf "%-50.50s" "${l_user}${user}")
     f_pass=$(printf "%-50.50s" "${l_pass}cat /root/credenciais_koha.txt")
-
-    # Monta as linhas internas dinamicamente (omitindo o que não estiver ativo)
-    local inner_content=""
-    inner_content+="     |--|  ${f_ctrl}  |--|\n"
-    inner_content+="     |--|  ${f_ssh}  |  |\n"
-    inner_content+="     |  | ================================================== |  |\n"
-    inner_content+="     |  |  ${f_urls}  |  |\n"
-    inner_content+="     |  |  ${f_staff_local}  |  |\n"
-    inner_content+="     |  |  ${f_opac_local}  |  |\n"
-    inner_content+="     |  |  ${f_staff_loc}  |  |\n"
-    inner_content+="     |  |  ${f_opac_loc}  |  |\n"
-    
-    # Adiciona as linhas do Cloudflare apenas se configurado
-    if [ -n "${f_staff_pub:-}" ]; then
-        inner_content+="     |  |  ${f_staff_pub}  |  |\n"
-    fi
-    if [ -n "${f_opac_pub:-}" ]; then
-        inner_content+="     |  |  ${f_opac_pub}  |  |\n"
-    fi
-
-    inner_content+="     |  |  --------------------------------------------------  |  |\n"
-    inner_content+="     |  |  ${f_user}  |  |\n"
-    inner_content+="     |  |  ${f_pass}  |  |\n"
 
     cat > /etc/issue << EOF
 \S
@@ -1456,7 +1445,20 @@ write_banner() {
            //        .-------------------------------------'----.        \\
          _//_======[   ${t_suite}   ]======_\\_
         |____|____________________________________________________|____|
-$(printf '%b' "$inner_content")         |  |====================================================|  |
+         |--|  ${f_ctrl}  |--|
+         |  |  ${f_ssh}  |  |
+         |  | ================================================== |  |
+         |  |  ${f_urls}  |  |
+         |  |  ${f_staff}  |  |
+         |  |  ${f_opac}  |  |
+         |  |  ${f_staff_loc}  |  |
+         |  |  ${f_opac_loc}  |  |
+         |  |  ${f_staff_cf}  |  |
+         |  |  ${f_opac_cf}  |  |
+         |  |  --------------------------------------------------  |  |
+         |  |  ${f_user}  |  |
+         |  |  ${f_pass}  |  |
+         |  |====================================================|  |
         /===/======================================================\\==\\
        /___/________________________________________________________\\__\\
 
