@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # ======================================================================
 # KOHA EASY INSTALLER & MANAGER - ADVANCED MANAGEMENT SUITE
 # Deployment, maintenance, tuning and backup suite for Koha ILS.
@@ -5,8 +6,6 @@
 # Single, self-sufficient file. Updates via "Update this panel" option.
 # ======================================================================
 # ======================================================================
-# TESTE_SYNC_PALOTINA_OK=1
-DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::ForceIPv4=true >/dev/null 2>&1
 
 set -o pipefail
 umask 022
@@ -61,13 +60,14 @@ if [ "${EUID:-$(id -u)}" -ne 0 ]; then
     echo "+---------------------------------------------------------------+"
     echo ""
     if [ -f "$0" ]; then
-        if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null || sudo -v 2>/dev/null; then
+        if command -v sudo >/dev/null 2>&1 && (sudo -n true 2>/dev/null || sudo -v 2>/dev/null); then
             exec sudo -E bash "$0" "$@"
         elif command -v su >/dev/null 2>&1; then
-            exec su -c "bash '$0' $*"
+            printf -v _args_quoted '%q ' "$@"
+            exec su - root -c "bash '$0' $_args_quoted"
         fi
     fi
-    echo "$(t "ERROR: run as root: su -c 'bash config.sh'")"
+    echo "$(t "ERROR: run as root: su - -c 'bash config.sh'")"
     exit 1
 fi
 
