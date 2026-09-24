@@ -11,7 +11,7 @@ set -o pipefail
 umask 022
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
-PANEL_VERSION=" β-0.9"
+PANEL_VERSION=" β-0.9.1"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
@@ -3651,6 +3651,17 @@ EOF
 # ======================================================================
 # MAIN MENU (16 OPTIONS)
 # ======================================================================
+export NEWT_COLORS='
+root=,,
+window=black,lightgray
+border=black,lightgray
+shadow=black,black
+title=black,lightgray
+textbox=black,lightgray
+listbox=black,lightgray
+actlistbox=white,blue
+'
+
 while true; do
     restore_apt_timers
 
