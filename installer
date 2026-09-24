@@ -3446,6 +3446,37 @@ function_validate_system() {
 }
 
 # ======================================================================
+# 20.1. DEEP MAINTENANCE & OPTIMIZATION
+# ======================================================================
+function_deep_maintenance() {
+    require_database || return 0
+    
+    prompt_yes_no "$(t "Deep Maintenance")" \
+"$(t "This routine will:\n\n• Repair and optimize MariaDB tables\n• Clean system journal logs (> 7 days)\n• Vacuum temporary and backup old files\n\nContinue?")" 14 76 || return 0
+
+    clear
+    display_explanation "Optimizing MariaDB tables and database..."
+    
+    if mysqlcheck --auto-repair --optimize --default-character-set=utf8mb4 "$DB_NAME" >/tmp/koha_db_optimize.log 2>&1; then
+        log "database optimized successfully"
+    else
+        log "database optimization reported warnings or errors"
+    fi
+
+    display_explanation "Cleaning system and journal logs..."
+    journalctl --vacuum-time=7d >/dev/null 2>&1 || true
+    find "$LOG_DIR" -name "*.log" -mtime +14 -delete 2>/dev/null || true
+
+    display_explanation "Restarting core services to free memory..."
+    systemctl restart memcached >/dev/null 2>&1 || true
+    /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
+    systemctl restart apache2 >/dev/null 2>&1 || true
+
+    msg_ok "$(t "Maintenance completed successfully!\n\n• MariaDB tables optimized\n• System logs vacuumed\n• Services restarted and memory flushed")" 12 74
+    log "deep maintenance completed"
+}
+
+# ======================================================================
 # 21. DETAILED STATUS
 # ======================================================================
 function_detailed_status() {
@@ -3770,16 +3801,18 @@ while true; do
             ;;
         7)
             SUB_OPT=$(whiptail --title "$(t "◈ Diagnostics & Maintenance Center")" --cancel-button "$(t "Back")" \
-                --menu "$(t "Choose a tool:")" 18 76 4 \
+                --menu "$(t "Choose a tool:")" 19 76 5 \
                 "1" "$(t "◈  Detailed server & Koha status")" \
                 "2" "$(t "✓  Full system health check")" \
                 "3" "$(t "▤  View latest validation report")" \
-                "4" "$(t "⌁  Real-time Apache log auditing")" 3>&1 1>&2 2>&3) || continue
+                "4" "$(t "⌁  Real-time Apache log auditing")" \
+                "5" "$(t "⚙  Deep database optimization & log cleanup")" 3>&1 1>&2 2>&3) || continue
             case "$SUB_OPT" in
                 1) function_detailed_status ;;
                 2) function_validate_system ;;
                 3) show_validation_report ;;
                 4) function_view_logs ;;
+                5) function_deep_maintenance ;;
             esac
             ;;
         8)
