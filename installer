@@ -3422,7 +3422,7 @@ function_google_search_console() {
 # 17. CERTIFICADO SSL / SSL CERTIFICATE
 # ======================================================================
 function_configure_ssl() {
-    prompt_yes_no "SSL / HTTPS" \
+    prompt_yes_no "$(t "SSL / HTTPS" "SSL / HTTPS")" \
 "$(t "Para gerar o certificado gratuito você PRECISA de um domínio\napontando (registro A) para o IP PÚBLICO deste servidor, e a\nporta 80 aberta na internet.\n\nSe você usa Cloudflare Tunnel, CANCELE: o HTTPS já vem de lá.\n\nContinuar?" \
 "To issue the free certificate you NEED a domain with an A record\npointing to this server's PUBLIC IP, and port 80 reachable.\n\nIf you use Cloudflare Tunnel, CANCEL: HTTPS already comes from it.\n\nContinue?")" 15 76 || return 0
     clear
@@ -3453,7 +3453,7 @@ function_configure_ssl() {
 # ======================================================================
 function_interoperability() {
     require_koha || return 0
-    prompt_yes_no "SIP2 & Z39.50" \
+    prompt_yes_no "$(t "SIP2 & Z39.50" "SIP2 & Z39.50")" \
 "$(t "Z39.50 (porta 2100): permite que outras bibliotecas busquem no seu acervo.\nSIP2 (porta 6001): permite ligar totens de autoatendimento.\n\nAtivar os dois e liberar as portas no firewall?" \
 "Z39.50 (port 2100): lets other libraries search your catalog.\nSIP2 (port 6001): lets you connect self-checkout terminals.\n\nEnable both and open the firewall ports?")" 13 78 || return 0
     clear
