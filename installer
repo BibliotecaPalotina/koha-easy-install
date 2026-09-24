@@ -2036,77 +2036,76 @@ function_manual_backup() {
     fi
     msg_info "$(t "Destino do Backup" "Backup Destination")" \
 "$(t "Escolha onde salvar o arquivo.\n\n  Pendrive/USB: normalmente em /media ou /mnt\n  Para baixar depois: scp root@$(get_server_ip):CAMINHO ." "Choose where to save the file.\n\n  USB drive: usually under /media or /mnt\n  To download later: scp root@$(get_server_ip):PATH .")" 12 76
+    
     local target_dir
     target_dir=$(select_directory "$REAL_HOME") || { backup_lock_release; return 0; }
     [ -z "$target_dir" ] && { backup_lock_release; return 0; }
     local target_file="${target_dir%/}/${DB_NAME}_manual_$(date +%Y-%m-%d_%Hh%M).sql.gz"
+    
     clear
     display_explanation "Gerando o backup..." "Generating the backup..."
+    
     if mysqldump --single-transaction --quick --routines --triggers \
          --default-character-set=utf8mb4 "$DB_NAME" | gzip > "$target_file" && gzip -t "$target_file" 2>/dev/null; then
+        
         log "$(t "backup manual gerado:" "manual backup generated:") $target_file"
         backup_lock_release
-        msg_ok "$(t "Backup gerado e verificado:\n$target_file\n\nTamanho: $(du -h "$target_file" | cut -f1)" "Backup generated and verified:\n$target_file\n\nSize: $(du -h "$target_file" | cut -f1)")" 11 76
+        
+        local size
+        size=$(du -h "$target_file" | cut -f1)
+        
+        msg_ok "$(t "Backup gerado e verificado:\n$target_file\n\nTamanho: $size" "Backup generated and verified:\n$target_file\n\nSize: $size")" 11 76
+
+        if prompt_yes_no "$(t "Baixar para este PC" "Download to this PC")" "$(t "Deseja ver o comando rápido para puxar este backup para o seu\ncomputador pessoal (Windows, Mac ou Linux) agora mesmo?" "Do you want to see the quick command to pull this backup to your\npersonal computer (Windows, Mac or Linux) right now?")" 10 76; then
+            
+            local tmp_msg
+            tmp_msg=$(mktemp /tmp/koha_scp_msg.XXXXXX) || return 0
+            
+            if [ "$SYS_LANG" = "pt" ]; then
+                cat > "$tmp_msg" << EOF
+======================================================================
+COMO SALVAR O BACKUP NO SEU COMPUTADOR (WINDOWS / MAC / LINUX)
+======================================================================
+
+Abra o Terminal ou PowerShell no seu computador pessoal (não neste
+servidor) e copie e cole o comando exato abaixo:
+
+scp ${REAL_USER:-root}@$(get_server_ip):${target_file} .
+
+1. O arquivo será salvo na pasta em que o seu terminal estiver aberto
+   (geralmente a pasta do seu usuário, ex: C:\Users\Bibliotecario).
+2. Não esqueça o ponto final ( . ) no comando acima.
+3. Será solicitada a senha do usuário '${REAL_USER:-root}' deste servidor.
+
+Arquivo para baixar: $(basename "$target_file") (${size})
+EOF
+            else
+                cat > "$tmp_msg" << EOF
+======================================================================
+HOW TO SAVE THE BACKUP TO YOUR COMPUTER (WINDOWS / MAC / LINUX)
+======================================================================
+
+Open Terminal or PowerShell on your personal computer (not on this
+server) and copy and paste the exact command below:
+
+scp ${REAL_USER:-root}@$(get_server_ip):${target_file} .
+
+1. The file will be saved in the folder where your terminal is open
+   (usually your user folder, e.g., C:\Users\Librarian).
+2. Do not forget the dot ( . ) at the end of the command above.
+3. You will be asked for the password of user '${REAL_USER:-root}'.
+
+File to download: $(basename "$target_file") (${size})
+EOF
+            fi
+
+            whiptail --title "$(t "Transferência de Arquivo via SCP" "File Transfer via SCP")" --textbox "$tmp_msg" 21 78 2>/dev/null || true
+            rm -f "$tmp_msg"
+        fi
     else
         rm -f "$target_file"
         backup_lock_release
         msg_error "" "$(t "Falha ao gerar o backup. Verifique o espaço em disco." "Failed to generate the backup. Check the free disk space.")" 9 70
-    fi
-}
-
-# ======================================================================
-# 5. ENVIAR BACKUP VIA SCP MANUAL / SEND MANUAL SCP BACKUP
-# ======================================================================
-function_send_manual_scp_backup() {
-    require_database || return 0
-    local host user port folder key use_saved="no"
-
-    if [ -f "$SCP_BACKUP_CONF" ] && grep -q '^SCP_HOST="[^"]\+"' "$SCP_BACKUP_CONF" 2>/dev/null; then
-        . "$SCP_BACKUP_CONF"
-        if prompt_yes_no "$(t "Usar destino salvo?" "Use saved destination?")" \
-            "$(t "Já existe um destino configurado:\n${SCP_USER}@${SCP_HOST}:${SCP_FOLDER}\n\nUsar esse destino agora?" "There is already a configured destination:\n${SCP_USER}@${SCP_HOST}:${SCP_FOLDER}\n\nUse this destination now?")" 11 74; then
-            host="$SCP_HOST"; user="$SCP_USER"; port="$SCP_PORT"; folder="$SCP_FOLDER"; key="$SCP_KEY"
-            use_saved="yes"
-        fi
-    fi
-
-if [ "$use_saved" = "no" ]; then
-        show_ip_discovery_help
-
-        host=$(whiptail --title "$(t "Enviar Backup via SCP" "Send Backup via SCP")" \
-            --inputbox "$(t "Endereço (IP ou domínio) do destino:" "Address (IP or hostname) of the destination:")" 10 70 3>&1 1>&2 2>&3) || return 0
-        [ -z "$host" ] && return 0
-        user=$(whiptail --title "$(t "Usuário" "Username")" --inputbox "$(t "Usuário SSH:" "SSH username:")" 9 60 "$REAL_USER" 3>&1 1>&2 2>&3) || return 0
-        [ -z "$user" ] && return 0
-        port=$(whiptail --title "$(t "Porta SSH" "SSH Port")" --inputbox "$(t "Porta SSH:" "SSH port:")" 9 60 "22" 3>&1 1>&2 2>&3) || return 0
-        [ -z "$port" ] && port="22"
-        folder=$(whiptail --title "$(t "Pasta de Destino" "Destination Folder")" --inputbox "$(t "Pasta no destino (deve existir):" "Folder on the destination (must exist):")" 10 70 "C:/Users/${user}/Documents" 3>&1 1>&2 2>&3) || return 0
-        [ -z "$folder" ] && return 0
-        key=""
-    fi
-
-    clear
-    display_explanation "Gerando o backup..." "Generating the backup..."
-    local target="${DIR_SQL}/${DB_NAME}_manual_$(date +%Y-%m-%d_%Hh%M).sql.gz"
-    mkdir -p "$DIR_SQL"
-    if ! (mysqldump --single-transaction --quick --routines --triggers \
-          --default-character-set=utf8mb4 "$DB_NAME" | gzip > "$target" && gzip -t "$target" 2>/dev/null); then
-        rm -f "$target"
-        msg_error "" "$(t "Falha ao gerar o backup. Verifique o espaço em disco." "Failed to generate the backup. Check the free disk space.")" 9 70
-        return 1
-    fi
-    ln -sf "$(basename "$target")" "${DIR_SQL}/ultimo_backup.sql.gz" 2>/dev/null
-
-    display_explanation "Enviando via SCP para ${user}@${host}..." "Sending via SCP to ${user}@${host}..."
-    local opts=(-P "$port" -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new)
-    [ -n "$key" ] && opts+=(-i "$key")
-
-    if scp "${opts[@]}" "$target" "${user}@${host}:${folder%/}/" 2>&1 | tee -a "$RUN_LOG"; then
-        log "$(t "backup enviado via SCP manual:" "backup sent via manual SCP:") $target -> ${user}@${host}:${folder}"
-        msg_ok "$(t "Backup gerado e enviado com sucesso!\n\nArquivo: $(basename "$target")\nDestino: ${user}@${host}:${folder}" "Backup generated and sent successfully!\n\nFile: $(basename "$target")\nDestination: ${user}@${host}:${folder}")" 11 76
-    else
-        msg_error "" "$(t "O backup foi gerado localmente (${target}), mas o envio por SCP falhou.\nSe você não usou o destino salvo, e a chave não estiver autorizada,\no SCP vai pedir senha (digite-a quando aparecer no terminal).\n\nLog: $RUN_LOG" "The backup was generated locally (${target}), but the SCP transfer\nfailed. If you didn't use the saved destination and the key isn't\nauthorized, SCP will prompt for a password (type it when it appears).\n\nLog: $RUN_LOG")" 13 78
-        return 1
     fi
 }
 
@@ -2847,69 +2846,6 @@ function_configure_rclone() {
         validate_and_register_rclone "$conn_name"
         return 0
     fi
-}
-
-# ======================================================================
-# 12. CONFIGURAR BACKUP AUTOMÁTICO SCP / CONFIGURE AUTOMATIC SCP BACKUP
-# ======================================================================
-function_configure_automatic_scp_backup() {
-    write_scp_backup_config
-    local host user port folder key
-
-    show_ip_discovery_help
-
-    host=$(whiptail --title "$(t "Backup Automático via SCP" "Automatic SCP Backup")" \
-        --inputbox "$(t "Endereço (IP ou domínio) do servidor de destino:" "Address (IP or hostname) of the destination server:")" 10 70 3>&1 1>&2 2>&3) || return 0
-    [ -z "$host" ] && return 0
-
-    user=$(whiptail --title "$(t "Usuário" "Username")" \
-        --inputbox "$(t "Usuário SSH no destino:" "SSH username on the destination:")" 9 60 "$REAL_USER" 3>&1 1>&2 2>&3) || return 0
-    [ -z "$user" ] && return 0
-
-    port=$(whiptail --title "$(t "Porta SSH" "SSH Port")" \
-        --inputbox "$(t "Porta SSH do destino:" "SSH port of the destination:")" 9 60 "22" 3>&1 1>&2 2>&3) || return 0
-    [ -z "$port" ] && port="22"
-
-    folder=$(whiptail --title "$(t "Pasta de Destino" "Destination Folder")" \
-        --inputbox "$(t "Pasta no destino onde salvar os backups (deve existir):" "Folder on the destination to save backups (must exist):")" 10 70 "/home/${user}/koha_backups" 3>&1 1>&2 2>&3) || return 0
-    [ -z "$folder" ] && return 0
-
-    key="/root/.ssh/koha_backup_ed25519"
-    mkdir -p /root/.ssh && chmod 700 /root/.ssh
-    if [ ! -f "$key" ]; then
-        display_explanation "Gerando chave SSH dedicada para o backup..." "Generating a dedicated SSH key for backups..."
-        ssh-keygen -t ed25519 -f "$key" -N "" -C "koha-backup@$(hostname)" >/dev/null 2>&1
-    fi
-
-    clear
-    echo "======================================================================"
-    echo "$(t "AUTORIZANDO A CHAVE NO SERVIDOR DE DESTINO" "AUTHORIZING THE KEY ON THE DESTINATION SERVER")"
-    echo "======================================================================"
-    echo "$(t "Vou tentar copiar a chave pública automaticamente. Será pedida a\nSENHA do usuário '${user}' no destino UMA VEZ (só agora)." "I will try to copy the public key automatically. The password for\nuser '${user}' on the destination will be asked ONCE (just now).")"
-    echo ""
-    if ssh-copy-id -p "$port" -i "${key}.pub" -o StrictHostKeyChecking=accept-new "${user}@${host}" 2>&1 | tee -a "$RUN_LOG"; then
-        echo -e "\n$(t "Chave copiada com sucesso." "Key copied successfully.")"
-    else
-        msg_info "$(t "Copie manualmente" "Copy manually")" \
-"$(t "Não foi possível copiar a chave automaticamente.\n\nCopie o conteúdo abaixo e cole no final do arquivo\n~/.ssh/authorized_keys do usuário '${user}' no destino:\n\n$(cat "${key}.pub" 2>/dev/null)" "Could not copy the key automatically.\n\nCopy the content below and paste it at the end of\n~/.ssh/authorized_keys for user '${user}' on the destination:\n\n$(cat "${key}.pub" 2>/dev/null)")" 20 78
-    fi
-
-    display_explanation "Testando a conexão sem senha..." "Testing passwordless connection..."
-    if ! ssh -p "$port" -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
-            "${user}@${host}" "mkdir -p '${folder}' && echo OK" 2>>"$RUN_LOG" | grep -q OK; then
-        msg_error "" "$(t "A conexão sem senha falhou. Verifique se a chave foi mesmo autorizada\nno destino e se a porta/usuário estão corretos.\n\nLog: $RUN_LOG" "Passwordless connection failed. Check that the key was really\nauthorized on the destination and that port/user are correct.\n\nLog: $RUN_LOG")" 12 76
-        return 1
-    fi
-
-    set_scp_config "SCP_HOST" "$host"
-    set_scp_config "SCP_USER" "$user"
-    set_scp_config "SCP_PORT" "$port"
-    set_scp_config "SCP_FOLDER" "$folder"
-    set_scp_config "SCP_KEY" "$key"
-    chmod 600 "$SCP_BACKUP_CONF"
-
-    log "$(t "backup automático via SCP configurado:" "automatic backup via SCP configured:") ${user}@${host}:${folder}"
-    msg_ok "$(t "Backup automático via SCP configurado e testado com sucesso.\n\nDestino: ${user}@${host}:${folder}\n\nA partir de agora, o backup diário das 23h também envia uma\ncópia para lá, sem depender do rclone." "Automatic SCP backup configured and tested successfully.\n\nDestination: ${user}@${host}:${folder}\n\nFrom now on, the daily 23:00 backup also sends a copy there,\nwithout going through rclone.")" 12 78
 }
 
 # ======================================================================
