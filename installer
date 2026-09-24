@@ -6,10 +6,9 @@
 # Single, self-sufficient file. Updates via "Update this panel" option.
 # ======================================================================
 
-if [ "$EUID" -ne 0 ]; then
-    echo "Please run as root (sudo)"
-    exit 1
-fi
+set -o pipefail
+umask 022
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
 PANEL_LOCK_FILE="/var/run/koha_panel.lock"
 
@@ -19,24 +18,32 @@ if ! flock -n 9; then
     exit 1
 fi
 
-trap on_exit EXIT
-
-set -o pipefail
-umask 022
-export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+# ======================================================================
+# 1. CLEANUP ON EXIT (Declarado ANTES do trap)
+# ======================================================================
+APT_TIMERS_STOPPED="no"
+restore_apt_timers() {
+    [ "$APT_TIMERS_STOPPED" = "yes" ] || return 0
+    systemctl start apt-daily.timer apt-daily-upgrade.timer unattended-upgrades >/dev/null 2>&1
+    APT_TIMERS_STOPPED="no"
+}
+on_exit() { 
+    restore_apt_timers
+    rm -f /tmp/koha_tmp_* 2>/dev/null || true
+    # Remove a trava apenas se não estivermos usando o descritor de arquivo rígido
+    # rm -f "$PANEL_LOCK_FILE"
+}
+trap on_exit EXIT INT TERM HUP
 
 PANEL_VERSION=" β-0.9.2"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
-# LANGUAGE (AUTOMATIC SYSTEM LOCALE DETECTION)
+# 2. LANGUAGE (AUTOMATIC SYSTEM LOCALE DETECTION)
 # ======================================================================
-
 detect_system_language() {
     local locale_value lang
-
     locale_value="$(locale | grep '^LC_MESSAGES=' | cut -d= -f2 | tr -d '\"' 2>/dev/null)"
-
     [ -z "$locale_value" ] && locale_value="${LC_ALL:-}"
     [ -z "$locale_value" ] && locale_value="${LC_MESSAGES:-}"
     [ -z "$locale_value" ] && locale_value="${LANG:-}"
@@ -52,27 +59,120 @@ detect_system_language() {
     esac
 
     KOHA_SYS_LANG="$(echo "${locale_value%%.*}" | tr '_' '-')"
-
     lang="${locale_value%%_*}"
     lang="${lang%%.*}"
     lang="${lang%%-*}"
 
     [ -z "$lang" ] && lang="en"
-
-    # Define a variável global de tradução do painel diretamente
     SYS_LANG="$lang"
 }
 
 detect_system_language
-
-# Prevenção extra de segurança
 [ -z "$KOHA_SYS_LANG" ] && KOHA_SYS_LANG="en"
 [ -z "$SYS_LANG" ] && SYS_LANG="en"
 
 declare -A _TRANS_CACHE
 
+t() {
+    local text="$1"
+    if [[ "$SYS_LANG" == "en" ]]; then
+        printf '%b' "$text"
+        return
+    fi
+    if [[ -n "${_TRANS_CACHE["$text"]+x}" ]]; then
+        printf '%b' "${_TRANS_CACHE["$text"]}"
+        return
+    fi
+
+    local translated
+    translated=$(curl -fsS -G \
+        --connect-timeout 5 \
+        --max-time 15 \
+        "https://translate.googleapis.com/translate_a/single" \
+        --data-urlencode "client=gtx" \
+        --data-urlencode "sl=en" \
+        --data-urlencode "tl=$SYS_LANG" \
+        --data-urlencode "dt=t" \
+        --data-urlencode "q=$text" 2>/dev/null |
+        python3 -c '
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    print("".join(part[0] for part in data[0] if part and part[0]))
+except Exception:
+    pass
+' 2>/dev/null)
+
+    if [ -n "$translated" ]; then
+        _TRANS_CACHE["$text"]="$translated"
+        printf '%b' "$translated"
+    else
+        printf '%b' "$text"
+    fi
+}
+
 # ======================================================================
-# PRIVILEGE ESCALATION
+# 3. SHIELDED APT
+# ======================================================================
+APT_OPTS=(-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o Acquire::ForceIPv4=true)
+
+wait_for_apt_locks() {
+    systemctl stop apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1
+    APT_TIMERS_STOPPED="yes"
+
+    local wait_time=0
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+          fuser /var/lib/apt/lists/lock  >/dev/null 2>&1 || \
+          fuser /var/lib/dpkg/lock        >/dev/null 2>&1; do
+        sleep 3
+        wait_time=$((wait_time + 3))
+        if [ "$wait_time" -ge 300 ]; then
+            restore_apt_timers
+            return 1
+        fi
+    done
+    if ! dpkg --configure -a >/dev/null 2>&1; then
+        restore_apt_timers
+        return 1
+    fi
+    return 0
+}
+
+apt_update_indices() {
+    local attempt=1 max=3
+    while [ "$attempt" -le "$max" ]; do
+        if apt-get update -y -o Acquire::ForceIPv4=true >/tmp/koha_apt_update.log 2>&1; then
+            rm -f /tmp/koha_apt_update.log
+            return 0
+        fi
+        sleep 2
+        if apt-get update -y --fix-missing -o Acquire::ForceIPv4=true >>/tmp/koha_apt_update.log 2>&1; then
+            rm -f /tmp/koha_apt_update.log
+            return 0
+        fi
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+    return 1
+}
+
+apt_install() {
+    local packages=("$@") attempt=1 max=3
+    while [ "$attempt" -le "$max" ]; do
+        if DEBIAN_FRONTEND=noninteractive apt-get install "${APT_OPTS[@]}" "${packages[@]}"; then
+            return 0
+        fi
+        apt_update_indices >/dev/null 2>&1
+        dpkg --configure -a >/dev/null 2>&1
+        apt-get -f install "${APT_OPTS[@]}" >/dev/null 2>&1
+        sleep 3
+        attempt=$((attempt + 1))
+    done
+    return 1
+}
+
+# ======================================================================
+# 4. PRIVILEGE ESCALATION
 # ======================================================================
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
     echo ""
@@ -99,20 +199,8 @@ REAL_HOME="$(getent passwd "$REAL_USER" 2>/dev/null | cut -d: -f6)"
 [ -d "$REAL_HOME" ] || REAL_HOME="/root"
 
 # ======================================================================
-# EXECUTION LOCKS (PID BASED)
+# 5. EXECUTION LOCKS (PID BASED) - BACKUP ONLY
 # ======================================================================
-PANEL_LOCK_FILE="/var/run/koha_easy_install.pid"
-if [ -f "$PANEL_LOCK_FILE" ]; then
-    LOCK_PID=$(cat "$PANEL_LOCK_FILE" 2>/dev/null | tr -dc '0-9')
-    if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
-        echo ""
-        echo "$(t "ERROR: Koha Easy Install & Tools is already running (PID: $LOCK_PID).")"
-        echo ""
-        exit 1
-    fi
-fi
-echo $$ > "$PANEL_LOCK_FILE"
-
 BACKUP_LOCK_FILE="/var/run/koha_backup.pid"
 backup_lock_acquire() {
     if [ -f "$BACKUP_LOCK_FILE" ]; then
@@ -130,7 +218,7 @@ backup_lock_release() {
 }
 
 # ======================================================================
-# GLOBAL CONSTANTS
+# 6. GLOBAL CONSTANTS
 # ======================================================================
 INSTANCE="library"
 DB_NAME="koha_${INSTANCE}"
@@ -153,7 +241,7 @@ log() { printf '%s | %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$RUN_LOG" 2>/
 log "===== panel started (v$PANEL_VERSION, user=$REAL_USER) ====="
 
 # ======================================================================
-# PANEL DEPENDENCIES
+# 7. PANEL DEPENDENCIES
 # ======================================================================
 timedatectl set-ntp true >/dev/null 2>&1 || true
 
@@ -166,179 +254,13 @@ done
 
 if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
     echo "$(t "Installing panel dependencies... Please wait.")"
-    wait_for_apt_locks || { echo "$(t "APT is locked. Aborting.")"; rm -f "$PANEL_LOCK_FILE"; exit 1; }
+    wait_for_apt_locks || { echo "$(t "APT is locked. Aborting.")"; exit 1; }
     apt_update_indices >/dev/null 2>&1
     apt_install "${MISSING_DEPS[@]}" >/dev/null 2>&1 || {
         echo "$(t "Could not install dependencies. Aborting.")"
-        rm -f "$PANEL_LOCK_FILE"
         exit 1
     }
 fi
-
-# ======================================================================
-# CLEANUP ON EXIT
-# ======================================================================
-APT_TIMERS_STOPPED="no"
-restore_apt_timers() {
-    [ "$APT_TIMERS_STOPPED" = "yes" ] || return 0
-    systemctl start apt-daily.timer apt-daily-upgrade.timer unattended-upgrades >/dev/null 2>&1
-    APT_TIMERS_STOPPED="no"
-}
-on_exit() { 
-    restore_apt_timers
-    rm -f "$PANEL_LOCK_FILE"
-    log "===== panel closed ====="
-}
-trap on_exit EXIT
-trap 'echo ""; echo "$(t "Interrupted by user.")"; exit 130' INT TERM
-
-# ======================================================================
-# UI HELPERS
-# ======================================================================
-display_explanation() {
-    local msg; msg="$(t "$1")"
-    echo ""
-    echo "+---------------------------------------------------------------------------+"
-    echo "| $msg"
-    echo "+---------------------------------------------------------------------------+"
-    echo ""
-    log "STEP: $msg"
-}
-
-msg_info()  { whiptail --title "$1" --msgbox "$2" "${3:-12}" "${4:-74}" 2>/dev/null || true; }
-msg_error() { log "ERROR: $2"; whiptail --title "$(t "Error")" --msgbox "$2" "${3:-14}" "${4:-78}" 2>/dev/null || true; }
-msg_ok()    { whiptail --title "$(t "Success")" --msgbox "$1" "${2:-10}" "${3:-74}" 2>/dev/null || true; }
-prompt_yes_no() { whiptail --title "$1" --yesno "$2" "${3:-12}" "${4:-74}" 2>/dev/null; }
-
-pause_terminal() {
-    echo ""
-    echo "$(t "Press [ENTER] to return to the panel...")"
-    read -r _ || true
-}
-
-# ======================================================================
-# NETWORK & SYSTEM
-# ======================================================================
-get_server_ip() {
-    local ip=""
-    ip=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')
-    [ -z "$ip" ] && ip=$(hostname -I 2>/dev/null | awk '{print $1}')
-    [ -z "$ip" ] && ip="127.0.0.1"
-    printf '%s' "$ip"
-}
-
-get_ssh_ports() {
-    local p=""
-    p=$(grep -shoriE '^[[:space:]]*Port[[:space:]]+[0-9]+' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf 2>/dev/null | grep -oE '[0-9]+' | sort -u)
-    [ -z "$p" ] && p=$(ss -lntp 2>/dev/null | grep -i sshd | awk '{print $4}' | sed 's/.*[:.]//' | sort -u)
-    [ -z "$p" ] && p="22"
-    printf '%s' "$p"
-}
-
-get_free_space_mb() { df -Pm "${1:-/}" 2>/dev/null | awk 'NR==2{print $4}'; }
-
-is_koha_installed() { [ -f "$KOHA_CONF" ]; }
-
-is_database_ready() {
-    mysql -Nse "SELECT 1 FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name='systempreferences' LIMIT 1;" 2>/dev/null | grep -q 1
-}
-
-require_koha() {
-    if ! is_koha_installed; then
-        msg_error "" "$(t "Koha is not installed yet.\nUse option 1 in the panel.")" 9 64
-        return 1
-    fi
-    return 0
-}
-
-require_database() {
-    require_koha || return 1
-    if ! is_database_ready; then
-        msg_error "" "$(t "Database is still empty.\n\nFinish the Web Installer in the browser (Staff) or restore a backup.")" 11 72
-        return 1
-    fi
-    return 0
-}
-
-get_database_password() {
-    [ -f "$KOHA_CONF" ] || return 1
-    grep -oP '(?<=<pass>)[^<]+' "$KOHA_CONF" 2>/dev/null | head -n 1
-}
-
-run_sql() { mysql -N -B -e "$1" 2>/dev/null; }
-
-# ======================================================================
-# SHIELDED APT
-# ======================================================================
-APT_OPTS=(-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o Acquire::ForceIPv4=true)
-
-wait_for_apt_locks() {
-    display_explanation "Checking APT/DPKG locks..."
-    systemctl stop apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1
-    APT_TIMERS_STOPPED="yes"
-
-    local wait_time=0
-    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
-          fuser /var/lib/apt/lists/lock  >/dev/null 2>&1 || \
-          fuser /var/lib/dpkg/lock        >/dev/null 2>&1; do
-        echo "$(t "[INFO] APT busy. Waiting 3s...")"
-        sleep 3
-        wait_time=$((wait_time + 3))
-        if [ "$wait_time" -ge 300 ]; then
-            echo "$(t "[ERROR] APT is still locked after 5 minutes. Operation cancelled.")"
-            restore_apt_timers
-            return 1
-        fi
-    done
-    if ! dpkg --configure -a >/dev/null 2>&1; then
-        echo "$(t "[ERROR] dpkg --configure -a failed. Fix dpkg before continuing.")"
-        restore_apt_timers
-        return 1
-    fi
-    return 0
-}
-
-apt_update_indices() {
-    local attempt=1 max=3
-    while [ "$attempt" -le "$max" ]; do
-        if apt-get update -y -o Acquire::ForceIPv4=true >/tmp/koha_apt_update.log 2>&1; then
-            rm -f /tmp/koha_apt_update.log
-            return 0
-        fi
-        sleep 2
-        if apt-get update -y --fix-missing -o Acquire::ForceIPv4=true >>/tmp/koha_apt_update.log 2>&1; then
-            rm -f /tmp/koha_apt_update.log
-            return 0
-        fi
-        log "APT update reported error or warning (attempt $attempt). Ignoring if not critical..."
-        sleep 2
-        attempt=$((attempt + 1))
-    done
-    
-    # CORREÇÃO: Após 3 tentativas falhas, regista o erro e devolve status de falha verdadeira.
-    log "APT FAILED: Could not update indices after $max attempts."
-    return 1
-}
-
-apt_install() {
-    local packages=("$@") attempt=1 max=3
-    while [ "$attempt" -le "$max" ]; do
-        if DEBIAN_FRONTEND=noninteractive apt-get install "${APT_OPTS[@]}" "${packages[@]}"; then
-            log "APT ok: ${packages[*]}"
-            return 0
-        fi
-        echo ""
-        echo "$(t "[WARN] Attempt $attempt of $max failed. Fixing indices...")"
-        apt_update_indices >/dev/null 2>&1
-        dpkg --configure -a >/dev/null 2>&1
-        apt-get -f install "${APT_OPTS[@]}" >/dev/null 2>&1
-        sleep 3
-        attempt=$((attempt + 1))
-    done
-    log "APT FAILED: ${packages[*]}"
-    msg_error "" "$(t "Failed to install after $max attempts:\n${packages[*]}\n\nCheck your internet connection and disk space.")" 12 74
-    return 1
-}
 
 # ======================================================================
 # FILE EXPLORER
