@@ -15,7 +15,7 @@ set -o pipefail
 umask 022
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
-PANEL_VERSION=" β-0.82"
+PANEL_VERSION=" β-0.83"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
@@ -2815,7 +2815,7 @@ function_configure_rclone() {
         echo ""
 
         local token_output
-        token_output=$(rclone authorize "drive" --auth-no-open-browser 2>&1)
+        token_output=$(rclone authorize "drive" --auth-no-open-browser 2>&1 | tee /dev/tty)
         local extracted_token
         extracted_token=$(echo "$token_output" | grep -o '{.*}' | head -n 1)
 
