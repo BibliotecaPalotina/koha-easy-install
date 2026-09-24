@@ -1993,7 +1993,7 @@ function_manual_backup() {
         return 0
     fi
     msg_info "$(t "Destino do Backup" "Backup Destination")" \
-"$(t "Escolha onde salvar o arquivo.\n\n  Pendrive/USB: normalmente em /media ou /mnt\n  Para baixar depois: scp root@$(get_server_ip):CAMINHO ." "Choose where to save the file.\n\n  USB drive: usually under /media or /mnt\n  To download later: scp root@$(get_server_ip):PATH .")" 12 76
+"$(t "Escolha onde salvar o arquivo.\n\n  Pendrive/USB: normalmente em /media ou /mnt\n  Para baixar depois: scp root@$(get_server_ip):CAMINHO Downloads/" "Choose where to save the file.\n\n  USB drive: usually under /media or /mnt\n  To download later: scp root@$(get_server_ip):PATH Downloads/")" 12 76
     
     local target_dir
     target_dir=$(select_directory "$REAL_HOME") || { backup_lock_release; return 0; }
@@ -2020,20 +2020,20 @@ function_manual_backup() {
         echo "$(t "Tamanho:" "Size:") $size"
         echo ""
         echo "----------------------------------------------------------------------"
-        echo -e "\e[1;36m$(t "COMO SALVAR NO SEU COMPUTADOR (WINDOWS / MAC / LINUX)" "HOW TO SAVE TO YOUR COMPUTER (WINDOWS / MAC / LINUX)")\e[0m"
+        echo -e "\e[1;36m$(t "COMO SALVAR NA SUA PASTA DOWNLOADS (WINDOWS / MAC / LINUX)" "HOW TO SAVE TO YOUR DOWNLOADS FOLDER (WINDOWS / MAC / LINUX)")\e[0m"
         echo "----------------------------------------------------------------------"
         echo "$(t "Abra o Terminal ou PowerShell no seu computador pessoal e cole o comando:" "Open Terminal or PowerShell on your personal computer and paste the exact command:")"
         echo ""
-        echo -e "\e[1;33mscp ${REAL_USER:-root}@${ip_addr}:${target_file} .\e[0m"
+        echo -e "\e[1;33mscp ${REAL_USER:-root}@${ip_addr}:${target_file} Downloads/\e[0m"
         echo ""
         
         if [ "$SYS_LANG" = "pt" ]; then
-            echo "1. O arquivo será salvo na pasta em que o seu terminal estiver aberto."
-            echo "2. Não esqueça o ponto final ( . ) no comando acima."
+            echo "1. O arquivo será salvo diretamente na sua pasta de Downloads."
+            echo "2. Inclua o termo 'Downloads/' no final do comando ao copiar."
             echo "3. Será solicitada a senha do usuário '${REAL_USER:-root}' deste servidor."
         else
-            echo "1. The file will be saved in the folder where your terminal is open."
-            echo "2. Do not forget the dot ( . ) at the end of the command above."
+            echo "1. The file will be saved directly into your Downloads folder."
+            echo "2. Make sure to include 'Downloads/' at the end of the command."
             echo "3. You will be asked for the password of user '${REAL_USER:-root}'."
         fi
         
