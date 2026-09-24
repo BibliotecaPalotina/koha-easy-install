@@ -3081,34 +3081,59 @@ function_cloudflare_status() {
     opac_host=$(grep -B1 "localhost:80$" /etc/cloudflared/config.yml | grep "hostname:" | awk '{print $NF}' 2>/dev/null)
     staff_host=$(grep -B1 "localhost:8080$" /etc/cloudflared/config.yml | grep "hostname:" | awk '{print $NF}' 2>/dev/null)
 
-    [ -z "$opac_host" ] && opac_host="$(t "Não identificado" "Unidentified")"
-    [ -z "$staff_host" ] && staff_host="$(t "Não identificado" "Unidentified")"
+    [ -z "$opac_host" ] && opac_host="$(t "Não configurado" "Not configured")"
+    [ -z "$staff_host" ] && staff_host="$(t "Não configurado" "Not configured")"
 
     c_status="$(t "OFFLINE" "OFFLINE")"
     systemctl is-active --quiet cloudflared && c_status="$(t "ONLINE" "ONLINE")"
 
-    local msg
+    local tmp_cf
+    tmp_cf=$(mktemp /tmp/koha_cf.XXXXXX) || return 1
+
     if [ "$SYS_LANG" = "pt" ]; then
-        msg=$(printf "STATUS DO TUNEL: [ %s ]\n\n" "$c_status")
-        msg+=$(printf "ENDERECOS PUBLICOS:\n")
-        msg+=$(printf "  - Catalogo (OPAC) : https://%s\n" "$opac_host")
-        msg+=$(printf "  - Admin (Staff)   : https://%s\n\n" "$staff_host")
-        msg+=$(printf "RECURSOS DE SEGURANCA ATIVOS:\n")
-        msg+=$(printf "  [+] IP Oculto      : Servidor invisivel contra ataques diretos.\n")
-        msg+=$(printf "  [+] Firewall Fechado: Nenhuma porta precisou ser aberta.\n")
-        msg+=$(printf "  [+] Criptografia   : Trafego HTTPS certificado de ponta a ponta.")
+        cat > "$tmp_cf" << EOF
+STATUS DO TUNEL: ${c_status}
+----------------------------------------------------------------------
+
+ENDERECOS PUBLICOS NA INTERNET:
+
+  Catálogo Público (OPAC):
+  https://${opac_host}
+
+  Administração (Staff):
+  https://${staff_host}
+
+----------------------------------------------------------------------
+PROTECAO E RECURSOS ATIVOS:
+
+  • IP Oculto: o IP real do servidor fica invisível na internet.
+  • Portas Fechadas: não precisa abrir portas no modem/roteador.
+  • Criptografia SSL: conexões seguras HTTPS automáticas.
+EOF
     else
-        msg=$(printf "TUNNEL STATUS: [ %s ]\n\n" "$c_status")
-        msg+=$(printf "PUBLIC URLS:\n")
-        msg+=$(printf "  - Catalog (OPAC)  : https://%s\n" "$opac_host")
-        msg+=$(printf "  - Admin (Staff)   : https://%s\n\n" "$staff_host")
-        msg+=$(printf "ACTIVE SECURITY FEATURES:\n")
-        msg+=$(printf "  [+] Hidden IP     : Server is hidden from direct attacks.\n")
-        msg+=$(printf "  [+] Closed Ports  : No router ports need to be exposed.\n")
-        msg+=$(printf "  [+] Encryption    : End-to-end certified HTTPS traffic.")
+        cat > "$tmp_cf" << EOF
+TUNNEL STATUS: ${c_status}
+----------------------------------------------------------------------
+
+PUBLIC INTERNET URLS:
+
+  Public Catalog (OPAC):
+  https://${opac_host}
+
+  Administration (Staff):
+  https://${staff_host}
+
+----------------------------------------------------------------------
+ACTIVE SECURITY FEATURES:
+
+  • Hidden IP: server real IP is invisible from internet attacks.
+  • Closed Ports: no need to forward router/firewall ports.
+  • SSL Encryption: automatic secure HTTPS connections.
+EOF
     fi
 
-    whiptail --title "$(t "Informações do Cloudflare" "Cloudflare Information")" --msgbox "$msg" 18 78 2>/dev/null || true
+    whiptail --title "$(t "Informações do Cloudflare" "Cloudflare Information")" --textbox "$tmp_cf" 20 76 2>/dev/null || true
+    rm -f "$tmp_cf"
 }
 
 function_cloudflare_setup() {
