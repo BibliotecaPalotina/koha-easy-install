@@ -15,7 +15,7 @@ set -o pipefail
 umask 022
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
-PANEL_VERSION=" β-0.87"
+PANEL_VERSION=" β-0.88"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
@@ -3871,7 +3871,7 @@ while true; do
         1) function_install_koha ;;
         2) function_view_credentials ;;
         3) function_restore_database ;;
-4)
+        4)
             SUB_OPT=$(whiptail --title "$(t "▣ Central de Backups" "▣ Backup Center")" --cancel-button "$(t "Voltar" "Back")" \
                 --menu "$(t "Escolha uma rotina de backup:" "Choose a backup routine:")" 17 76 3 \
                 "1" "$(t "▣  Gerar backup manual e baixar para o PC" "▣  Generate manual backup and download to PC")" \
@@ -3932,7 +3932,7 @@ while true; do
                     for jail in sshd apache-auth apache-badbots; do
                         info="${info}=== ${jail} ===\n$(fail2ban-client status "$jail" 2>/dev/null || echo "$(t "jail inativa" "jail inactive")")\n\n"
                     done
-                    whiptail --title "⚠ Fail2ban" --scrolltext --msgbox "$(printf '%b' "$info")" 24 78 2>/dev/null || true
+                    whiptail --title "$(t "⚠ Fail2ban" "⚠ Fail2ban")" --scrolltext --msgbox "$(printf '%b' "$info")" 24 78 2>/dev/null || true
                     ;;
                 2)
                     if prompt_yes_no "$(t "Firewall do Staff" "Staff firewall")" \
@@ -3985,7 +3985,7 @@ while true; do
                         msg_error "" "$(t "Falha ao alterar a senha no MariaDB. Nada foi mudado." "Failed to change the password in MariaDB. Nothing was changed.")" 9 72
                     fi
                     ;;
-                4) whiptail --title "☑ UFW" --scrolltext --msgbox "$(ufw status verbose 2>/dev/null || echo 'ufw?')" 24 78 2>/dev/null || true ;;
+                4) whiptail --title "$(t "☑ UFW" "☑ UFW")" --scrolltext --msgbox "$(ufw status verbose 2>/dev/null || echo 'ufw?')" 24 78 2>/dev/null || true ;;
             esac
             ;;
         9)
