@@ -15,7 +15,7 @@ set -o pipefail
 umask 022
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
-PANEL_VERSION=" β-0.751"
+PANEL_VERSION=" β-0.8"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
@@ -3068,9 +3068,38 @@ SQLEOF
 }
 
 # ======================================================================
-# 16. CLOUDFLARE TUNNEL / CLOUDFLARE TUNNEL (modo local automatizado)
+# 16. CLOUDFLARE TUNNEL / CLOUDFLARE MANAGER
 # ======================================================================
-function_configure_cloudflare() {
+
+function_cloudflare_status() {
+    if [ ! -f /etc/cloudflared/config.yml ]; then
+        msg_error "" "$(t "O túnel ainda não foi configurado.\nUse a opção de instalação primeiro." "The tunnel is not configured yet.\nUse the installation option first.")" 9 70
+        return
+    fi
+
+    local opac_host staff_host c_status
+    opac_host=$(grep -B1 "localhost:80$" /etc/cloudflared/config.yml | grep "hostname:" | awk '{print $NF}' 2>/dev/null)
+    staff_host=$(grep -B1 "localhost:8080$" /etc/cloudflared/config.yml | grep "hostname:" | awk '{print $NF}' 2>/dev/null)
+
+    [ -z "$opac_host" ] && opac_host="$(t "Desconhecido (verifique o config.yml)" "Unknown (check config.yml)")"
+    [ -z "$staff_host" ] && staff_host="$(t "Desconhecido" "Unknown")"
+
+    c_status="🔴 $(t "OFFLINE" "OFFLINE")"
+    systemctl is-active --quiet cloudflared && c_status="🟢 $(t "ONLINE" "ONLINE")"
+
+    local msg
+    msg="$(t "🌐 STATUS DO TÚNEL: ${c_status}\n\n" "🌐 TUNNEL STATUS: ${c_status}\n\n")"
+    msg+="$(t "📚 Catálogo Público (OPAC):\n   https://${opac_host}\n\n" "📚 Public Catalog (OPAC):\n   https://${opac_host}\n\n")"
+    msg+="$(t "🔒 Administração (Staff):\n   https://${staff_host}\n\n" "🔒 Administration (Staff):\n   https://${staff_host}\n\n")"
+    msg+="$(t "🛡️ VANTAGENS DE SEGURANÇA ATIVAS:\n" "🛡️ ACTIVE SECURITY FEATURES:\n")"
+    msg+="$(t " • IP Oculto: O verdadeiro IP deste servidor está invisível na internet.\n" " • Hidden IP: The real IP of this server is invisible on the internet.\n")"
+    msg+="$(t " • Firewall Fechado: Nenhuma porta precisa ser aberta no roteador.\n" " • Closed Firewall: No router ports need to be opened.\n")"
+    msg+="$(t " • SSL Nativo: Todo o tráfego é criptografado de ponta a ponta." " • Native SSL: All traffic is end-to-end encrypted.")"
+
+    whiptail --title "$(t "Informações do Cloudflare" "Cloudflare Information")" --msgbox "$msg" 22 80
+}
+
+function_cloudflare_setup() {
     msg_info "$(t "Passo 1: Domínio e Nameservers" "Step 1: Domain & Nameservers")" \
 "$(t "COMO ASSOCIAR SEU DOMÍNIO À CLOUDFLARE:\n\n1. OBTENHA UM DOMÍNIO GRATUITO:\n    - Digital Plat (rápido/automático): https://domain.digitalplat.org/\n    - nic.eu.org (manual, demora de 14 a 45 dias): https://nic.eu.org\n    - Ou solicite à TI um CNAME oficial (ex: catalogo.palotina.pr.gov.br)\n\n2. ADICIONE NA CLOUDFLARE (dash.cloudflare.com):\n    - Clique em 'Add a site/domain', digite o domínio e selecione Free.\n    - A Cloudflare exibirá DOIS Nameservers. Copie os dois.\n\n3. ATUALIZE ONDE REGISTROU O DOMÍNIO:\n    - No Digital Plat ou nic.eu.org, vá em DNS / Nameservers.\n    - Substitua os servidores existentes pelos DOIS da Cloudflare.\n    - Na Cloudflare, clique em 'Check nameservers' até o status ficar Ativo.\n\nEsta parte não dá pra automatizar, mas o resto do processo é todo automático." \
 "HOW TO LINK YOUR DOMAIN TO CLOUDFLARE:\n\n1. GET A FREE DOMAIN:\n    - Digital Plat (fast/automated): https://domain.digitalplat.org/\n    - nic.eu.org (manual, takes 14 to 45 days): https://nic.eu.org\n    - Or ask local IT for an official CNAME (e.g. catalog.palotina.pr.gov.br)\n\n2. ADD TO CLOUDFLARE (dash.cloudflare.com):\n    - Click 'Add a site/domain', type your domain and select Free.\n    - Cloudflare provides TWO Nameservers. Copy both.\n\n3. UPDATE AT YOUR DOMAIN REGISTRAR:\n    - Replace existing servers with the TWO from Cloudflare.\n    - In Cloudflare, click 'Check nameservers' until status is Active.\n\nThis part can't be automated, but everything from here on is fully automatic.")" 22 78
@@ -3118,12 +3147,10 @@ function_configure_cloudflare() {
     local tunnel_id_check
     tunnel_id_check=$(cloudflared tunnel list 2>/dev/null | awk -v n="$tunnel_name" '$0 ~ n {print $1; exit}')
 
-    # Verifica se o túnel existe E se o arquivo .json correspondente está presente nesta máquina
     if [ -n "$tunnel_id_check" ] && { [ -f "$REAL_HOME/.cloudflared/${tunnel_id_check}.json" ] || [ -f "/root/.cloudflared/${tunnel_id_check}.json" ]; }; then
         log "$(t "Túnel '$tunnel_name' já existe e tem credenciais; reaproveitando..." "Tunnel '$tunnel_name' already exists with credentials; reusing...")"
     else
         display_explanation "Criando o túnel '$tunnel_name'..." "Creating tunnel '$tunnel_name'..."
-        # Se o túnel existe na nuvem mas não tem o arquivo .json local, remove da nuvem para recriar do zero
         if [ -n "$tunnel_id_check" ]; then
             cloudflared tunnel delete -f "$tunnel_name" >/dev/null 2>&1 || true
         fi
@@ -3168,9 +3195,7 @@ ingress:
   - service: http_status:404
 EOF
 
-display_explanation "Registrando os subdomínios no DNS..." "Registering subdomains in DNS..."
-    
-    # A flag -f (force) sobrescreve os registros caso eles já existam de uma instalação anterior
+    display_explanation "Registrando os subdomínios no DNS..." "Registering subdomains in DNS..."
     cloudflared tunnel route dns -f "$tunnel_name" "${opac_sub}.${dominio}" || true
     cloudflared tunnel route dns -f "$tunnel_name" "${staff_sub}.${dominio}" || true
 
@@ -3182,183 +3207,45 @@ display_explanation "Registrando os subdomínios no DNS..." "Registering subdoma
     sleep 3
 
     if systemctl is-active --quiet cloudflared; then
-        msg_ok "$(t "TÚNEL ATIVO E ROTAS CRIADAS AUTOMATICAMENTE!\n\nCatálogo (OPAC): https://${opac_sub}.${dominio}\nAdministração:    https://${staff_sub}.${dominio}\n\nPode levar alguns minutos até o DNS propagar." "TUNNEL ACTIVE AND ROUTES CREATED AUTOMATICALLY!\n\nCatalog (OPAC): https://${opac_sub}.${dominio}\nAdministration: https://${staff_sub}.${dominio}\n\nMay take a few minutes for DNS to propagate.")" 12 78
+        function_cloudflare_status
     else
         msg_error "" "$(t "O serviço não ficou ativo. Veja: journalctl -u cloudflared -n 30" "The service is not active. Check: journalctl -u cloudflared -n 30")" 9 74
     fi
 }
 
-# ======================================================================
-# TAILSCALE FUNNEL / TAILSCALE FUNNEL CONFIGURATION
-# ======================================================================
-
-mostrar_links_tailscale() {
-    local ts_hostname opac_ativo=false staff_ativo=false funnel_status texto
-
-    ts_hostname=$(tailscale status --json 2>/dev/null | python3 -c '
-import json, sys
-try:
-    data = json.load(sys.stdin)
-    name = data.get("Self", {}).get("DNSName", "")
-    print(name.rstrip("."))
-except Exception:
-    pass
-')
-
-    if [ -z "$ts_hostname" ]; then
-        msg_error "" "$(t "Não foi possível detectar o endereço do Tailscale. O servidor está autenticado?" "Could not detect the Tailscale address. Is the server authenticated?")" 9 70
-        return 1
-    fi
-
-    funnel_status=$(tailscale funnel status 2>&1)
-    echo "$funnel_status" | grep -q '127\.0\.0\.1:80\b' && opac_ativo=true
-    echo "$funnel_status" | grep -q '127\.0\.0\.1:8080\b' && staff_ativo=true
-
-    texto=$(t "SEU DOMÍNIO TAILSCALE:" "YOUR TAILSCALE DOMAIN:")
-    texto+=$'\n'
-    texto+="https://${ts_hostname}"
-    texto+=$'\n\n'
-
-    if [ "$opac_ativo" = true ]; then
-        texto+=$(t "✅ Catálogo (OPAC):   https://${ts_hostname}" "✅ Catalog (OPAC):   https://${ts_hostname}")
-    else
-        texto+=$(t "⬜ Catálogo (OPAC):   não publicado" "⬜ Catalog (OPAC):   not published")
-    fi
-    texto+=$'\n'
-
-    if [ "$staff_ativo" = true ]; then
-        texto+=$(t "✅ Administração:    https://${ts_hostname}:8443" "✅ Administration:    https://${ts_hostname}:8443")
-    else
-        texto+=$(t "⬜ Administração:    não publicada" "⬜ Administration:    not published")
-    fi
-    texto+=$'\n'
-
-    whiptail --title "$(t "Links Publicados" "Published Links")" --msgbox "$texto" 14 76
-}
-
-function_configure_tailscale() {
-    msg_info "Tailscale Funnel" \
-        "$(t "O Tailscale Funnel publica o Koha na internet automaticamente,\ncom domínio e HTTPS prontos, sem precisar de Cloudflare nem domínio próprio." "Tailscale Funnel publishes Koha to the internet automatically,\nwith domain and HTTPS ready, no Cloudflare or custom domain needed.")" 12 76
-
-    clear
-    display_explanation "Verificando instalação do Tailscale..." "Checking Tailscale installation..."
-
-    if ! command -v tailscale >/dev/null 2>&1; then
-        display_explanation "Instalando o Tailscale via curl..." "Installing Tailscale via curl..."
-        if ! curl -fsSL https://tailscale.com/install.sh | sh; then
-            msg_error "" "$(t "Falha ao instalar o Tailscale. Verifique sua conexão com a internet." "Failed to install Tailscale. Check your internet connection.")" 9 74
-            return 1
-        fi
-    fi
-
-    if ! tailscale status >/dev/null 2>&1; then
-        display_explanation "Iniciando a conexão com sua conta Tailscale..." "Initiating connection to your Tailscale account..."
-        echo -e "\e[1;33m$(t "Siga o link abaixo no seu navegador para autenticar este servidor:" "Follow the link below in your browser to authenticate this server:")\e[0m"
-        tailscale up
-        echo ""
-    fi
-
-    if ! tailscale status >/dev/null 2>&1; then
-        msg_error "" "$(t "O servidor não pôde ser autenticado no Tailscale. Tente novamente." "The server could not be authenticated on Tailscale. Try again.")" 9 70
-        return 1
-    fi
-
-    local ts_hostname
-    ts_hostname=$(tailscale status --json 2>/dev/null | python3 -c '
-import json, sys
-try:
-    data = json.load(sys.stdin)
-    name = data.get("Self", {}).get("DNSName", "")
-    print(name.rstrip("."))
-except Exception:
-    pass
-')
-
-    if [ -n "$ts_hostname" ]; then
-        msg_ok "$(t "Servidor conectado!\n\nSeu domínio será:\nhttps://${ts_hostname}" "Server connected!\n\nYour domain will be:\nhttps://${ts_hostname}")" 11 70
-    fi
-
+function_configure_cloudflare() {
     while true; do
+        local tunnel_active="INATIVO"
+        systemctl is-active --quiet cloudflared && tunnel_active="ATIVO"
+
         local choice
-        choice=$(whiptail --title "$(t "Gerenciador do Tailscale Funnel" "Tailscale Funnel Manager")" \
+        choice=$(whiptail --title "$(t "Gerenciador Cloudflare Tunnel" "Cloudflare Tunnel Manager")" \
             --cancel-button "$(t "Voltar" "Back")" \
-            --menu "$(t "O que deseja fazer?" "What do you want to do?")" 18 76 5 \
-            "1" "$(t "★ Publicar tudo automaticamente (OPAC + Staff)" "★ Publish everything automatically (OPAC + Staff)")" \
-            "2" "$(t "Publicar só o Catálogo Público (OPAC)" "Publish only Public Catalog (OPAC)")" \
-            "3" "$(t "Publicar só a Administração (Staff)" "Publish only Administration (Staff)")" \
-            "4" "$(t "Ver os links publicados agora" "View currently published links")" \
-            "5" "$(t "Desativar/Parar todos os Funnels ativos" "Stop all active Funnels")" \
+            --menu "$(t "Status do Túnel: $tunnel_active\n\nO Cloudflare Tunnel expõe o Koha de forma segura sem abrir portas.\n\nO que deseja fazer?" "Tunnel Status: $tunnel_active\n\nCloudflare Tunnel safely exposes Koha without opening ports.\n\nWhat do you want to do?")" 18 78 4 \
+            "1" "$(t "🚀 Instalar e Configurar Túnel (Primeiro Uso)" "🚀 Install and Configure Tunnel (First Use)")" \
+            "2" "$(t "ℹ️ Ver Links Públicos e Status de Segurança" "ℹ️ View Public Links and Security Status")" \
+            "3" "$(t "🔄 Reiniciar Serviço do Túnel" "🔄 Restart Tunnel Service")" \
+            "4" "$(t "🛑 Desativar e Remover Túnel (Ficar Offline)" "🛑 Disable and Remove Tunnel (Go Offline)")" \
             3>&1 1>&2 2>&3)
         [[ $? -ne 0 ]] && break
 
         case "$choice" in
-            1)
-                clear
-                display_explanation "Publicando Catálogo (OPAC, porta 80)..." "Publishing Catalog (OPAC, port 80)..."
-                local opac_ok=false staff_ok=false saida_opac saida_staff
-
-                saida_opac=$(tailscale funnel --bg 80 2>&1)
-                if [ $? -eq 0 ]; then
-                    opac_ok=true
-                else
-                    msg_error "" "$(t "A Tailscale bloqueou a publicação.\n\nAcesse login.tailscale.com, vá em 'DNS' e ative 'HTTPS Certificates'. Depois, em 'Access Controls', adicione a permissão de Funnel.\n\nDetalhe do erro:\n$saida_opac" "Tailscale blocked the publication.\n\nEnable HTTPS Certificates and add Funnel permission in your Tailscale admin panel.\n\nError details:\n$saida_opac")" 18 78
-                    continue
-                fi
-
-                if prompt_yes_no \
-                    "$(t "Publicar Staff também?" "Publish Staff too?")" \
-                    "$(t "ATENÇÃO: isso publica a administração do Koha na internet.\nSó continue se realmente precisa acessá-la remotamente.\n\nPublicar?" "WARNING: this publishes the Koha admin panel to the internet.\nOnly continue if you really need remote access to it.\n\nPublish?")" \
-                    12 74; then
-                    display_explanation "Publicando Administração (Staff, porta 8080)..." "Publishing Administration (Staff, port 8080)..."
-                    saida_staff=$(tailscale funnel --bg --https=8443 8080 2>&1)
-                    if [ $? -eq 0 ]; then
-                        staff_ok=true
-                    else
-                        msg_error "" "$(t "Erro ao publicar a Administração:\n\n$saida_staff" "Error publishing Administration:\n\n$saida_staff")" 14 78
-                    fi
-                fi
-
-                if [ "$opac_ok" = true ]; then
-                    mostrar_links_tailscale
-                fi
-                ;;
-            2)
-                clear
-                display_explanation "Ativando o Funnel para o Catálogo (Porta 80)..." "Enabling Funnel for Catalog (Port 80)..."
-                local saida_opac
-                saida_opac=$(tailscale funnel --bg 80 2>&1)
-                if [ $? -eq 0 ]; then
-                    mostrar_links_tailscale
-                else
-                    msg_error "" "$(t "Falha ao iniciar o Funnel na porta 80. Verifique as permissões (Certificados HTTPS e Access Controls) no painel admin da Tailscale.\n\nDetalhes:\n$saida_opac" "Failed to start Funnel on port 80. Check your Tailscale admin panel permissions.\n\nDetails:\n$saida_opac")" 16 78
-                fi
-                ;;
+            1) function_cloudflare_setup ;;
+            2) function_cloudflare_status ;;
             3)
-                if ! prompt_yes_no \
-                    "$(t "Publicar Staff na internet" "Publish Staff to the Internet")" \
-                    "$(t "ATENÇÃO:\n\nIsso publica a interface administrativa do Koha pela internet.\n\nUse somente se você entende o risco e realmente precisa dessa exposição.\n\nContinuar?" "WARNING:\n\nThis publishes the Koha staff administration interface to the Internet.\n\nOnly continue if you understand the risk and really need this exposure.\n\nContinue?")" \
-                    15 78; then
-                    continue
-                fi
                 clear
-                display_explanation "Ativando o Funnel para a Administração (Porta 8080)..." "Enabling Funnel for Administration (Port 8080)..."
-                local saida_staff
-                saida_staff=$(tailscale funnel --bg --https=8443 8080 2>&1)
-                if [ $? -eq 0 ]; then
-                    mostrar_links_tailscale
-                else
-                    msg_error "" "$(t "Falha ao iniciar o Funnel na porta 8080. Verifique as permissões no painel admin da Tailscale.\n\nDetalhes:\n$saida_staff" "Failed to start Funnel on port 8080. Check admin panel permissions.\n\nDetails:\n$saida_staff")" 16 78
-                fi
+                display_explanation "Reiniciando o Cloudflare Tunnel..." "Restarting Cloudflare Tunnel..."
+                systemctl restart cloudflared >/dev/null 2>&1
+                msg_ok "$(t "Serviço reiniciado com sucesso." "Service restarted successfully.")" 8 60
                 ;;
             4)
-                clear
-                mostrar_links_tailscale
-                ;;
-            5)
-                clear
-                display_explanation "Desativando os Funnels ativos..." "Stopping active Funnels..."
-                tailscale funnel off >/dev/null 2>&1 || true
-                msg_ok "$(t "Todos os tunelamentos do Funnel foram desativados." "All Funnel tunnels have been turned off.")" 9 64
+                if prompt_yes_no "$(t "Desativar Túnel" "Disable Tunnel")" "$(t "Isso vai parar o serviço e remover a inicialização automática.\nO seu catálogo ficará offline para a internet.\n\nContinuar?" "This will stop the service and remove auto-start.\nYour catalog will go offline to the internet.\n\nContinue?")" 10 70; then
+                    clear
+                    display_explanation "Desinstalando o serviço..." "Uninstalling service..."
+                    cloudflared service uninstall >/dev/null 2>&1 || true
+                    systemctl disable --now cloudflared >/dev/null 2>&1 || true
+                    msg_ok "$(t "Túnel desativado.\nO Koha agora só é acessível na rede local." "Tunnel disabled.\nKoha is now only accessible on the local network.")" 10 70
+                fi
                 ;;
         esac
     done
@@ -3879,19 +3766,9 @@ function_reboot_server() {
 # 30. SOBRE O PROGRAMA / ABOUT THE PROGRAM
 # ======================================================================
 function_about() {
-    local tmp_about
-    tmp_about=$(mktemp /tmp/koha_about.XXXXXX) || return 1
-
-    local about_text
-    about_text="$(t "Koha Easy Install & Tools v${PANEL_VERSION}\n\nEste projeto nasceu da vivência real de quem já enfrentou os inúmeros desafios e barreiras técnicas na gestão de acervos.\n\nFoi pensado especialmente para bibliotecas que não possuem recursos financeiros para sistemas proprietários ou suporte técnico especializado, democratizando o acesso a uma tecnologia robusta, gratuita e verdadeiramente acessível.\n\nO objetivo é estender a mão a outras instituições e profissionais que passam pelas mesmas dificuldades.\n\nSe esta iniciativa te ajudou:\n⭐ Deixe sua estrela no repositório do GitHub!\n📢 Compartilhe com amigos e colegas que precisam.\n\nRepositório:\ngithub.com/BibliotecaPalotina/koha-easy-install\n\nCriado com dedicação por Paulo F. Baldi FH.\nAuxiliar de Biblioteca - Biblioteca Pública Municipal Castro Alves\nPalotina, Paraná, Brasil" \
-"Koha Easy Install & Tools v${PANEL_VERSION}\n\nThis project was born from real-life experience facing technical barriers in collection management.\n\nIt was specifically designed for libraries lacking financial resources for proprietary systems or specialized technical support, democratizing access to robust, free, and truly accessible technology.\n\nThe goal is to help other institutions facing the same struggles.\n\nIf this initiative helped you:\n⭐ Star the repository on GitHub!\n📢 Share it with friends and colleagues.\n\nRepository:\ngithub.com/BibliotecaPalotina/koha-easy-install\n\nCreated with dedication by Paulo F. Baldi FH.\nLibrary Assistant - Castro Alves Public Library\nPalotina, Paraná, Brazil")"
-
-    printf '%b\n' "$about_text" > "$tmp_about"
-
-    # Altura definida para 16 linhas para obrigar a exibição da barra de rolagem vertical
-    whiptail --title "$(t "Sobre / About" "Sobre / About")" --scrolltext --textbox "$tmp_about" 16 74 2>/dev/null || true
-
-    rm -f "$tmp_about"
+    whiptail --title "$(t "Sobre / About" "Sobre / About")" --msgbox \
+"$(t "Koha Easy Install & Tools v${PANEL_VERSION}\n\nEste projeto nasceu da vivência real de quem já enfrentou os inúmeros desafios e barreiras técnicas na gestão de acervos.\n\nFoi pensado especialmente para bibliotecas que não possuem recursos financeiros para sistemas proprietários ou suporte técnico especializado, democratizando o acesso a uma tecnologia robusta, gratuita e verdadeiramente acessível.\n\nO objetivo é estender a mão a outras instituições e profissionais que passam pelas mesmas dificuldades.\n\nSe esta iniciativa te ajudou:\n⭐ Deixe sua estrela no repositório do GitHub!\n📢 Compartilhe com amigos e colegas que precisam.\n\nRepositório: github.com/BibliotecaPalotina/koha-easy-install\n\nCriado com dedicação por Paulo F. Baldi FH.\nAuxiliar de Biblioteca - Biblioteca Pública Municipal Castro Alves\nPalotina, Paraná, Brasil" \
+"Koha Easy Install & Tools v${PANEL_VERSION}\n\nThis project was born from real-life experience facing technical barriers in collection management.\n\nIt was specifically designed for libraries lacking financial resources for proprietary systems or specialized technical support, democratizing access to robust, free, and truly accessible technology.\n\nThe goal is to help other institutions facing the same struggles.\n\nIf this initiative helped you:\n⭐ Star the repository on GitHub!\n📢 Share it with friends and colleagues.\n\nRepository: github.com/BibliotecaPalotina/koha-easy-install\n\nCreated with dedication by Paulo F. Baldi FH.\nLibrary Assistant - Castro Alves Public Library\nPalotina, Paraná, Brazil")" 23 78 2>/dev/null || true
 }
 
 # ======================================================================
@@ -3952,20 +3829,18 @@ while true; do
             ;;
         6)
             SUB_OPT=$(whiptail --title "$(t "Publicar o Sistema na Internet" "Publish System to Internet")" --cancel-button "$(t "Voltar" "Back")" \
-                --menu "$(t "Escolha um método de publicação:" "Choose a publishing method:")" 18 76 4 \
-                "1" "$(t "Acesso externo com domínio (Cloudflare Tunnel)" "External access with domain (Cloudflare Tunnel)")" \
-                "2" "$(t "Acesso privado VPN / Funnel (Tailscale)" "Private VPN access / Funnel (Tailscale)")" \
-                "3" "$(t "Certificado SSL gratuito (Certbot / Apache)" "Free SSL certificate (Certbot / Apache)")" \
-                "4" "$(t "Assistente do Google Search Console" "Google Search Console Assistant")" 3>&1 1>&2 2>&3) || continue
+                --menu "$(t "Escolha um método de publicação:" "Choose a publishing method:")" 17 76 3 \
+                "1" "$(t "Gerenciador Cloudflare Tunnel (Recomendado)" "Cloudflare Tunnel Manager (Recommended)")" \
+                "2" "$(t "Certificado SSL gratuito (Certbot / Apache)" "Free SSL certificate (Certbot / Apache)")" \
+                "3" "$(t "Assistente do Google Search Console" "Google Search Console Assistant")" 3>&1 1>&2 2>&3) || continue
             case "$SUB_OPT" in
                 1) function_configure_cloudflare ;;
-                2) function_configure_tailscale ;;
-                3) function_configure_ssl ;;
-                4) function_google_search_console ;;
+                2) function_configure_ssl ;;
+                3) function_google_search_console ;;
             esac
             ;;
         7)
-SUB_OPT=$(whiptail --title "$(t "Central de Diagnóstico e Manutenção" "Diagnostics & Maintenance Center")" --cancel-button "$(t "Voltar" "Back")" \
+            SUB_OPT=$(whiptail --title "$(t "Central de Diagnóstico e Manutenção" "Diagnostics & Maintenance Center")" --cancel-button "$(t "Voltar" "Back")" \
                 --menu "$(t "Escolha uma ferramenta:" "Choose a tool:")" 18 76 4 \
                 "1" "$(t "Status detalhado do servidor e Koha" "Detailed server & Koha status")" \
                 "2" "$(t "Validação geral de integridade (Health Check)" "Full system health check")" \
@@ -4022,7 +3897,7 @@ SUB_OPT=$(whiptail --title "$(t "Central de Diagnóstico e Manutenção" "Diagno
                         msg_error "" "$(t "Não consegui criar o backup do koha-conf.xml. A senha não foi alterada." "Could not back up koha-conf.xml. Password was not changed.")" 9 74
                         continue
                     }
-if mysql -e "ALTER USER '${DB_NAME}'@'localhost' IDENTIFIED BY '${new_pass}'; FLUSH PRIVILEGES;"; then
+                    if mysql -e "ALTER USER '${DB_NAME}'@'localhost' IDENTIFIED BY '${new_pass}'; FLUSH PRIVILEGES;"; then
                         sed -i "s|<pass>[^<]*</pass>|<pass>${new_pass}</pass>|g" "$KOHA_CONF"
                         if ! xmllint --noout "$KOHA_CONF" >/dev/null 2>&1; then
                             cp -f "$xml_bak" "$KOHA_CONF"
