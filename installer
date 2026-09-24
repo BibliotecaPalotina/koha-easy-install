@@ -180,18 +180,23 @@ log "===== panel started (v$PANEL_VERSION, user=$REAL_USER) ====="
 # ======================================================================
 timedatectl set-ntp true >/dev/null 2>&1 || true
 
-DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::ForceIPv4=true -o Acquire::Check-Valid-Until=false >/dev/null 2>&1
-
+MISSING_DEPS=()
 for dep in whiptail curl python3 unzip gpg wget; do
     if ! command -v "$dep" >/dev/null 2>&1; then
-        echo "$(t "Installing panel dependency: $dep")"
-        DEBIAN_FRONTEND=noninteractive apt-get install -y -o Acquire::Check-Valid-Until=false "$dep" >/dev/null 2>&1 || {
-            echo "$(t "Could not install '$dep'. Aborting.")"
-            rm -f "$PANEL_LOCK_FILE"
-            exit 1
-        }
+        MISSING_DEPS+=("$dep")
     fi
 done
+
+if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
+    echo "$(t "Installing panel dependencies... Please wait.")"
+    wait_for_apt_locks || { echo "$(t "APT is locked. Aborting.")"; rm -f "$PANEL_LOCK_FILE"; exit 1; }
+    apt_update_indices >/dev/null 2>&1
+    apt_install "${MISSING_DEPS[@]}" >/dev/null 2>&1 || {
+        echo "$(t "Could not install dependencies. Aborting.")"
+        rm -f "$PANEL_LOCK_FILE"
+        exit 1
+    }
+fi
 
 # ======================================================================
 # CLEANUP ON EXIT
@@ -332,7 +337,10 @@ apt_update_indices() {
         sleep 2
         attempt=$((attempt + 1))
     done
-    return 0
+    
+    # CORREÇÃO: Após 3 tentativas falhas, regista o erro e devolve status de falha verdadeira.
+    log "APT FAILED: Could not update indices after $max attempts."
+    return 1
 }
 
 apt_install() {
@@ -1512,7 +1520,7 @@ EOF
 }
 
 function_install_koha() {
-    validate_pre_installation || return 0
+    validate_pre_installation || return 1
 
     local tz
     tz=$(choose_timezone) && [ -n "$tz" ] && timedatectl set-timezone "$tz" >/dev/null 2>&1
@@ -3617,36 +3625,43 @@ function_autoupdate() {
     fi
 
     if ! prompt_yes_no "$(t "Update Available")" \
-"$(t "A new version of the panel was found on GitHub.\n\nCurrent installed version: ${PANEL_VERSION}\nNew available version    : ${remote_version}\n\nThe system will download it, validate the script and create a backup before replacing.\n\nDownload and update now?")" 16 80; then
+"$(t "A new version of the panel was found on GitHub.\n\nCurrent installed version: ${PANEL_VERSION}\nNew available version    : ${remote_version}\n\nThe system will download it, validate the SHA-256 signature, and create a backup before replacing.\n\nDownload and update now?")" 16 80; then
         return 0
     fi
 
     clear
-    display_explanation "Downloading version ${remote_version}..."
+    display_explanation "Downloading version ${remote_version} and SHA-256 signature..."
     local target="/usr/local/bin/config.sh"
     local target_dir; target_dir=$(dirname "$target")
-    local tmp; tmp="$(mktemp "${target_dir}/.config.sh.update.XXXXXX")" || {
-        msg_error "" "$(t "Could not create a temporary file in the panel directory.")" 9 76
-        return 1
-    }
-
-    if ! curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 10 --max-time 120 "$UPDATE_URL" -o "$tmp"; then
-        rm -f "$tmp"
-        msg_error "" "$(t "Update download failed. The current panel keeps working.")" 9 78
+    
+    local tmp; tmp="$(mktemp "${target_dir}/.config.sh.update.XXXXXX")"
+    local tmp_sha; tmp_sha="$(mktemp "${target_dir}/.config.sh.sha256.XXXXXX")"
+    
+    if [ -z "$tmp" ] || [ -z "$tmp_sha" ]; then
+        msg_error "" "$(t "Could not create temporary files in the panel directory.")" 9 76
         return 1
     fi
 
-    local size; size=$(stat -c %s "$tmp" 2>/dev/null || echo 0)
-    
-    if [ "$size" -lt 10240 ] || ! head -n1 "$tmp" | grep -q '^#!.*bash' || \
-       ! grep -q 'KOHA EASY INSTALL & TOOLS' "$tmp" || ! grep -q '"16"' "$tmp"; then
-        rm -f "$tmp"
-        msg_error "" "$(t "The downloaded file is incomplete, invalid or not the expected panel ($size bytes). Update cancelled.")" 11 78
+    if ! curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 10 --max-time 120 "$UPDATE_URL" -o "$tmp" || \
+       ! curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 10 --max-time 30 "${UPDATE_URL}.sha256" -o "$tmp_sha"; then
+        rm -f "$tmp" "$tmp_sha"
+        msg_error "" "$(t "Update download failed (script or signature missing). The current panel keeps working.")" 10 78
+        return 1
+    fi
+
+    display_explanation "Verifying cryptographic signature (SHA-256)..."
+    local expected_hash actual_hash
+    expected_hash=$(awk '{print $1}' "$tmp_sha" 2>/dev/null)
+    actual_hash=$(sha256sum "$tmp" | awk '{print $1}')
+
+    if [ -z "$expected_hash" ] || [ "$expected_hash" != "$actual_hash" ]; then
+        rm -f "$tmp" "$tmp_sha"
+        msg_error "" "$(t "SECURITY ALERT: The downloaded file does NOT match the expected SHA-256 signature.\nUpdate aborted to protect the server.")" 11 78
         return 1
     fi
 
     if ! bash -n "$tmp" 2>/dev/null; then
-        rm -f "$tmp"
+        rm -f "$tmp" "$tmp_sha"
         msg_error "" "$(t "The downloaded file has a syntax error. Update cancelled to avoid system issues.")" 10 78
         return 1
     fi
@@ -3655,20 +3670,20 @@ function_autoupdate() {
     local backup="${target}.bak-$(date +%Y%m%d-%H%M%S)"
     if [ -f "$target" ]; then
         if ! cp -p "$target" "$backup"; then
-            rm -f "$tmp"
+            rm -f "$tmp" "$tmp_sha"
             msg_error "" "$(t "Could not create a backup of the current panel. Update cancelled.")" 10 76
             return 1
         fi
     fi
 
     if mv -f "$tmp" "$target" && chmod 755 "$target" && chown root:root "$target"; then
-        log "panel updated from version $PANEL_VERSION to $remote_version"
+        log "panel updated from version $PANEL_VERSION to $remote_version (SHA-256 verified)"
         msg_ok "$(t "Panel updated successfully to v${remote_version}!\n\nBackup of the old version saved at:\n${backup}\n\nPress OK to exit. Open again with: sudo config.sh")" 14 78
-        rm -f "$PANEL_LOCK_FILE"
+        rm -f "$PANEL_LOCK_FILE" "$tmp_sha"
         exit 0
     fi
 
-    rm -f "$tmp"
+    rm -f "$tmp" "$tmp_sha"
     if [ -f "$backup" ]; then
         cp -p "$backup" "$target" 2>/dev/null || true
     fi
