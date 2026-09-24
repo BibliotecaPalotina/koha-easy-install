@@ -3727,33 +3727,56 @@ function_view_logs() {
 # 28. ATUALIZAR O PAINEL / UPDATE THE PANEL
 # ======================================================================
 function_autoupdate() {
-    prompt_yes_no "$(t "Atualizar o Painel" "Update the Panel")" \
-"$(t "Baixa a versão mais recente deste painel do GitHub, confere se\no arquivo é um script válido e só então substitui o atual.\nUma cópia da versão atual é guardada antes.\n\nVersão instalada: ${PANEL_VERSION}\n\nContinuar?" \
-"Downloads the latest version of this panel from GitHub, checks that\nthe file is a valid script and only then replaces the current one.\nA copy of the current version is kept first.\n\nInstalled version: ${PANEL_VERSION}\n\nContinue?")" 15 78 || return 0
     clear
-    display_explanation "Baixando a nova versão..." "Downloading the new version..."
+    display_explanation "Procurando atualizações no repositório..." "Looking for updates in the repository..."
+
+    # Lê rapidamente o arquivo online e extrai apenas o valor da variável PANEL_VERSION
+    local remote_version
+    remote_version=$(curl -fsSL --retry 2 --connect-timeout 5 --max-time 10 "$UPDATE_URL" | grep -m1 '^PANEL_VERSION=' | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+
+    if [ -z "$remote_version" ]; then
+        msg_error "" "$(t "Não foi possível verificar a versão no GitHub. Verifique sua conexão com a internet ou a URL de atualização." "Could not check the version on GitHub. Check your internet connection or the update URL.")" 10 76
+        return 1
+    fi
+
+    if [ "$remote_version" = "$PANEL_VERSION" ]; then
+        msg_ok "$(t "O painel já está na versão mais recente!\n\nNenhuma atualização necessária.\nVersão instalada: ${PANEL_VERSION}" "The panel is already at the latest version!\n\nNo update required.\nInstalled version: ${PANEL_VERSION}")" 10 70
+        return 0
+    fi
+
+    if ! prompt_yes_no "$(t "Atualização Disponível" "Update Available")" \
+"$(t "Uma nova versão do painel foi encontrada no GitHub.\n\nVersão atual instalada: ${PANEL_VERSION}\nNova versão disponível: ${remote_version}\n\nO sistema fará o download, validará o script e criará uma cópia de segurança antes de substituir.\n\nDeseja baixar e atualizar agora?" \
+"A new version of the panel was found on GitHub.\n\nCurrent installed version: ${PANEL_VERSION}\nNew available version    : ${remote_version}\n\nThe system will download it, validate the script and create a backup before replacing.\n\nDownload and update now?")" 16 80; then
+        return 0
+    fi
+
+    clear
+    display_explanation "Baixando a versão ${remote_version}..." "Downloading version ${remote_version}..."
     local target="/usr/local/bin/options.sh"
     local target_dir; target_dir=$(dirname "$target")
     local tmp; tmp="$(mktemp "${target_dir}/.options.sh.update.XXXXXX")" || {
         msg_error "" "$(t "Não consegui criar um arquivo temporário no mesmo diretório do painel." "Could not create a temporary file in the panel directory.")" 9 76
         return 1
     }
+
     if ! curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 10 --max-time 120 "$UPDATE_URL" -o "$tmp"; then
         rm -f "$tmp"
-        msg_error "" "$(t "Não foi possível baixar. O painel atual continua funcionando." "Download failed. The current panel keeps working.")" 9 72
+        msg_error "" "$(t "Não foi possível baixar a atualização. O painel atual continua funcionando." "Update download failed. The current panel keeps working.")" 9 78
         return 1
     fi
+
     local size; size=$(stat -c %s "$tmp" 2>/dev/null || echo 0)
     
     if [ "$size" -lt 10240 ] || ! head -n1 "$tmp" | grep -q '^#!.*bash' || \
        ! grep -q 'KOHA EASY INSTALL & TOOLS' "$tmp" || ! grep -q '"16"' "$tmp"; then
         rm -f "$tmp"
-        msg_error "" "$(t "O arquivo baixado está incompleto, não parece ser o painel correto ou está inválido ($size bytes). Atualização cancelada." "The downloaded file is incomplete, not the expected panel, or invalid ($size bytes). Update cancelled.")" 11 78
+        msg_error "" "$(t "O arquivo baixado está incompleto, inválido ou não é o painel ($size bytes). Atualização cancelada." "The downloaded file is incomplete, invalid or not the expected panel ($size bytes). Update cancelled.")" 11 78
         return 1
     fi
+
     if ! bash -n "$tmp" 2>/dev/null; then
         rm -f "$tmp"
-        msg_error "" "$(t "O arquivo baixado tem erro de sintaxe. Atualização cancelada para não quebrar o painel." "The downloaded file has a syntax error. Update cancelled to avoid breaking the panel.")" 10 76
+        msg_error "" "$(t "O arquivo baixado tem erro de sintaxe. Atualização cancelada para evitar problemas no sistema." "The downloaded file has a syntax error. Update cancelled to avoid system issues.")" 10 78
         return 1
     fi
 
@@ -3768,8 +3791,8 @@ function_autoupdate() {
     fi
 
     if mv -f "$tmp" "$target" && chmod 755 "$target" && chown root:root "$target"; then
-        log "$(t "painel atualizado a partir de" "panel updated from") $UPDATE_URL; backup=$backup"
-        msg_ok "$(t "Painel atualizado com sucesso!\n\nBackup da versão anterior:\n${backup}\n\nFeche e abra de novo com: sudo options.sh" "Panel updated successfully!\n\nBackup of previous version:\n${backup}\n\nClose and reopen with: sudo options.sh")" 12 76
+        log "$(t "painel atualizado da versão" "panel updated from version") $PANEL_VERSION $(t "para" "to") $remote_version"
+        msg_ok "$(t "Painel atualizado com sucesso para a v${remote_version}!\n\nBackup da versão antiga guardado em:\n${backup}\n\nPressione OK para fechar. Abra novamente com: sudo options.sh" "Panel updated successfully to v${remote_version}!\n\nBackup of the old version saved at:\n${backup}\n\nPress OK to exit. Open again with: sudo options.sh")" 14 78
         rm -f "$PANEL_LOCK_FILE"
         exit 0
     fi
@@ -3778,7 +3801,7 @@ function_autoupdate() {
     if [ -f "$backup" ]; then
         cp -p "$backup" "$target" 2>/dev/null || true
     fi
-    msg_error "" "$(t "Falha ao substituir $target. Tente novamente; a versão anterior foi preservada." "Failed to replace $target. Try again; the previous version was preserved.")" 10 76
+    msg_error "" "$(t "Falha ao substituir o arquivo principal. A versão atual ($PANEL_VERSION) foi preservada intacta." "Failed to replace the main file. The current version ($PANEL_VERSION) was kept intact.")" 10 78
     return 1
 }
 
@@ -3851,69 +3874,6 @@ EOF
     whiptail --title "$(t "Sobre / About" "Sobre / About")" --textbox "$tmp_about" 22 78 2>/dev/null || true
     rm -f "$tmp_about"
 }
-# ======================================================================
-# TEMA DARK / DARK THEME - KOHA EASY INSTALL & TOOLS
-# Apenas aparência visual - nenhuma lógica do painel é alterada
-# ======================================================================
-
-# ======================================================================
-# TEMA DARK / DARK THEME
-# ======================================================================
-
-export NEWT_COLORS='
-root=lightgray,black
-window=lightgray,black
-border=cyan,black
-shadow=black,black
-
-title=lightcyan,black
-
-# Botões normais
-button=white,blue
-
-# Botão atualmente em foco
-actbutton=black,cyan
-
-compactbutton=white,black
-
-checkbox=lightgray,black
-actcheckbox=black,cyan
-
-entry=lightgray,black
-disentry=gray,black
-
-label=lightgray,black
-
-listbox=lightgray,black
-actlistbox=black,cyan
-actsellistbox=black,lightcyan
-sellistbox=lightgray,black
-
-textbox=lightgray,black
-acttextbox=black,cyan
-
-helpline=gray,black
-roottext=lightgray,black
-
-emptyscale=cyan,black
-fullscale=lightcyan,black
-'
-
-# ======================================================================
-# TEMA VISUAL DO PAINEL (NEWT_COLORS)
-# ======================================================================
-export NEWT_COLORS='
-    root=white,black
-    window=white,black
-    border=blue,black
-    title=green,black
-    textbox=white,black
-    listbox=white,black
-    actlistbox=cyan,white
-    button=white,black
-    actbutton=black,cyan
-'
-
 # ======================================================================
 # MENU PRINCIPAL / MAIN MENU (16 OPÇÕES)
 # ======================================================================
