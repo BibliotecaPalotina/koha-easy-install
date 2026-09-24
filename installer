@@ -3905,7 +3905,7 @@ fullscale=lightcyan,black
 while true; do
     restore_apt_timers
 
-    MAIN_OPT=$(whiptail --title "Koha Easy Install & Tools v${PANEL_VERSION} - $(t "Painel de Controle" "Control Dashboard")" \
+    MAIN_OPT=$(whiptail --fullbuttons --title "Koha Easy Install & Tools v${PANEL_VERSION} - $(t "Painel de Controle" "Control Dashboard")" \
         --cancel-button "$(t "Sair" "Exit")" \
         --menu "$(t "Selecione uma opção:" "Select an option:")" 25 80 16 \
         "1"  "$(t "⚙  Instalar o servidor Koha" "⚙  Install Koha server")" \
@@ -3930,7 +3930,7 @@ while true; do
         2) function_view_credentials ;;
         3) function_restore_database ;;
         4)
-            SUB_OPT=$(whiptail --title "$(t "▣ Central de Backups" "▣ Backup Center")" --cancel-button "$(t "Voltar" "Back")" \
+            SUB_OPT=$(whiptail --fullbuttons --title "$(t "▣ Central de Backups" "▣ Backup Center")" --cancel-button "$(t "Voltar" "Back")" \
                 --menu "$(t "Escolha uma rotina de backup:" "Choose a backup routine:")" 19 76 5 \
                 "1" "$(t "▣  Gerar backup manual local agora" "▣  Generate manual local backup now")" \
                 "2" "$(t "↗  Enviar backup via SCP manual agora" "↗  Send manual SCP backup now")" \
@@ -3946,7 +3946,7 @@ while true; do
             esac
             ;;
         5)
-            SUB_OPT=$(whiptail --title "$(t "⌁ Motor de Busca e Indexação" "⌁ Search Engine & Indexing")" --cancel-button "$(t "Voltar" "Back")" \
+            SUB_OPT=$(whiptail --fullbuttons --title "$(t "⌁ Motor de Busca e Indexação" "⌁ Search Engine & Indexing")" --cancel-button "$(t "Voltar" "Back")" \
                 --menu "$(t "Escolha uma ação:" "Choose an action:")" 16 76 2 \
                 "1" "$(t "↔  Alternar motor de busca (Zebra ⇄ Elasticsearch)" "↔  Toggle search engine (Zebra ⇄ Elasticsearch)")" \
                 "2" "$(t "⟳  Reparar / reconstruir indexação" "⟳  Repair / rebuild indexing")" 3>&1 1>&2 2>&3) || continue
@@ -3956,7 +3956,7 @@ while true; do
             esac
             ;;
         6)
-            SUB_OPT=$(whiptail --title "$(t "☁ Publicar o Sistema na Internet" "☁ Publish System to Internet")" --cancel-button "$(t "Voltar" "Back")" \
+            SUB_OPT=$(whiptail --fullbuttons --title "$(t "☁ Publicar o Sistema na Internet" "☁ Publish System to Internet")" --cancel-button "$(t "Voltar" "Back")" \
                 --menu "$(t "Escolha um método de publicação:" "Choose a publishing method:")" 17 76 3 \
                 "1" "$(t "☁  Gerenciador Cloudflare Tunnel (Recomendado)" "☁  Cloudflare Tunnel Manager (Recommended)")" \
                 "2" "$(t "⌁  Certificado SSL gratuito (Certbot / Apache)" "⌁  Free SSL certificate (Certbot / Apache)")" \
@@ -3968,7 +3968,7 @@ while true; do
             esac
             ;;
         7)
-            SUB_OPT=$(whiptail --title "$(t "◈ Central de Diagnóstico e Manutenção" "◈ Diagnostics & Maintenance Center")" --cancel-button "$(t "Voltar" "Back")" \
+            SUB_OPT=$(whiptail --fullbuttons --title "$(t "◈ Central de Diagnóstico e Manutenção" "◈ Diagnostics & Maintenance Center")" --cancel-button "$(t "Voltar" "Back")" \
                 --menu "$(t "Escolha uma ferramenta:" "Choose a tool:")" 18 76 4 \
                 "1" "$(t "◈  Status detalhado do servidor e Koha" "◈  Detailed server & Koha status")" \
                 "2" "$(t "✓  Validação geral de integridade (Health Check)" "✓  Full system health check")" \
@@ -3982,7 +3982,7 @@ while true; do
             esac
             ;;
         8)
-            SUB_OPT=$(whiptail --title "$(t "⚠ Central de Segurança" "⚠ Security Center")" --cancel-button "$(t "Voltar" "Back")" \
+            SUB_OPT=$(whiptail --fullbuttons --title "$(t "⚠ Central de Segurança" "⚠ Security Center")" --cancel-button "$(t "Voltar" "Back")" \
                 --menu "$(t "Escolha uma rotina de segurança:" "Choose a security routine:")" 18 76 4 \
                 "1" "$(t "⚠  Status do Fail2ban (tentativas de invasão)" "⚠  Fail2ban status (intrusion attempts)")" \
                 "2" "$(t "▣  Firewall do Staff (restringir porta 8080)" "▣  Staff firewall (restrict port 8080)")" \
@@ -4051,7 +4051,7 @@ while true; do
             esac
             ;;
         9)
-            SUB_OPT=$(whiptail --title "$(t "⚙ Configurações e Parâmetros do Koha" "⚙ Koha Settings & Parameters")" --cancel-button "$(t "Voltar" "Back")" \
+            SUB_OPT=$(whiptail --fullbuttons --title "$(t "⚙ Configurações e Parâmetros do Koha" "⚙ Koha Settings & Parameters")" --cancel-button "$(t "Voltar" "Back")" \
                 --menu "$(t "Escolha um parâmetro:" "Choose a parameter:")" 19 76 5 \
                 "1" "$(t "⚙  Dimensionar o servidor (memória / workers)" "⚙  Server sizing (memory / workers)")" \
                 "2" "$(t "✉  Configurar e-mails e avisos de circulação" "✉  Configure email and circulation notices")" \
@@ -4067,7 +4067,7 @@ while true; do
             esac
             ;;
         10)
-            SUB_OPT=$(whiptail --title "$(t "▤ Ferramentas Gerais" "▤ General Tools")" --cancel-button "$(t "Voltar" "Back")" \
+            SUB_OPT=$(whiptail --fullbuttons --title "$(t "▤ Ferramentas Gerais" "▤ General Tools")" --cancel-button "$(t "Voltar" "Back")" \
                 --menu "$(t "Escolha uma ferramenta:" "Choose a tool:")" 17 76 3 \
                 "1" "$(t "▤  Monitoramento de recursos (Htop / Nethogs)" "▤  Resource monitoring (Htop / Nethogs)")" \
                 "2" "$(t "⌁  Navegador web de terminal (Links)" "⌁  Terminal web browser (Links)")" \
@@ -4081,7 +4081,7 @@ while true; do
         11) function_manage_crons ;;
         12) function_install_languages ;;
         13)
-            SUB_OPT=$(whiptail --title "$(t "⟳ Central de Atualizações" "⟳ Update Center")" --cancel-button "$(t "Voltar" "Back")" \
+            SUB_OPT=$(whiptail --fullbuttons --title "$(t "⟳ Central de Atualizações" "⟳ Update Center")" --cancel-button "$(t "Voltar" "Back")" \
                 --menu "$(t "Escolha o que deseja atualizar:" "Choose what to update:")" 16 76 2 \
                 "1" "$(t "⟳  Atualizar pacotes do sistema e schemas do Koha" "⟳  Update OS packages & Koha schemas")" \
                 "2" "$(t "↻  Atualizar este painel via GitHub" "↻  Update this panel via GitHub")" 3>&1 1>&2 2>&3) || continue
