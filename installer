@@ -15,7 +15,7 @@ set -o pipefail
 umask 022
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
-PANEL_VERSION=" β-0.86"
+PANEL_VERSION=" β-0.87"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
@@ -1371,8 +1371,13 @@ configure_firewall() {
 
 write_banner() {
     local ip="$1" user="$2"
-    local url_staff="http://${ip}:8080"
-    local url_opac="http://${ip}:80"
+    
+    # Detecta URLs do Cloudflare Tunnel se configurado
+    local cf_opac="" cf_staff=""
+    if [ -f /etc/cloudflared/config.yml ]; then
+        cf_opac=$(grep -B1 "localhost:80$" /etc/cloudflared/config.yml | grep "hostname:" | awk '{print $NF}' 2>/dev/null)
+        cf_staff=$(grep -B1 "localhost:8080$" /etc/cloudflared/config.yml | grep "hostname:" | awk '{print $NF}' 2>/dev/null)
+    fi
 
     # Define o usuário e comando SSH
     local ssh_user="${REAL_USER:-servidor}"
@@ -1381,14 +1386,14 @@ write_banner() {
 
     local t_head t_suite l_ctrl l_urls l_user l_pass
     if [ "$SYS_LANG" = "pt" ]; then
-        t_head="    B I B L I O T E C A   K O H A    "  # 37 chars
+        t_head="    B I B L I O T E C A    K O H A    "  # 37 chars
         t_suite="   CATALOGO PUBLICO & AUTOMACAO   "   # 34 chars
         l_ctrl="PAINEL DE CONTROLE: options.sh"
         l_urls="ENDERECOS / ACESSO WEB:"
         l_user="- Usuario (Admin) : "
         l_pass="- Senha (Root)    : "
     else
-        t_head="     K O H A   L I B R A R Y     "  # 37 chars
+        t_head="     K O H A    L I B R A R Y      "  # 37 chars
         t_suite=" PUBLIC CATALOG & AUTOMATION SUITE"   # 34 chars
         l_ctrl="CONTROL DASHBOARD : options.sh"
         l_urls="URLS / WEB ACCESS   :"
@@ -1397,36 +1402,61 @@ write_banner() {
     fi
 
     # Formata rigorosamente para 50 caracteres úteis entre as colunas |  |
-    local f_ctrl f_ssh f_urls f_staff f_opac f_user f_pass
+    local f_ctrl f_ssh f_urls f_staff_local f_opac_local f_staff_loc f_opac_loc f_staff_pub f_opac_pub f_user f_pass
     f_ctrl=$(printf "%-50.50s" "$l_ctrl")
     f_ssh=$(printf "%-50.50s" "$str_ssh")
     f_urls=$(printf "%-50.50s" "$l_urls")
-    f_staff=$(printf "%-50.50s" "- Staff (Intranet): $url_staff")
-    f_opac=$(printf "%-50.50s" "- OPAC  (Public)  : $url_opac")
+    
+    f_staff_local=$(printf "%-50.50s" "- Staff (IP)      : http://${ip}:8080")
+    f_opac_local=$(printf "%-50.50s" "- OPAC  (IP)      : http://${ip}:80")
+    f_staff_loc=$(printf "%-50.50s" "- Staff (Localhost): http://127.0.0.1:8080")
+    f_opac_loc=$(printf "%-50.50s" "- OPAC  (Localhost): http://127.0.0.1:80")
+
+    if [ -n "$cf_staff" ]; then
+        f_staff_pub=$(printf "%-50.50s" "- Staff (Public)  : https://${cf_staff}")
+    fi
+    if [ -n "$cf_opac" ]; then
+        f_opac_pub=$(printf "%-50.50s" "- OPAC  (Public)  : https://${cf_opac}")
+    fi
+
     f_user=$(printf "%-50.50s" "${l_user}${user}")
     f_pass=$(printf "%-50.50s" "${l_pass}cat /root/credenciais_koha.txt")
+
+    # Monta as linhas internas dinamicamente (omitindo o que não estiver ativo)
+    local inner_content=""
+    inner_content+="     |--|  ${f_ctrl}  |--|\n"
+    inner_content+="     |--|  ${f_ssh}  |  |\n"
+    inner_content+="     |  | ================================================== |  |\n"
+    inner_content+="     |  |  ${f_urls}  |  |\n"
+    inner_content+="     |  |  ${f_staff_local}  |  |\n"
+    inner_content+="     |  |  ${f_opac_local}  |  |\n"
+    inner_content+="     |  |  ${f_staff_loc}  |  |\n"
+    inner_content+="     |  |  ${f_opac_loc}  |  |\n"
+    
+    # Adiciona as linhas do Cloudflare apenas se configurado
+    if [ -n "${f_staff_pub:-}" ]; then
+        inner_content+="     |  |  ${f_staff_pub}  |  |\n"
+    fi
+    if [ -n "${f_opac_pub:-}" ]; then
+        inner_content+="     |  |  ${f_opac_pub}  |  |\n"
+    fi
+
+    inner_content+="     |  |  --------------------------------------------------  |  |\n"
+    inner_content+="     |  |  ${f_user}  |  |\n"
+    inner_content+="     |  |  ${f_pass}  |  |\n"
 
     cat > /etc/issue << EOF
 \S
 
 
                 __________________________________________________
-              //==================================================\\\\
-             //         .--------------------------------.         \\\\
-            //         | ${t_head}|         \\\\
-           //       .-------------------------------------'----.        \\\\
-         _//_======[  ${t_suite}  ]======_\\\\_
+              //==================================================\\
+             //          .--------------------------------.          \\
+            //           | ${t_head}|          \\
+           //        .-------------------------------------'----.        \\
+         _//_======[   ${t_suite}   ]======_\\_
         |____|____________________________________________________|____|
-         |--|  ${f_ctrl}  |--|
-         |  |  ${f_ssh}  |  |
-         |  | ================================================== |  |
-         |  |  ${f_urls}  |  |
-         |  |  ${f_staff}  |  |
-         |  |  ${f_opac}  |  |
-         |  |  --------------------------------------------------  |  |
-         |  |  ${f_user}  |  |
-         |  |  ${f_pass}  |  |
-         |  |====================================================|  |
+$(printf '%b' "$inner_content")         |  |====================================================|  |
         /===/======================================================\\==\\
        /___/________________________________________________________\\__\\
 
@@ -1779,10 +1809,54 @@ if prompt_yes_no "$(t "Reiniciar Servidor (Recomendado)" "Reboot Server (Recomme
 # ======================================================================
 function_view_credentials() {
     require_koha || return 0
-    local ip; ip=$(get_server_ip)
-    msg_info "$(t "Credenciais" "Credentials")" \
-"$(t "ACESSO AO KOHA\n\n  Staff (administração): http://${ip}:8080\n  OPAC  (catálogo):      http://${ip}:80\n\n  Usuário: ${DB_NAME}\n  Senha:   $(get_database_password)\n\nEsta é a senha do banco, usada no primeiro acesso.\nArquivo completo: /root/credenciais_koha.txt" \
-"KOHA ACCESS\n\n  Staff (administration): http://${ip}:8080\n  OPAC  (catalog):        http://${ip}:80\n\n  User: ${DB_NAME}\n  Pass: $(get_database_password)\n\nThis is the database password, used for first login.\nFull file: /root/credenciais_koha.txt")" 18 74
+    local ip opac_url staff_url cf_section="" local_hint=""
+    ip=$(get_server_ip)
+
+    # Identifica se a sessão atual é SSH ou terminal local (Tty)
+    if [ -n "${SSH_CONNECTION:-}" ] || [ -n "${SSH_CLIENT:-}" ]; then
+        local_hint=$(t "Dica: Você está via SSH. Para testar localmente use http://127.0.0.1" "Tip: You are via SSH. To test locally use http://127.0.0.1")
+    else
+        local_hint=$(t "Dica: Você está no terminal do servidor. Use http://localhost" "Tip: You are at the server terminal. Use http://localhost")
+    fi
+
+    # Detecta URLs do Cloudflare Tunnel se configurado e ativo
+    if [ -f /etc/cloudflared/config.yml ]; then
+        local cf_opac cf_staff
+        cf_opac=$(grep -B1 "localhost:80$" /etc/cloudflared/config.yml | grep "hostname:" | awk '{print $NF}' 2>/dev/null)
+        cf_staff=$(grep -B1 "localhost:8080$" /etc/cloudflared/config.yml | grep "hostname:" | awk '{print $NF}' 2>/dev/null)
+
+        if [ -n "$cf_opac" ] || [ -n "$cf_staff" ]; then
+            cf_section=$(t "\n[ INTERNET / CLOUDFLARE TUNNEL ]\n" "\n[ INTERNET / CLOUDFLARE TUNNEL ]\n")
+            [ -n "$cf_opac" ] && cf_section+="  OPAC  : https://${cf_opac}\n"
+            [ -n "$cf_staff" ] && cf_section+="  Staff : https://${cf_staff}\n"
+        fi
+    fi
+
+    if [ "$SYS_LANG" = "pt" ]; then
+        msg_info "Credenciais de Acesso" \
+"ENDEREÇOS WEB:
+  Rede Local / IP : http://${ip}:80 (OPAC) | :8080 (Staff)
+  Localhost (Máq.) : http://127.0.0.1:80 (OPAC) | :8080 (Staff)
+${cf_section}
+CREDENCIAIS DO BANCO (1º Acesso / Web Installer):
+  Usuário : ${DB_NAME}
+  Senha   : $(get_database_password)
+
+${local_hint}
+Arquivo completo: /root/credenciais_koha.txt" 23 78
+    else
+        msg_info "Access Credentials" \
+"WEB ADDRESSES:
+  Local Network / IP : http://${ip}:80 (OPAC) | :8080 (Staff)
+  Localhost (Machine): http://127.0.0.1:80 (OPAC) | :8080 (Staff)
+${cf_section}
+DATABASE CREDENTIALS (1st Access / Web Installer):
+  User : ${DB_NAME}
+  Pass : $(get_database_password)
+
+${local_hint}
+Full file: /root/credenciais_koha.txt" 23 78
+    fi
 }
 
 # ======================================================================
@@ -3117,6 +3191,25 @@ EOF
     sleep 3
 
     if systemctl is-active --quiet cloudflared; then
+        # Sincroniza preferências de sistema do Koha caso o banco esteja pronto
+        if is_database_ready; then
+            display_explanation "Configurando preferências de URL no Koha..." "Setting Koha URL system preferences..."
+            local full_opac="https://${opac_sub}.${dominio}"
+            local full_staff="https://${staff_sub}.${dominio}"
+
+            mysql -e "INSERT INTO ${DB_NAME}.systempreferences (variable, value, type) VALUES ('OPACBaseURL', '${full_opac}', 'Free') ON DUPLICATE KEY UPDATE value='${full_opac}';" >/dev/null 2>&1 || true
+            mysql -e "INSERT INTO ${DB_NAME}.systempreferences (variable, value, type) VALUES ('staffClientBaseURL', '${full_staff}', 'Free') ON DUPLICATE KEY UPDATE value='${full_staff}';" >/dev/null 2>&1 || true
+
+            local k_sites="/etc/koha/koha-sites.conf"
+            if [ -f "$k_sites" ]; then
+                sed -i -E "s|^[[:space:]]*DEFAULTSOPACURL=.*|DEFAULTSOPACURL=\"${full_opac}\"|" "$k_sites" 2>/dev/null || true
+                sed -i -E "s|^[[:space:]]*DEFAULTSINTRAURL=.*|DEFAULTSINTRAURL=\"${full_staff}\"|" "$k_sites" 2>/dev/null || true
+            fi
+
+            systemctl restart memcached >/dev/null 2>&1 || true
+            /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
+        fi
+
         function_cloudflare_status
     else
         msg_error "" "$(t "O serviço não ficou ativo. Veja: journalctl -u cloudflared -n 30" "The service is not active. Check: journalctl -u cloudflared -n 30")" 9 74
@@ -3132,10 +3225,10 @@ function_configure_cloudflare() {
         choice=$(whiptail --title "$(t "Gerenciador Cloudflare Tunnel" "Cloudflare Tunnel Manager")" \
             --cancel-button "$(t "Voltar" "Back")" \
             --menu "$(t "Status do Túnel: $tunnel_active\n\nO Cloudflare Tunnel expõe o Koha de forma segura sem abrir portas.\n\nO que deseja fazer?" "Tunnel Status: $tunnel_active\n\nCloudflare Tunnel safely exposes Koha without opening ports.\n\nWhat do you want to do?")" 18 78 4 \
-            "1" "$(t "🚀 Instalar e Configurar Túnel (Primeiro Uso)" "🚀 Install and Configure Tunnel (First Use)")" \
-            "2" "$(t "ℹ️ Ver Links Públicos e Status de Segurança" "ℹ️ View Public Links and Security Status")" \
-            "3" "$(t "🔄 Reiniciar Serviço do Túnel" "🔄 Restart Tunnel Service")" \
-            "4" "$(t "🛑 Desativar e Remover Túnel (Ficar Offline)" "🛑 Disable and Remove Tunnel (Go Offline)")" \
+            "1" "$(t "⚙  Instalar e Configurar Túnel (Primeiro Uso)" "⚙  Install and Configure Tunnel (First Use)")" \
+            "2" "$(t "ℹ  Ver Links Públicos e Status de Segurança" "ℹ  View Public Links and Security Status")" \
+            "3" "$(t "↻  Reiniciar Serviço do Túnel" "↻  Restart Tunnel Service")" \
+            "4" "$(t "✖  Desativar e Remover Túnel (Ficar Offline)" "✖  Disable and Remove Tunnel (Go Offline)")" \
             3>&1 1>&2 2>&3)
         [[ $? -ne 0 ]] && break
 
