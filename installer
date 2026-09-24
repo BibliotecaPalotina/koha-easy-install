@@ -3081,22 +3081,34 @@ function_cloudflare_status() {
     opac_host=$(grep -B1 "localhost:80$" /etc/cloudflared/config.yml | grep "hostname:" | awk '{print $NF}' 2>/dev/null)
     staff_host=$(grep -B1 "localhost:8080$" /etc/cloudflared/config.yml | grep "hostname:" | awk '{print $NF}' 2>/dev/null)
 
-    [ -z "$opac_host" ] && opac_host="$(t "Desconhecido (verifique o config.yml)" "Unknown (check config.yml)")"
-    [ -z "$staff_host" ] && staff_host="$(t "Desconhecido" "Unknown")"
+    [ -z "$opac_host" ] && opac_host="$(t "Não identificado" "Unidentified")"
+    [ -z "$staff_host" ] && staff_host="$(t "Não identificado" "Unidentified")"
 
-    c_status="🔴 $(t "OFFLINE" "OFFLINE")"
-    systemctl is-active --quiet cloudflared && c_status="🟢 $(t "ONLINE" "ONLINE")"
+    c_status="$(t "OFFLINE" "OFFLINE")"
+    systemctl is-active --quiet cloudflared && c_status="$(t "ONLINE" "ONLINE")"
 
     local msg
-    msg="$(t "🌐 STATUS DO TÚNEL: ${c_status}\n\n" "🌐 TUNNEL STATUS: ${c_status}\n\n")"
-    msg+="$(t "📚 Catálogo Público (OPAC):\n   https://${opac_host}\n\n" "📚 Public Catalog (OPAC):\n   https://${opac_host}\n\n")"
-    msg+="$(t "🔒 Administração (Staff):\n   https://${staff_host}\n\n" "🔒 Administration (Staff):\n   https://${staff_host}\n\n")"
-    msg+="$(t "🛡️ VANTAGENS DE SEGURANÇA ATIVAS:\n" "🛡️ ACTIVE SECURITY FEATURES:\n")"
-    msg+="$(t " • IP Oculto: O verdadeiro IP deste servidor está invisível na internet.\n" " • Hidden IP: The real IP of this server is invisible on the internet.\n")"
-    msg+="$(t " • Firewall Fechado: Nenhuma porta precisa ser aberta no roteador.\n" " • Closed Firewall: No router ports need to be opened.\n")"
-    msg+="$(t " • SSL Nativo: Todo o tráfego é criptografado de ponta a ponta." " • Native SSL: All traffic is end-to-end encrypted.")"
+    if [ "$SYS_LANG" = "pt" ]; then
+        msg=$(printf "STATUS DO TUNEL: [ %s ]\n\n" "$c_status")
+        msg+=$(printf "ENDERECOS PUBLICOS:\n")
+        msg+=$(printf "  - Catalogo (OPAC) : https://%s\n" "$opac_host")
+        msg+=$(printf "  - Admin (Staff)   : https://%s\n\n" "$staff_host")
+        msg+=$(printf "RECURSOS DE SEGURANCA ATIVOS:\n")
+        msg+=$(printf "  [+] IP Oculto      : Servidor invisivel contra ataques diretos.\n")
+        msg+=$(printf "  [+] Firewall Fechado: Nenhuma porta precisou ser aberta.\n")
+        msg+=$(printf "  [+] Criptografia   : Trafego HTTPS certificado de ponta a ponta.")
+    else
+        msg=$(printf "TUNNEL STATUS: [ %s ]\n\n" "$c_status")
+        msg+=$(printf "PUBLIC URLS:\n")
+        msg+=$(printf "  - Catalog (OPAC)  : https://%s\n" "$opac_host")
+        msg+=$(printf "  - Admin (Staff)   : https://%s\n\n" "$staff_host")
+        msg+=$(printf "ACTIVE SECURITY FEATURES:\n")
+        msg+=$(printf "  [+] Hidden IP     : Server is hidden from direct attacks.\n")
+        msg+=$(printf "  [+] Closed Ports  : No router ports need to be exposed.\n")
+        msg+=$(printf "  [+] Encryption    : End-to-end certified HTTPS traffic.")
+    fi
 
-    whiptail --title "$(t "Informações do Cloudflare" "Cloudflare Information")" --msgbox "$msg" 22 80
+    whiptail --title "$(t "Informações do Cloudflare" "Cloudflare Information")" --msgbox "$msg" 18 78 2>/dev/null || true
 }
 
 function_cloudflare_setup() {
