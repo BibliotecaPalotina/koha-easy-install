@@ -3856,6 +3856,10 @@ EOF
 # Apenas aparência visual - nenhuma lógica do painel é alterada
 # ======================================================================
 
+# ======================================================================
+# TEMA DARK / DARK THEME
+# ======================================================================
+
 export NEWT_COLORS='
 root=lightgray,black
 window=lightgray,black
@@ -3864,10 +3868,13 @@ shadow=black,black
 
 title=lightcyan,black
 
-button=lightgray,black
+# Botões normais
+button=white,blue
+
+# Botão atualmente em foco
 actbutton=black,cyan
 
-compactbutton=lightgray,black
+compactbutton=white,black
 
 checkbox=lightgray,black
 actcheckbox=black,cyan
@@ -3883,8 +3890,9 @@ actsellistbox=black,lightcyan
 sellistbox=lightgray,black
 
 textbox=lightgray,black
-helpline=gray,black
+acttextbox=black,cyan
 
+helpline=gray,black
 roottext=lightgray,black
 
 emptyscale=cyan,black
