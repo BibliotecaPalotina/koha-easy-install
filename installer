@@ -15,34 +15,79 @@ PANEL_VERSION=" β-0.9.1"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
-# LANGUAGE (DYNAMIC GLOBAL TRANSLATION VIA API)
+# LANGUAGE (AUTOMATIC SYSTEM LOCALE DETECTION)
 # ======================================================================
-SYS_LANG="${LANG:-${LC_ALL:-en}}"
-SYS_LANG="${SYS_LANG%%_*}"
-[ -z "$SYS_LANG" ] && SYS_LANG="en"
+
+detect_system_language() {
+    local locale_value lang
+
+    locale_value="$(locale | grep '^LC_MESSAGES=' | cut -d= -f2 | tr -d '\"' 2>/dev/null)"
+
+    [ -z "$locale_value" ] && locale_value="${LC_ALL:-}"
+    [ -z "$locale_value" ] && locale_value="${LC_MESSAGES:-}"
+    [ -z "$locale_value" ] && locale_value="${LANG:-}"
+    [ -z "$locale_value" ] && locale_value="${LANGUAGE%%:*}"
+    [ -z "$locale_value" ] && locale_value="en_US"
+
+    case "$locale_value" in
+        C|POSIX|C.*|POSIX.*)
+            echo "en"
+            return
+            ;;
+    esac
+
+    KOHA_SYS_LANG="$(echo "${locale_value%%.*}" | tr '_' '-')"
+
+    lang="${locale_value%%_*}"
+    lang="${lang%%.*}"
+    lang="${lang%%-*}"
+
+    [ -z "$lang" ] && lang="en"
+
+    printf '%s' "$lang"
+}
+
+SYS_LANG="$(detect_system_language)"
+[ -z "$KOHA_SYS_LANG" ] && KOHA_SYS_LANG="en"
+
+declare -A _TRANS_CACHE
 
 t() {
     local text="$1"
-    
-    if [[ "$SYS_LANG" == "en"* ]]; then
+
+    if [[ "$SYS_LANG" == "en" ]]; then
         printf '%b' "$text"
         return
     fi
-    
+
+    if [[ -n "${_TRANS_CACHE["$text"]+x}" ]]; then
+        printf '%b' "${_TRANS_CACHE["$text"]}"
+        return
+    fi
+
     local translated
-    translated=$(curl -s -G "https://translate.googleapis.com/translate_a/single" \
+    translated=$(curl -fsS -G \
+        --connect-timeout 5 \
+        --max-time 15 \
+        "https://translate.googleapis.com/translate_a/single" \
         --data-urlencode "client=gtx" \
         --data-urlencode "sl=en" \
         --data-urlencode "tl=$SYS_LANG" \
         --data-urlencode "dt=t" \
-        --data-urlencode "q=$text" 2>/dev/null | \
-        python3 -c "import sys, json
+        --data-urlencode "q=$text" 2>/dev/null |
+        python3 -c '
+import sys
+import json
+
 try:
-    print(''.join([x[0] for x in json.load(sys.stdin)[0]]))
-except:
-    pass" 2>/dev/null)
-    
+    data = json.load(sys.stdin)
+    print("".join(part[0] for part in data[0] if part and part[0]))
+except Exception:
+    pass
+' 2>/dev/null)
+
     if [ -n "$translated" ]; then
+        _TRANS_CACHE["$text"]="$translated"
         printf '%b' "$translated"
     else
         printf '%b' "$text"
