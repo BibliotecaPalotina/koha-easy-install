@@ -1391,29 +1391,29 @@ write_banner() {
     local ssh_user="${REAL_USER:-servidor}"
     [ "$ssh_user" = "root" ] && ssh_user="servidor"
     local str_ssh
-    str_ssh="$(t "SSH ACCESS        : ssh ${ssh_user}@${ip}")"
+    str_ssh="$(t "SSH ACCESS       : ssh ${ssh_user}@${ip}")"
 
     local t_head t_suite l_ctrl l_urls l_user l_pass
-    t_head="     K O H A    L I B R A R Y      "
+    t_head="      K O H A    L I B R A R Y      "
     t_suite=" PUBLIC CATALOG & AUTOMATION SUITE"
     l_ctrl="$(t "CONTROL DASHBOARD : config.sh")"
     l_urls="$(t "URLS / WEB ACCESS   :")"
     l_user="$(t "- User (Admin)    : ")"
     l_pass="$(t "- Password (Root) : ")"
 
-    # Formata rigorosamente para exatamente 50 caracteres úteis entre as colunas |  |
+    # Formata para exatamente 52 caracteres úteis para fechar alinhado com as colunas |  |
     local f_ctrl f_ssh f_urls f_staff f_opac f_staff_loc f_opac_loc f_staff_cf f_opac_cf f_user f_pass
-    f_ctrl=$(printf "%-50.50s" "$l_ctrl")
-    f_ssh=$(printf "%-50.50s" "$str_ssh")
-    f_urls=$(printf "%-50.50s" "$l_urls")
-    f_staff=$(printf "%-50.50s" "$(t "- Staff (Net/IP)  : ")$url_staff")
-    f_opac=$(printf "%-50.50s" "$(t "- OPAC  (Net/IP)  : ")$url_opac")
-    f_staff_loc=$(printf "%-50.50s" "- Staff (Local)   : http://127.0.0.1:8080")
-    f_opac_loc=$(printf "%-50.50s" "- OPAC  (Local)   : http://127.0.0.1:80")
-    f_staff_cf=$(printf "%-50.50s" "- Staff (Cloudfl) : $staff_cf_text")
-    f_opac_cf=$(printf "%-50.50s" "- OPAC  (Cloudfl) : $opac_cf_text")
-    f_user=$(printf "%-50.50s" "${l_user}${user}")
-    f_pass=$(printf "%-50.50s" "${l_pass}cat /root/credenciais_koha.txt")
+    f_ctrl=$(printf "%-52.52s" "$l_ctrl")
+    f_ssh=$(printf "%-52.52s" "$str_ssh")
+    f_urls=$(printf "%-52.52s" "$l_urls")
+    f_staff=$(printf "%-52.52s" "$(t "- Staff (Net/IP)  : ")$url_staff")
+    f_opac=$(printf "%-52.52s" "$(t "- OPAC  (Net/IP)  : ")$url_opac")
+    f_staff_loc=$(printf "%-52.52s" "- Staff (Localhost): http://127.0.0.1:8080")
+    f_opac_loc=$(printf "%-52.52s" "- OPAC  (Localhost): http://127.0.0.1:80")
+    f_staff_cf=$(printf "%-52.52s" "- Staff (Cloudfl) : $staff_cf_text")
+    f_opac_cf=$(printf "%-52.52s" "- OPAC  (Cloudfl) : $opac_cf_text")
+    f_user=$(printf "%-52.52s" "${l_user}${user}")
+    f_pass=$(printf "%-52.52s" "${l_pass}cat /root/credenciais_koha.txt")
 
     cat > /etc/issue << EOF
 \S
@@ -1421,14 +1421,14 @@ write_banner() {
 
                 __________________________________________________
               //=================================================\\\
-             //          .--------------------------------.       \\\
+             //          .--------------------------------.        \\\
             //           | ${t_head}|          \\\
            //        .-------------------------------------'----.    \\\
          _//_======[   ${t_suite}   ]======_\\\_
         |____|____________________________________________________|____|
          |--|  ${f_ctrl}  |--|
          |  |  ${f_ssh}  |  |
-         |  | ==================================================== |  |
+         |  |======================================================|  |
          |  |  ${f_urls}  |  |
          |  |  ${f_staff}  |  |
          |  |  ${f_opac}  |  |
@@ -1436,12 +1436,12 @@ write_banner() {
          |  |  ${f_opac_loc}  |  |
          |  |  ${f_staff_cf}  |  |
          |  |  ${f_opac_cf}  |  |
-         |  |  --------------------------------------------------  |  |
+         |  |------------------------------------------------------|  |
          |  |  ${f_user}  |  |
          |  |  ${f_pass}  |  |
          |  |======================================================|  |
-        /===/======================================================\\==\\
-       /___/________________________________________________________\\__\\
+        /===/======================================================\==\\
+       /___/________________________________________________________\__\\
 
 
 EOF
