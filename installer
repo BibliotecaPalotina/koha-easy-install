@@ -3911,7 +3911,7 @@ export NEWT_COLORS='
     listbox=white,black
     actlistbox=cyan,white
     button=white,black
-    actbutton=cyan,white
+    actbutton=black,cyan
 '
 
 # ======================================================================
