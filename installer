@@ -5,7 +5,27 @@
 # ----------------------------------------------------------------------
 # Single, self-sufficient file. Updates via "Update this panel" option.
 # ======================================================================
+
+if [ "$EUID" -ne 0 ]; then
+    echo "Please run as root (sudo)"
+    exit 1
+fi
+
 # ======================================================================
+# LOCK ATÔMICO (Prevenção de Dupla Execução)
+# ======================================================================
+PANEL_LOCK_FILE="/var/run/koha_panel.lock"
+
+exec 9> "$PANEL_LOCK_FILE"
+if ! flock -n 9; then
+    echo "The panel is already running in another session. Aborting to prevent conflicts."
+    exit 1
+fi
+
+# ======================================================================
+# TRAP (Limpeza ao sair) E AMBIENTE
+# ======================================================================
+trap on_exit EXIT
 
 set -o pipefail
 umask 022
@@ -31,7 +51,8 @@ detect_system_language() {
 
     case "$locale_value" in
         C|POSIX|C.*|POSIX.*)
-            echo "en"
+            SYS_LANG="en"
+            KOHA_SYS_LANG="en"
             return
             ;;
     esac
@@ -44,55 +65,17 @@ detect_system_language() {
 
     [ -z "$lang" ] && lang="en"
 
-    printf '%s' "$lang"
+    # Define a variável global de tradução do painel diretamente
+    SYS_LANG="$lang"
 }
 
-SYS_LANG="$(detect_system_language)"
+detect_system_language
+
+# Prevenção extra de segurança
 [ -z "$KOHA_SYS_LANG" ] && KOHA_SYS_LANG="en"
+[ -z "$SYS_LANG" ] && SYS_LANG="en"
 
 declare -A _TRANS_CACHE
-
-t() {
-    local text="$1"
-
-    if [[ "$SYS_LANG" == "en" ]]; then
-        printf '%b' "$text"
-        return
-    fi
-
-    if [[ -n "${_TRANS_CACHE["$text"]+x}" ]]; then
-        printf '%b' "${_TRANS_CACHE["$text"]}"
-        return
-    fi
-
-    local translated
-    translated=$(curl -fsS -G \
-        --connect-timeout 5 \
-        --max-time 15 \
-        "https://translate.googleapis.com/translate_a/single" \
-        --data-urlencode "client=gtx" \
-        --data-urlencode "sl=en" \
-        --data-urlencode "tl=$SYS_LANG" \
-        --data-urlencode "dt=t" \
-        --data-urlencode "q=$text" 2>/dev/null |
-        python3 -c '
-import sys
-import json
-
-try:
-    data = json.load(sys.stdin)
-    print("".join(part[0] for part in data[0] if part and part[0]))
-except Exception:
-    pass
-' 2>/dev/null)
-
-    if [ -n "$translated" ]; then
-        _TRANS_CACHE["$text"]="$translated"
-        printf '%b' "$translated"
-    else
-        printf '%b' "$text"
-    fi
-}
 
 # ======================================================================
 # PRIVILEGE ESCALATION
@@ -1528,10 +1511,17 @@ function_install_koha() {
     wait_for_apt_locks || return 1
 
     display_explanation "Configuring locales and UTF-8..."
-    apt_update_indices
+    apt_update_indices || return 1
     apt_install locales || return 1
-    locale-gen pt_BR.UTF-8 en_US.UTF-8 >/dev/null 2>&1
-    if [ "$SYS_LANG" = "pt" ]; then update-locale LANG=pt_BR.UTF-8; else update-locale LANG=en_US.UTF-8; fi
+    
+    local sys_locale="${LANG:-en_US.UTF-8}"
+    case "$sys_locale" in
+        C|POSIX|C.*|POSIX.*|"") sys_locale="en_US.UTF-8" ;;
+    esac
+    sys_locale="${sys_locale%%.*}.UTF-8"
+    sed -i -E "s/^#[[:space:]]*(${sys_locale}[[:space:]]+UTF-8)/\1/i" /etc/locale.gen 2>/dev/null || true
+    locale-gen "$sys_locale" en_US.UTF-8 >/dev/null 2>&1
+    update-locale LANG="$sys_locale"
 
     display_explanation "Synchronizing the clock (NTP)..."
     apt_install systemd-timesyncd >/dev/null 2>&1
@@ -1557,7 +1547,7 @@ function_install_koha() {
 
     wait_for_apt_locks || return 1
     display_explanation "Upgrading the system..."
-    apt_update_indices
+    apt_update_indices || return 1
     if ! DEBIAN_FRONTEND=noninteractive apt-get upgrade "${APT_OPTS[@]}"; then
         restore_apt_timers
         msg_error "" "$(t "System upgrade failed. Koha will not be changed at this stage.")" 10 74
@@ -1591,7 +1581,7 @@ function_install_koha() {
         echo "$(t "[WARN] Elasticsearch repository unavailable; continuing with Zebra only.")"
     fi
 
-    apt_update_indices
+    apt_update_indices || return 1
     display_explanation "Installing MariaDB and Koha (longest step)..."
     apt_install mariadb-server koha-common || return 1
     systemctl enable --now mariadb >/dev/null 2>&1
