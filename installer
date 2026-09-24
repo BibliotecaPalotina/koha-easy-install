@@ -15,7 +15,7 @@ set -o pipefail
 umask 022
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
-PANEL_VERSION=" β-0.84"
+PANEL_VERSION=" β-0.85"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
@@ -529,13 +529,8 @@ validate_backups() {
     fi
     if [ -f "$BACKUP_CONF" ] && grep -q '^RCLONE_REMOTE="[^"]\+"' "$BACKUP_CONF" 2>/dev/null; then
         v_ok "Nuvem: $(t "remote do rclone configurado" "rclone remote configured")."
-    else
-        v_warn "Nuvem: $(t "backup remoto não configurado (opção 11)" "remote backup not configured (option 11)")."
-    fi
-    if [ -f "$SCP_BACKUP_CONF" ] && grep -q '^SCP_HOST="[^"]\+"' "$SCP_BACKUP_CONF" 2>/dev/null; then
-        v_ok "SCP: $(t "backup via SCP automático configurado" "automatic SCP backup configured")."
-    else
-        v_warn "SCP: $(t "backup via SCP automático não configurado (opção 12)" "automatic SCP backup not configured (option 12)")."
+else
+        v_warn "Nuvem: $(t "backup remoto não configurado (Central de Backups)" "remote backup not configured (Backup Center)")."
     fi
 }
 
@@ -1116,30 +1111,6 @@ EOF
     chmod 600 "$BACKUP_CONF"
 }
 
-write_scp_backup_config() {
-    [ -f "$SCP_BACKUP_CONF" ] && return 0
-    cat > "$SCP_BACKUP_CONF" << 'EOF'
-# Configuração do backup automático via SCP (sem rclone).
-# Configuration for automatic SCP backup (without rclone).
-SCP_HOST=""
-SCP_USER=""
-SCP_PORT="22"
-SCP_FOLDER=""
-SCP_KEY="/root/.ssh/koha_backup_ed25519"
-EOF
-    chmod 600 "$SCP_BACKUP_CONF"
-}
-
-set_scp_config() {
-    local key="$1" val="$2"
-    write_scp_backup_config
-    if grep -qE "^${key}=" "$SCP_BACKUP_CONF" 2>/dev/null; then
-        sed -i -E "s|^${key}=.*|${key}=\"${val}\"|" "$SCP_BACKUP_CONF"
-    else
-        echo "${key}=\"${val}\"" >> "$SCP_BACKUP_CONF"
-    fi
-}
-
 write_backup_scripts() {
     mkdir -p "$DIR_SQL" "$DIR_MARC"
     write_backup_config
@@ -1169,7 +1140,7 @@ mkdir -p "\$DIR"
 
 FILE="\$DIR/\${DB}_\$(date +%Y-%m-%d_%Hh%M).sql.gz"
 
-if ! mysqldump --single-transaction --quick --routines --triggers \\
+if ! mysqldump --single-transaction --quick --routines --triggers \
         --default-character-set=utf8mb4 "\$DB" 2>>"\$LOG" | gzip > "\$FILE"; then
     log_backup "FALHA ao gerar \$FILE / FAILED to generate \$FILE"
     rm -f "\$FILE"
@@ -1198,19 +1169,6 @@ if [ -n "\$RCLONE_REMOTE" ] && [ -f /root/.config/rclone/rclone.conf ]; then
         log_backup "Nuvem OK / Cloud OK: \${RCLONE_REMOTE}:\${RCLONE_SQL_FOLDER}/"
     else
         log_backup "AVISO: envio para a nuvem falhou (cópia local preservada) / WARN: cloud upload failed (local copy preserved)"
-    fi
-fi
-
-# Envio via SCP direto (sem rclone), se configurado / Direct SCP transfer (without rclone), if configured
-SCP_CONF="${CONF_DIR}/scp_backup.conf"
-SCP_HOST=""; SCP_USER=""; SCP_PORT="22"; SCP_FOLDER=""; SCP_KEY=""
-[ -f "\$SCP_CONF" ] && . "\$SCP_CONF"
-if [ -n "\$SCP_HOST" ] && [ -n "\$SCP_USER" ] && [ -n "\$SCP_FOLDER" ]; then
-    if scp -P "\$SCP_PORT" -i "\$SCP_KEY" -o BatchMode=yes -o ConnectTimeout=10 \\
-           -o StrictHostKeyChecking=accept-new "\$FILE" "\${SCP_USER}@\${SCP_HOST}:\${SCP_FOLDER%/}/" >>"\$LOG" 2>&1; then
-        log_backup "SCP OK: \${SCP_USER}@\${SCP_HOST}:\${SCP_FOLDER}"
-    else
-        log_backup "AVISO: envio via SCP falhou (copia local preservada) / WARN: SCP transfer failed (local copy preserved)"
     fi
 fi
 
@@ -2051,57 +2009,36 @@ function_manual_backup() {
         log "$(t "backup manual gerado:" "manual backup generated:") $target_file"
         backup_lock_release
         
-        local size
+        local size ip_addr
         size=$(du -h "$target_file" | cut -f1)
+        ip_addr=$(get_server_ip)
         
-        msg_ok "$(t "Backup gerado e verificado:\n$target_file\n\nTamanho: $size" "Backup generated and verified:\n$target_file\n\nSize: $size")" 11 76
-
-        if prompt_yes_no "$(t "Baixar para este PC" "Download to this PC")" "$(t "Deseja ver o comando rápido para puxar este backup para o seu\ncomputador pessoal (Windows, Mac ou Linux) agora mesmo?" "Do you want to see the quick command to pull this backup to your\npersonal computer (Windows, Mac or Linux) right now?")" 10 76; then
-            
-            local tmp_msg
-            tmp_msg=$(mktemp /tmp/koha_scp_msg.XXXXXX) || return 0
-            
-            if [ "$SYS_LANG" = "pt" ]; then
-                cat > "$tmp_msg" << EOF
-======================================================================
-COMO SALVAR O BACKUP NO SEU COMPUTADOR (WINDOWS / MAC / LINUX)
-======================================================================
-
-Abra o Terminal ou PowerShell no seu computador pessoal (não neste
-servidor) e copie e cole o comando exato abaixo:
-
-scp ${REAL_USER:-root}@$(get_server_ip):${target_file} .
-
-1. O arquivo será salvo na pasta em que o seu terminal estiver aberto
-   (geralmente a pasta do seu usuário, ex: C:\Users\Bibliotecario).
-2. Não esqueça o ponto final ( . ) no comando acima.
-3. Será solicitada a senha do usuário '${REAL_USER:-root}' deste servidor.
-
-Arquivo para baixar: $(basename "$target_file") (${size})
-EOF
-            else
-                cat > "$tmp_msg" << EOF
-======================================================================
-HOW TO SAVE THE BACKUP TO YOUR COMPUTER (WINDOWS / MAC / LINUX)
-======================================================================
-
-Open Terminal or PowerShell on your personal computer (not on this
-server) and copy and paste the exact command below:
-
-scp ${REAL_USER:-root}@$(get_server_ip):${target_file} .
-
-1. The file will be saved in the folder where your terminal is open
-   (usually your user folder, e.g., C:\Users\Librarian).
-2. Do not forget the dot ( . ) at the end of the command above.
-3. You will be asked for the password of user '${REAL_USER:-root}'.
-
-File to download: $(basename "$target_file") (${size})
-EOF
-            fi
-
-            whiptail --title "$(t "Transferência de Arquivo via SCP" "File Transfer via SCP")" --textbox "$tmp_msg" 21 78 2>/dev/null || true
-            rm -f "$tmp_msg"
+        echo "======================================================================"
+        echo -e "\e[1;32m$(t "BACKUP GERADO E VERIFICADO COM SUCESSO!" "BACKUP GENERATED AND VERIFIED SUCCESSFULLY!")\e[0m"
+        echo "======================================================================"
+        echo "$(t "Arquivo:" "File:") $target_file"
+        echo "$(t "Tamanho:" "Size:") $size"
+        echo ""
+        echo "----------------------------------------------------------------------"
+        echo -e "\e[1;36m$(t "COMO SALVAR NO SEU COMPUTADOR (WINDOWS / MAC / LINUX)" "HOW TO SAVE TO YOUR COMPUTER (WINDOWS / MAC / LINUX)")\e[0m"
+        echo "----------------------------------------------------------------------"
+        echo "$(t "Abra o Terminal ou PowerShell no seu computador pessoal e cole o comando:" "Open Terminal or PowerShell on your personal computer and paste the exact command:")"
+        echo ""
+        echo -e "\e[1;33mscp ${REAL_USER:-root}@${ip_addr}:${target_file} .\e[0m"
+        echo ""
+        
+        if [ "$SYS_LANG" = "pt" ]; then
+            echo "1. O arquivo será salvo na pasta em que o seu terminal estiver aberto."
+            echo "2. Não esqueça o ponto final ( . ) no comando acima."
+            echo "3. Será solicitada a senha do usuário '${REAL_USER:-root}' deste servidor."
+        else
+            echo "1. The file will be saved in the folder where your terminal is open."
+            echo "2. Do not forget the dot ( . ) at the end of the command above."
+            echo "3. You will be asked for the password of user '${REAL_USER:-root}'."
         fi
+        
+        echo "======================================================================"
+        pause_terminal
     else
         rm -f "$target_file"
         backup_lock_release
@@ -2867,11 +2804,11 @@ function_manage_crons() {
 
         [ -z "$cron_choice" ] && return 0
 
-        case "$cron_choice" in
+case "$cron_choice" in
             1)
                 local txt_help
                 txt_help=$(t "DETALHAMENTO DAS TAREFAS AUTOMÁTICAS:\n\n" "AUTOMATED TASKS BREAKDOWN:\n\n")
-                txt_help+=$(t "• Backup do Banco de Dados (23:00 diário):\n  Gera cópia completa .sql.gz, valida integridade e sincroniza com a nuvem/SCP.\n\n" "• Database Backup (23:00 daily):\n  Generates .sql.gz archive, verifies integrity, and syncs to cloud/SCP.\n\n")
+                txt_help+=$(t "• Backup do Banco de Dados (23:00 diário):\n  Gera cópia completa .sql.gz, valida integridade e sincroniza com a nuvem.\n\n" "• Database Backup (23:00 daily):\n  Generates .sql.gz archive, verifies integrity, and syncs to cloud.\n\n")
                 txt_help+=$(t "• Backup dos Registros MARC21 (Domingos às 03:00):\n  Exporta livros e autoridades em formato padronizado MARC21 intercambiável.\n\n" "• MARC21 Records Backup (Sundays at 03:00):\n  Exports catalog and authorities in standard MARC21 exchange format.\n\n")
                 txt_help+=$(t "• Limpeza de Banco e Sessões (01:30 diário):\n  Expira logins antigos para manter a navegação rápida e o banco enxuto.\n\n" "• DB & Session Cleanup (01:30 daily):\n  Purges stale web sessions keeping database and browsing responsive.\n\n")
                 txt_help+=$(t "• Manutenção do Acelerador Plack (05:00 diário):\n  Reinicia os processos em segundo plano para garantir consumo estável de RAM.\n\n" "• Plack Accelerator Maintenance (05:00 daily):\n  Flushes workers ensuring stable low memory consumption.\n\n")
@@ -3576,8 +3513,7 @@ $(t "MÁQUINA" "MACHINE")
 
 $(t "BACKUP" "BACKUP")
   $(t "Último SQL" "Latest SQL")    : $(find "$DIR_SQL" -name '*.sql.gz' -printf '%TY-%Tm-%Td %TH:%TM\n' 2>/dev/null | sort -r | head -n1 || echo '-')
-  $(t "Nuvem" "Cloud")         : $(grep -o 'RCLONE_REMOTE="[^"]*"' "$BACKUP_CONF" 2>/dev/null | cut -d'"' -f2 | grep . || echo "$(t "não configurada" "not configured")")
-  $(t "SCP Auto" "SCP Auto")      : $(grep -o 'SCP_HOST="[^"]*"' "$SCP_BACKUP_CONF" 2>/dev/null | cut -d'"' -f2 | grep . || echo "$(t "não configurado" "not configured")")" 30 78 2>/dev/null || true
+  $(t "Nuvem" "Cloud")         : $(grep -o 'RCLONE_REMOTE="[^"]*"' "$BACKUP_CONF" 2>/dev/null | cut -d'"' -f2 | grep . || echo "$(t "não configurada" "not configured")")" 29 78 2>/dev/null || true
 }
 
 # ======================================================================
@@ -3840,20 +3776,16 @@ while true; do
         1) function_install_koha ;;
         2) function_view_credentials ;;
         3) function_restore_database ;;
-        4)
+4)
             SUB_OPT=$(whiptail --title "$(t "▣ Central de Backups" "▣ Backup Center")" --cancel-button "$(t "Voltar" "Back")" \
-                --menu "$(t "Escolha uma rotina de backup:" "Choose a backup routine:")" 19 76 5 \
-                "1" "$(t "▣  Gerar backup manual local agora" "▣  Generate manual local backup now")" \
-                "2" "$(t "↗  Enviar backup via SCP manual agora" "↗  Send manual SCP backup now")" \
-                "3" "$(t "☁  Configurar backup em nuvem (Rclone / Google Drive)" "☁  Configure cloud backup (Rclone / Google Drive)")" \
-                "4" "$(t "⟳  Configurar envio automático via SCP" "⟳  Configure automatic SCP backup")" \
-                "5" "$(t "✓  Testar integridade do último backup" "✓  Test integrity of latest backup")" 3>&1 1>&2 2>&3) || continue
+                --menu "$(t "Escolha uma rotina de backup:" "Choose a backup routine:")" 17 76 3 \
+                "1" "$(t "▣  Gerar backup manual e baixar para o PC" "▣  Generate manual backup and download to PC")" \
+                "2" "$(t "☁  Configurar backup em nuvem (Google Drive)" "☁  Configure cloud backup (Google Drive)")" \
+                "3" "$(t "✓  Testar integridade do último backup" "✓  Test integrity of latest backup")" 3>&1 1>&2 2>&3) || continue
             case "$SUB_OPT" in
                 1) function_manual_backup ;;
-                2) function_send_manual_scp_backup ;;
-                3) function_configure_rclone ;;
-                4) function_configure_automatic_scp_backup ;;
-                5) function_test_backup ;;
+                2) function_configure_rclone ;;
+                3) function_test_backup ;;
             esac
             ;;
         5)
