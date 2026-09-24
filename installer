@@ -11,9 +11,6 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# ======================================================================
-# LOCK ATÔMICO (Prevenção de Dupla Execução)
-# ======================================================================
 PANEL_LOCK_FILE="/var/run/koha_panel.lock"
 
 exec 9> "$PANEL_LOCK_FILE"
@@ -22,16 +19,13 @@ if ! flock -n 9; then
     exit 1
 fi
 
-# ======================================================================
-# TRAP (Limpeza ao sair) E AMBIENTE
-# ======================================================================
 trap on_exit EXIT
 
 set -o pipefail
 umask 022
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
-PANEL_VERSION=" β-0.9.1"
+PANEL_VERSION=" β-0.9.2"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
