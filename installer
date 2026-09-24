@@ -3778,11 +3778,54 @@ function_reboot_server() {
 # 30. SOBRE O PROGRAMA / ABOUT THE PROGRAM
 # ======================================================================
 function_about() {
-    whiptail --title "$(t "Sobre / About" "Sobre / About")" --msgbox \
-"$(t "Koha Easy Install & Tools v${PANEL_VERSION}\n\nDesenvolvido para democratizar a gestão de acervos, oferecendo uma infraestrutura robusta, gratuita e acessível para bibliotecas que não contam com suporte especializado ou recursos para softwares proprietários.\n\nSe esta iniciativa foi útil:\n⭐ Deixe uma estrela no GitHub: github.com/BibliotecaPalotina/koha-easy-install\n📢 Compartilhe com colegas e outras instituições!\n\nDesenvolvido por Paulo F. Baldi FH.\nBiblioteca Pública Municipal Castro Alves — Palotina, PR, Brasil" \
-"Koha Easy Install & Tools v${PANEL_VERSION}\n\nDesigned to democratize collection management, delivering a robust, free, and accessible infrastructure for libraries lacking specialized support or budget for proprietary tools.\n\nIf this project helped you:\n⭐ Star it on GitHub: github.com/BibliotecaPalotina/koha-easy-install\n📢 Share it with colleagues and other libraries!\n\nDeveloped by Paulo F. Baldi FH.\nCastro Alves Public Library — Palotina, PR, Brazil")" 18 76 2>/dev/null || true
-}
+    local tmp_about
+    tmp_about=$(mktemp /tmp/koha_about.XXXXXX) || return 1
 
+    if [ "$SYS_LANG" = "pt" ]; then
+        cat > "$tmp_about" << 'EOF'
+Koha Easy Install & Tools
+
+Este projeto nasceu da vivência real enfrentando barreiras técnicas na
+gestão de acervos, pensado para bibliotecas que não possuem recursos
+para sistemas comerciais caros ou suporte técnico especializado.
+
+Se esta iniciativa te ajudou:
+  * Deixe uma estrela no repositório do GitHub!
+  * Compartilhe com colegas e outras instituições.
+
+Repositório Oficial:
+  https://github.com/BibliotecaPalotina/koha-easy-install
+
+----------------------------------------------------------------------
+Criado com dedicação por Paulo F. Baldi FH.
+Auxiliar de Biblioteca - Biblioteca Pública Municipal Castro Alves
+Palotina, Paraná, Brasil
+EOF
+    else
+        cat > "$tmp_about" << 'EOF'
+Koha Easy Install & Tools
+
+Born from real-life experience facing technical barriers in collection
+management, designed for libraries without budget for expensive commercial
+systems or dedicated technical support.
+
+If this project helped you:
+  * Star the repository on GitHub!
+  * Share it with colleagues and other institutions.
+
+Official Repository:
+  https://github.com/BibliotecaPalotina/koha-easy-install
+
+----------------------------------------------------------------------
+Created with dedication by Paulo F. Baldi FH.
+Library Assistant - Castro Alves Public Library
+Palotina, Paraná, Brazil
+EOF
+    fi
+
+    whiptail --title "$(t "Sobre / About" "Sobre / About")" --textbox "$tmp_about" 22 78 2>/dev/null || true
+    rm -f "$tmp_about"
+}
 # ======================================================================
 # MENU PRINCIPAL / MAIN MENU (16 OPÇÕES)
 # ======================================================================
