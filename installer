@@ -1,9 +1,9 @@
-#!/usr/bin/env bash
 # ======================================================================
-# KOHA EASY INSTALL & TOOLS - ADVANCED MANAGEMENT SUITE
+# KOHA EASY INSTALLER & MANAGER - ADVANCED MANAGEMENT SUITE
 # Deployment, maintenance, tuning and backup suite for Koha ILS.
 # ----------------------------------------------------------------------
 # Single, self-sufficient file. Updates via "Update this panel" option.
+# ======================================================================
 # ======================================================================
 # TESTE_SYNC_PALOTINA_OK=1
 DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::ForceIPv4=true >/dev/null 2>&1
@@ -382,7 +382,7 @@ v_reset() {
     VALIDATION_LOG="${LOG_DIR}/validacao-$(date '+%Y%m%d-%H%M%S').log"
     {
         echo "======================================================================"
-        echo "KOHA EASY INSTALL & Tools - VALIDATION REPORT"
+        echo "KOHA EASY INSTALLER & MANAGER - VALIDATION REPORT"
         echo "Context: ${1:-general}"
         echo "Date: $(date '+%Y-%m-%d %H:%M:%S %Z')"
         echo "Host: $(hostname)    Panel: v${PANEL_VERSION}"
@@ -647,7 +647,7 @@ show_validation_report() {
 }
 
 validate_pre_installation() {
-    msg_info "$(t "Welcome to Koha Easy Install!")" \
+    msg_info "$(t "Welcome to Koha Easy Installer!")" \
         "$(t "This project democratizes collection management, automating the setup of a robust, fast and free infrastructure for libraries.\n\nThe wizard will install and tune MariaDB, Apache, Memcached and Koha.\n\nEstimated time: 10 to 30 minutes.\nPlease do not close the terminal during installation.")" 16 78
         
     clear
@@ -3625,7 +3625,7 @@ function_about() {
     tmp_about=$(mktemp /tmp/koha_about.XXXXXX) || return 1
 
     cat > "$tmp_about" << 'EOF'
-Koha Easy Install & Tools
+Koha Easy Installer & Manager
 
 Born from real-life experience facing technical barriers in collection
 management, designed for libraries without budget for expensive commercial
@@ -3654,7 +3654,7 @@ EOF
 while true; do
     restore_apt_timers
 
-    MAIN_OPT=$(whiptail --title "Koha Easy Install & Tools v${PANEL_VERSION} - $(t "Control Dashboard")" \
+    MAIN_OPT=$(whiptail --title "Koha Easy Installer & Manager v${PANEL_VERSION} - $(t "Control Dashboard")" \
         --cancel-button "$(t "Exit")" \
         --menu "$(t "Select an option:")" 25 80 16 \
         "1"  "$(t "⚙  Install Koha server")" \
