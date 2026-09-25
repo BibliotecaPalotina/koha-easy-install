@@ -35,22 +35,6 @@ UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-insta
 # 2. LANGUAGE / IDIOMA
 # ======================================================================
 
-LANGUAGES_KOHA="en-GB:English (UK);en-NZ:English (NZ);pt-BR:Português (Brasil);pt-PT:Português (Portugal);es-ES:Español;fr-FR:Français;de-DE:Deutsch;it-IT:Italiano;nl-NL:Nederlands;pl-PL:Polski;ru-RU:Русский"
-
-TRANSLATION_CONFIG="/etc/koha-easy-install/translation.conf"
-CONFIG_DIR="/etc/koha-easy-install"
-
-# ---------------------------------------------------------------
-# Load saved panel language
-# ---------------------------------------------------------------
-if [ -f "$TRANSLATION_CONFIG" ]; then
-    source "$TRANSLATION_CONFIG" 2>/dev/null || true
-fi
-
-# ======================================================================
-# 2. LANGUAGE / IDIOMA
-# ======================================================================
-
 LANGUAGES_KOHA="en-GB:English (UK);en-NZ:English (NZ);pt-BR:Português (Brasil);pt-PT:Português (Portugal);es-ES:Español;sq-AL:Albanian;am-Ethi:Amharic;ar-Arab:Arabic;hy-Armn:Armenian;az-AZ:Azerbaijani;be-BY:Belarusian;bn-IN:Bengali;bg-Cyrl:Bulgarian;my:Burmese;ca-ES:Català;cs-CZ:Čeština;zh-Hans-CN:Chinese (Simplified);zh-Hant-TW:Chinese (Traditional);da-DK:Dansk;de-DE:Deutsch;de-CH:Deutsch (Schweiz);et:Estonian;eo:Esperanto;eu:Euskara;fr-FR:Français;fr-CA:Français (Canada);gl:Galego;ka:Georgian;el-GR:Greek;he-Hebr:Hebrew;hi:Hindi;hr-HR:Hrvatski;hu-HU:Magyar;ia:Interlingua;ga:Irish;is-IS:Íslenska;it-IT:Italiano;ja-Jpan-JP:Japanese;kn-Knda:Kannada;kk-KZ:Kazakh;km-KH:Khmer;rw-RW:Kinyarwanda;ko-Kore-KP:Korean;ku-Arab:Kurdish;lo-Laoo:Lao;lv:Latvian;ms-MY:Malay;ml:Malayalam;mi-NZ:Maori;mr:Marathi;ne-NE:Nepali;nl-NL:Nederlands;nl-BE:Nederlands (BE);nb-NO:Norsk Bokmål;nn-NO:Norsk Nynorsk;fa-Arab:Persian;pl-PL:Polski;ro-RO:Română;ru-RU:Russian;gd:Scottish Gaelic;sr-Cyrl:Serbian;si:Sinhala;sk-SK:Slovenčina;sl-SI:Slovenščina;fi-FI:Suomi;sv-SE:Svenska;sw-KE:Swahili;tl-PH:Tagalog;ta:Tamil;te:Telugu;th-TH:Thai;tr-TR:Türkçe;uk-UA:Ukrainian;ur-Arab:Urdu;uz:Uzbek;vi-VN:Vietnamese;cy-GB:Welsh"
 
 TRANSLATION_CONFIG="/etc/koha-easy-install/translation.conf"
@@ -337,7 +321,6 @@ except Exception:
     printf '%b' "$source_text"
     return 0
 }
-
 # ======================================================================
 # 3. SHIELDED APT
 # ======================================================================
@@ -2346,15 +2329,22 @@ function_install_languages() {
                 chmod +x /tmp/koha-foreach
                 export PATH="/tmp:$PATH"
             }
+
         created_mock=1
     fi
 
     # ==================================================================
     # LANGUAGE SELECTOR
     # ==================================================================
-    local items=() pairs=() pair code name choice
+    local items=()
+    local pairs=()
+    local pair
+    local code
+    local name
+    local choice
+
     IFS=';' read -ra pairs <<< "$LANGUAGES_KOHA"
-    
+
     for pair in "${pairs[@]}"; do
         code="${pair%%:*}"
         name="${pair#*:}"
@@ -2370,12 +2360,14 @@ function_install_languages() {
             "${items[@]}" \
             3>&1 1>&2 2>&3
     ) || {
-        [ "$created_mock" -eq 1 ] && rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
+        [ "$created_mock" -eq 1 ] &&
+            rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
         return 0
     }
 
     [ -z "$choice" ] && {
-        [ "$created_mock" -eq 1 ] && rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
+        [ "$created_mock" -eq 1 ] &&
+            rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
         return 0
     }
 
@@ -2413,6 +2405,7 @@ function_install_languages() {
     # PREPARE SYSTEM LOCALE
     # ==================================================================
     clear
+
     display_explanation "Preparing OS for language: $choice"
 
     local loc_prefix
@@ -2454,7 +2447,10 @@ function_install_languages() {
     koha_trans_cmd="$(command -v koha-translate || echo "/usr/sbin/koha-translate")"
 
     if [ ! -x "$koha_trans_cmd" ]; then
-        msg_error "" "$(t "Koha translation utility was not found.\n\nExpected:\n/usr/sbin/koha-translate")" 11 74
+        msg_error "" \
+            "$(t "Koha translation utility was not found.\n\nExpected:\n/usr/sbin/koha-translate")" \
+            11 74
+
         [ "$created_mock" -eq 1 ] && rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
         return 0
     fi
@@ -2485,6 +2481,9 @@ function_install_languages() {
                 mysql_runner="sudo mysql"
             fi
 
+            # ----------------------------------------------------------
+            # OPAC
+            # ----------------------------------------------------------
             $mysql_runner -e "
                 INSERT INTO ${DB_NAME}.systempreferences (variable, value, type)
                 VALUES ('OPACLanguages', '${choice}', 'Free')
@@ -2493,7 +2492,12 @@ function_install_languages() {
                     WHEN FIND_IN_SET('${choice}', value) THEN value
                     ELSE CONCAT(value, ',', '${choice}')
                 END;
+            " >/dev/null 2>&1 || true
 
+            # ----------------------------------------------------------
+            # STAFF INTERFACE
+            # ----------------------------------------------------------
+            $mysql_runner -e "
                 INSERT INTO ${DB_NAME}.systempreferences (variable, value, type)
                 VALUES ('StaffInterfaceLanguages', '${choice}', 'Free')
                 ON DUPLICATE KEY UPDATE value = CASE
@@ -2501,10 +2505,19 @@ function_install_languages() {
                     WHEN FIND_IN_SET('${choice}', value) THEN value
                     ELSE CONCAT(value, ',', '${choice}')
                 END;
-
-                UPDATE ${DB_NAME}.systempreferences SET value='${choice}' WHERE variable='language';
-                DELETE FROM ${DB_NAME}.sessions;
             " >/dev/null 2>&1 || true
+
+            # ----------------------------------------------------------
+            # Legacy compatibility
+            # ----------------------------------------------------------
+            $mysql_runner -e "
+                UPDATE ${DB_NAME}.systempreferences SET value='${choice}' WHERE variable='language';
+            " >/dev/null 2>&1 || true
+
+            # ----------------------------------------------------------
+            # Clear sessions
+            # ----------------------------------------------------------
+            $mysql_runner -e "DELETE FROM ${DB_NAME}.sessions;" >/dev/null 2>&1 || true
 
             $sudo_cmd systemctl restart memcached >/dev/null 2>&1 || true
             $sudo_cmd /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
