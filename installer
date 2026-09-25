@@ -506,6 +506,13 @@ validate_backups() {
     fi
 }
 
+get_free_space_mb() {
+    local val
+    val=$(df -Pm "${1:-/}" 2>/dev/null | awk 'NR==2{print $4}')
+    val=$(echo "$val" | tr -dc '0-9')
+    printf '%s' "${val:-0}"
+}
+
 validate_network_and_system() {
     local ram free_disk
     validate_command curl "Internet"
