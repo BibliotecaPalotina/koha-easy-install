@@ -112,7 +112,33 @@ except Exception:
 }
 
 choose_timezone() {
-    whiptail --title "$(t "Timezone")" --inputbox "$(t "Confirm your timezone (e.g. America/Sao_Paulo):")" 10 60 "America/Sao_Paulo" 3>&1 1>&2 2>&3
+    local current_tz selected_tz
+    
+    current_tz=$(timedatectl show -p Timezone --value 2>/dev/null)
+    case "$current_tz" in ""|"n/a") current_tz="UTC" ;; esac
+
+    if whiptail --title "$(t "Timezone")" --yesno "$(t "Is your timezone currently set to:")\n\n>>> ${current_tz} <<<\n\n$(t "Is this correct?")" 12 60 3>&1 1>&2 2>&3; then
+        printf '%s' "$current_tz"
+        return 0
+    fi
+
+    local tz_list=()
+    while IFS= read -r tz; do
+        [ -n "$tz" ] && tz_list+=("$tz" "")
+    done < <(timedatectl list-timezones 2>/dev/null)
+
+    if [ ${#tz_list[@]} -eq 0 ]; then
+        tz_list=("UTC" "" "America/New_York" "" "Europe/London" "" "Asia/Tokyo" "" "Australia/Sydney" "")
+    fi
+
+    selected_tz=$(whiptail --title "$(t "Select Timezone")" \
+        --menu "$(t "Choose your timezone from the list:")" 22 70 14 "${tz_list[@]}" 3>&1 1>&2 2>&3)
+    
+    if [ -n "$selected_tz" ]; then
+        printf '%s' "$selected_tz"
+    else
+        printf '%s' "$current_tz"
+    fi
 }
 
 # ======================================================================
