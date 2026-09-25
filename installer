@@ -514,12 +514,16 @@ validate_network_and_system() {
     else
         v_fail "DNS: $(t "cannot resolve") debian.koha-community.org."
     fi
-    ram=$(awk '/MemTotal:/ {printf "%.1f", $2/1024/1024}' /proc/meminfo 2>/dev/null)
+    
+    # CORREÇÃO: LC_ALL=C força a leitura com ponto decimal ignorando o idioma local
+    ram=$(LC_ALL=C awk '/MemTotal:/ {printf "%.1f", $2/1024/1024}' /proc/meminfo 2>/dev/null)
     v_info "RAM: ${ram:-?} GB."
+    
     free_disk=$(get_free_space_mb /)
     if [ "${free_disk:-0}" -ge 5120 ] 2>/dev/null; then v_ok "Disk: ${free_disk} MB $(t "free")."
     elif [ "${free_disk:-0}" -ge 2048 ] 2>/dev/null; then v_warn "Disk: ${free_disk} MB $(t "free")."
     else v_fail "Disk: ${free_disk:-0} MB $(t "free (under 2 GB)")."; fi
+    
     swapon --show 2>/dev/null | grep -q '/' && v_ok "SWAP: $(t "active")." || v_warn "SWAP: $(t "none")."
     timedatectl show -p NTPSynchronized --value 2>/dev/null | grep -q '^yes$' \
         && v_ok "NTP: $(t "synchronized")." \
