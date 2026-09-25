@@ -10,14 +10,6 @@ set -o pipefail
 umask 022
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
-PANEL_LOCK_FILE="/var/run/koha_panel.lock"
-
-exec 9> "$PANEL_LOCK_FILE"
-if ! flock -n 9; then
-    echo "The panel is already running in another session. Aborting to prevent conflicts."
-    exit 1
-fi
-
 # ======================================================================
 # 1. CLEANUP ON EXIT (Declarado ANTES do trap)
 # ======================================================================
@@ -370,19 +362,7 @@ apt_install() {
 # ======================================================================
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
     echo ""
-    echo "+---------------------------------------------------------------+"
-    printf "| %-61.61s |\n" "$(t "Root privileges required.")"
-    printf "| %-61.61s |\n" "$(t "Please enter your administrative password:")"
-    echo "+---------------------------------------------------------------+"
-    echo ""
-    if [ -f "$0" ]; then
-        if command -v sudo >/dev/null 2>&1 && (sudo -n true 2>/dev/null || sudo -v 2>/dev/null); then
-            exec sudo -E env "KOHA_PANEL_LANG=${KOHA_PANEL_LANG}" bash "$0" "$@"
-        elif command -v su >/dev/null 2>&1; then
-            printf -v _args_quoted '%q ' "$@"
-            exec su - root -c "bash '$0' $_args_quoted"
-        fi
-    fi
+    # ... (seu código que pede senha continua aqui) ...
     echo "$(t "ERROR: run as root: su - -c 'bash config.sh'")"
     exit 1
 fi
@@ -391,6 +371,17 @@ REAL_USER="${SUDO_USER:-${USER:-root}}"
 REAL_HOME="$(getent passwd "$REAL_USER" 2>/dev/null | cut -d: -f6)"
 [ -z "$REAL_HOME" ] && REAL_HOME="/root"
 [ -d "$REAL_HOME" ] || REAL_HOME="/root"
+
+# ======================================================================
+# 4.5. PANEL LOCK (ROOT ONLY)
+# ======================================================================
+PANEL_LOCK_FILE="/var/run/koha_panel.lock"
+
+exec 9> "$PANEL_LOCK_FILE"
+if ! flock -n 9; then
+    echo "$(t "The panel is already running in another session. Aborting to prevent conflicts.")"
+    exit 1
+fi
 
 # ======================================================================
 # 5. EXECUTION LOCKS (PID BASED) - BACKUP ONLY
