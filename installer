@@ -31,209 +31,153 @@ PANEL_VERSION=" β-0.9.2"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
-# 2. LANGUAGE / IDIOMA
+# TRANSLATION ENGINE / MOTOR DE TRADUÇÃO DO PAINEL
 # ======================================================================
-LANGUAGES_KOHA="en-GB:English (UK);en-NZ:English (NZ);pt-BR:Portugues (Brasil);pt-PT:Portugues (Portugal);es-ES:Espanol;sq-AL:Albanian;am-Ethi:Amharic;ar-Arab:Arabic;hy-Armn:Armenian;az-AZ:Azerbaijani;be-BY:Belarusian;bn-IN:Bengali;bg-Cyrl:Bulgarian;my:Burmese;ca-ES:Catala;cs-CZ:Cestina;zh-Hans-CN:Chinese (Simplified);zh-Hant-TW:Chinese (Traditional);da-DK:Dansk;de-DE:Deutsch;de-CH:Deutsch (Schweiz);et:Estonian;eo:Esperanto;eu:Euskara;fr-FR:Francais;fr-CA:Francais (Canada);gl:Galego;ka:Georgian;el-GR:Greek;he-Hebr:Hebrew;hi:Hindi;hr-HR:Hrvatski;hu-HU:Magyar;ia:Interlingua;ga:Irish;is-IS:Islenska;it-IT:Italiano;ja-Jpan-JP:Japanese;kn-Knda:Kannada;kk-KZ:Kazakh;km-KH:Khmer;rw-RW:Kinyarwanda;ko-Kore-KP:Korean;ku-Arab:Kurdish;lo-Laoo:Lao;lv:Latvian;ms-MY:Malay;ml:Malayalam;mi-NZ:Maori;mr:Marathi;ne-NE:Nepali;nl-NL:Nederlands;nl-BE:Nederlands (BE);nb-NO:Norsk Bokmal;nn-NO:Norsk Nynorsk;fa-Arab:Persian;pl-PL:Polski;ro-RO:Romana;ru-RU:Russian;gd:Scottish Gaelic;sr-Cyrl:Serbian;si:Sinhala;sk-SK:Slovencina;sl-SI:Slovenscina;fi-FI:Suomi;sv-SE:Svenska;sw-KE:Swahili;tl-PH:Tagalog;ta:Tamil;te:Telugu;th-TH:Thai;tr-TR:Turkce;uk-UA:Ukrainian;ur-Arab:Urdu;uz:Uzbek;vi-VN:Vietnamese;cy-GB:Welsh"
-TRANSLATION_CONFIG="/etc/koha-easy-install/translation.conf"
-CONFIG_DIR="/etc/koha-easy-install"
-
-if [ -f "$TRANSLATION_CONFIG" ]; then
-    source "$TRANSLATION_CONFIG" 2>/dev/null
-fi
-
-if [ -z "${KOHA_PANEL_LANG_FULL:-}" ]; then
-    items=()
-    IFS=';' read -ra pairs <<< "$LANGUAGES_KOHA"
-    for pair in "${pairs[@]}"; do
-        items+=("${pair%%:*}" "${pair#*:}")
-    done
-
-    SELECTED_LANG_FULL=$(whiptail --title "System Language / Idioma" \
-        --menu "Select the primary language for the Panel and Koha ILS:\nSelecione o idioma principal para o Painel e o sistema Koha:" 22 72 13 \
-        "${items[@]}" 3>&1 1>&2 2>&3)
-    
-    [ -z "$SELECTED_LANG_FULL" ] && SELECTED_LANG_FULL="en-GB"
-    export KOHA_PANEL_LANG_FULL="$SELECTED_LANG_FULL"
-    
-    case "$SELECTED_LANG_FULL" in
-        pt-BR|pt-PT)         export KOHA_PANEL_LANG="pt" ;;
-        es-ES)               export KOHA_PANEL_LANG="es" ;;
-        en-GB|en-NZ)         export KOHA_PANEL_LANG="en" ;;
-        fr-FR|fr-CA)         export KOHA_PANEL_LANG="fr" ;;
-        de-DE|de-CH)         export KOHA_PANEL_LANG="de" ;;
-        nl-NL|nl-BE)         export KOHA_PANEL_LANG="nl" ;;
-        zh-Hans-CN)          export KOHA_PANEL_LANG="zh-CN" ;;
-        zh-Hant-TW)          export KOHA_PANEL_LANG="zh-TW" ;;
-        ja-Jpan-JP)          export KOHA_PANEL_LANG="ja" ;;
-        ko-Kore-KP)          export KOHA_PANEL_LANG="ko" ;;
-        ru-RU)               export KOHA_PANEL_LANG="ru" ;;
-        uk-UA)               export KOHA_PANEL_LANG="uk" ;;
-        ar-Arab)             export KOHA_PANEL_LANG="ar" ;;
-        he-Hebr)             export KOHA_PANEL_LANG="he" ;;
-        fa-Arab)             export KOHA_PANEL_LANG="fa" ;;
-        nb-NO|nn-NO)         export KOHA_PANEL_LANG="no" ;;
-        sv-SE)               export KOHA_PANEL_LANG="sv" ;;
-        cs-CZ)               export KOHA_PANEL_LANG="cs" ;;
-        pl-PL)               export KOHA_PANEL_LANG="pl" ;;
-        it-IT)               export KOHA_PANEL_LANG="it" ;;
-        tr-TR)               export KOHA_PANEL_LANG="tr" ;;
-        *)                   export KOHA_PANEL_LANG="${SELECTED_LANG_FULL%%-*}" ;;
-    esac
-fi
-
-if [ "${EUID:-$(id -u)}" -eq 0 ]; then
-    mkdir -p "$CONFIG_DIR" 2>/dev/null
-    if ! grep -q "KOHA_PANEL_LANG_FULL=\"$KOHA_PANEL_LANG_FULL\"" "$TRANSLATION_CONFIG" 2>/dev/null; then
-        sed -i '/^KOHA_PANEL_LANG/d' "$TRANSLATION_CONFIG" 2>/dev/null || true
-        echo "KOHA_PANEL_LANG_FULL=\"$KOHA_PANEL_LANG_FULL\"" >> "$TRANSLATION_CONFIG"
-        echo "KOHA_PANEL_LANG=\"$KOHA_PANEL_LANG\"" >> "$TRANSLATION_CONFIG"
-    fi
-fi
-
-preserve_panel_language() {
-    local detected=""
-    if [ -n "${KOHA_PANEL_LANG:-}" ]; then
-        printf '%s' "$KOHA_PANEL_LANG"
-        return 0
-    fi
-    if [ -n "${LANGUAGE:-}" ]; then detected="${LANGUAGE%%:*}"; fi
-    case "$detected" in ""|C|C.*|POSIX|POSIX.*) detected="" ;; esac
-    if [ -z "$detected" ] && [ -n "${LC_ALL:-}" ]; then
-        case "$LC_ALL" in C|C.*|POSIX|POSIX.*) ;; *) detected="$LC_ALL" ;; esac
-    fi
-    if [ -z "$detected" ] && [ -n "${LC_MESSAGES:-}" ]; then
-        case "$LC_MESSAGES" in C|C.*|POSIX|POSIX.*) ;; *) detected="$LC_MESSAGES" ;; esac
-    fi
-    if [ -z "$detected" ] && [ -n "${LANG:-}" ]; then
-        case "$LANG" in C|C.*|POSIX|POSIX.*) ;; *) detected="$LANG" ;; esac
-    fi
-    [ -z "$detected" ] && detected="en_US.UTF-8"
-    printf '%s' "$detected"
-}
-
-if [ -z "${KOHA_PANEL_LANG:-}" ]; then
-    KOHA_PANEL_LANG="$(preserve_panel_language)"
-    export KOHA_PANEL_LANG
-fi
-
-detect_system_language() {
-    local locale_value lang
-    locale_value="${KOHA_PANEL_LANG:-}"
-    [ -z "$locale_value" ] && locale_value="${LANGUAGE%%:*}"
-    if [ -z "$locale_value" ]; then
-        locale_value="${LC_ALL:-}"
-        case "$locale_value" in C|C.*|POSIX|POSIX.*) locale_value="" ;; esac
-    fi
-    if [ -z "$locale_value" ]; then
-        locale_value="${LC_MESSAGES:-}"
-        case "$locale_value" in C|C.*|POSIX|POSIX.*) locale_value="" ;; esac
-    fi
-    if [ -z "$locale_value" ]; then
-        locale_value="${LANG:-}"
-        case "$locale_value" in C|C.*|POSIX|POSIX.*) locale_value="" ;; esac
-    fi
-    [ -z "$locale_value" ] && locale_value="en_US.UTF-8"
-
-    KOHA_SYS_LANG="$(printf '%s' "${locale_value%%.*}" | tr '_' '-')"
-
-    lang="${locale_value%%.*}"
-    lang="${lang%%_*}"
-    lang="${lang%%-*}"
-    lang="$(printf '%s' "$lang" | tr '[:upper:]' '[:lower:]')"
-
-    case "$lang" in
-        pt|por) SYS_LANG="pt" ;;
-        en|eng) SYS_LANG="en" ;;
-        es|spa) SYS_LANG="es" ;;
-        fr|fra|fre) SYS_LANG="fr" ;;
-        de|deu|ger) SYS_LANG="de" ;;
-        it|ita) SYS_LANG="it" ;;
-        ca) SYS_LANG="ca" ;;
-        nl) SYS_LANG="nl" ;;
-        pl) SYS_LANG="pl" ;;
-        ru) SYS_LANG="ru" ;;
-        uk) SYS_LANG="uk" ;;
-        zh) SYS_LANG="zh-CN" ;;
-        ja) SYS_LANG="ja" ;;
-        ko) SYS_LANG="ko" ;;
-        ar) SYS_LANG="ar" ;;
-        he) SYS_LANG="he" ;;
-        fa) SYS_LANG="fa" ;;
-        tr) SYS_LANG="tr" ;;
-        cs) SYS_LANG="cs" ;;
-        sv) SYS_LANG="sv" ;;
-        no) SYS_LANG="no" ;;
-        *)
-            [ -z "$lang" ] && lang="en"
-            SYS_LANG="$lang"
-            ;;
-    esac
-}
-
-detect_system_language
-
-[ -z "$KOHA_SYS_LANG" ] && KOHA_SYS_LANG="en-US"
-[ -z "$SYS_LANG" ] && SYS_LANG="en"
 
 declare -A _TRANS_CACHE
 
 t() {
-    local pt_text="$1"
-    local en_text="${2:-$1}"
-    local source_text
+    local text_pt="${1:-}"
+    local text_en="${2:-$1}"
+    local source_text=""
     local translated=""
-    local cache_key
+    local cache_key=""
     local api_key=""
     local response=""
     local json_payload=""
 
-    if [[ "$SYS_LANG" == "pt" && -n "${2:-}" ]]; then
-        printf '%b' "$pt_text"
+    # ------------------------------------------------------------------
+    # Idioma escolhido pelo usuário no painel.
+    # KOHA_PANEL_LANG é a fonte principal e não deve ser sobrescrita
+    # pelo locale do sistema depois da escolha manual.
+    # ------------------------------------------------------------------
+    local target_lang="${KOHA_PANEL_LANG:-${SYS_LANG:-en}}"
+
+    # Normalização defensiva
+    case "$target_lang" in
+        pt-*|pt_BR|pt_PT|por)
+            target_lang="pt"
+            ;;
+        en-*|en_GB|en_NZ|eng)
+            target_lang="en"
+            ;;
+        es-*|es_ES|spa)
+            target_lang="es"
+            ;;
+        fr-*|fra|fre)
+            target_lang="fr"
+            ;;
+        de-*|deu|ger)
+            target_lang="de"
+            ;;
+        it-*|ita)
+            target_lang="it"
+            ;;
+        nl-*)
+            target_lang="nl"
+            ;;
+        pl-*|pol)
+            target_lang="pl"
+            ;;
+        ru-*|rus)
+            target_lang="ru"
+            ;;
+        uk-*|ukr)
+            target_lang="uk"
+            ;;
+        ja-*|jpn)
+            target_lang="ja"
+            ;;
+        ko-*|kor)
+            target_lang="ko"
+            ;;
+        zh-Hans-*|zh-CN)
+            target_lang="zh-CN"
+            ;;
+        zh-Hant-*|zh-TW)
+            target_lang="zh-TW"
+            ;;
+    esac
+
+    # ------------------------------------------------------------------
+    # PORTUGUÊS
+    #
+    # Quando existirem dois argumentos:
+    #   t "Texto em português" "English text"
+    #
+    # não existe motivo para chamar a internet.
+    # ------------------------------------------------------------------
+    if [[ "$target_lang" == "pt" && -n "${2:-}" ]]; then
+        printf '%b' "$text_pt"
         return 0
     fi
 
-    if [[ "$SYS_LANG" == "en" ]]; then
-        printf '%b' "$en_text"
+    # ------------------------------------------------------------------
+    # INGLÊS
+    # ------------------------------------------------------------------
+    if [[ "$target_lang" == "en" ]]; then
+        printf '%b' "$text_en"
         return 0
     fi
 
-    source_text="$en_text"
-    cache_key="${SYS_LANG}|${source_text}"
+    # ------------------------------------------------------------------
+    # Para os demais idiomas, a origem é SEMPRE a versão inglesa.
+    # ------------------------------------------------------------------
+    source_text="$text_en"
+
+    # ------------------------------------------------------------------
+    # CACHE
+    # ------------------------------------------------------------------
+    cache_key="${target_lang}|${source_text}"
 
     if [[ -n "${_TRANS_CACHE["$cache_key"]+x}" ]]; then
         printf '%b' "${_TRANS_CACHE["$cache_key"]}"
         return 0
     fi
 
+    # ------------------------------------------------------------------
+    # Lê a chave opcional do Google Cloud Translation.
+    #
+    # /etc/koha-easy-install/translation.conf
+    #
+    # GOOGLE_TRANSLATE_API_KEY="..."
+    # ------------------------------------------------------------------
     if [ -n "${GOOGLE_TRANSLATE_API_KEY:-}" ]; then
         api_key="$GOOGLE_TRANSLATE_API_KEY"
+
     elif [ -f "$TRANSLATION_CONFIG" ]; then
-        api_key="$(sed -n 's/^[[:space:]]*GOOGLE_TRANSLATE_API_KEY[[:space:]]*=[[:space:]]*//p' "$TRANSLATION_CONFIG" 2>/dev/null | head -n 1 | sed 's/^"//; s/"$//; s/^'\''//; s/'\''$//')"
+        api_key="$(
+            sed -n \
+                's/^[[:space:]]*GOOGLE_TRANSLATE_API_KEY[[:space:]]*=[[:space:]]*//p' \
+                "$TRANSLATION_CONFIG" 2>/dev/null |
+            head -n 1 |
+            sed 's/^"//; s/"$//; s/^'\''//; s/'\''$//'
+        )"
     fi
 
-    if ! command -v curl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
-        case "$SYS_LANG" in
-            pt)
-                case "$source_text" in
-                    "Root privileges required.") printf 'Privilégios de administrador (root) são necessários.'; return 0 ;;
-                    "Please enter your administrative password:") printf 'Por favor, digite a sua senha de administrador:'; return 0 ;;
-                    "Installing panel dependencies... Please wait.") printf 'Instalando dependências do painel... Por favor, aguarde.'; return 0 ;;
-                    "APT is locked. Aborting.") printf 'O APT está bloqueado. Abortando.'; return 0 ;;
-                    "Could not install dependencies. Aborting.") printf 'Não foi possível instalar as dependências. Abortando.'; return 0 ;;
-                    "ERROR: run as root: su -c 'bash config.sh'") printf 'ERRO: execute como root: sudo ou su'; return 0 ;;
-                esac
-                ;;
-            esac
+    # ------------------------------------------------------------------
+    # DEPENDÊNCIAS
+    # ------------------------------------------------------------------
+    if ! command -v curl >/dev/null 2>&1 || \
+       ! command -v python3 >/dev/null 2>&1; then
+
         printf '%b' "$source_text"
         return 0
     fi
 
+    # ==================================================================
+    # MÉTODO 1 - GOOGLE CLOUD TRANSLATION API OFICIAL
+    # ==================================================================
     if [ -n "$api_key" ]; then
-        json_payload="$(python3 - "$source_text" "$SYS_LANG" <<'PY'
+
+        json_payload="$(
+            python3 - "$source_text" "$target_lang" <<'PY'
 import json
 import sys
+
 text = sys.argv[1]
 target = sys.argv[2]
+
 print(json.dumps({
     "q": text,
     "source": "en",
@@ -243,11 +187,26 @@ print(json.dumps({
 PY
         )"
 
-        response="$(printf '%s' "$json_payload" | curl -4fsS --retry 2 --retry-delay 1 --connect-timeout 5 --max-time 15 -H "Content-Type: application/json; charset=utf-8" -H "x-goog-api-key: ${api_key}" -d @- "https://translation.googleapis.com/language/translate/v2" 2>/dev/null)"
+        response="$(
+            printf '%s' "$json_payload" |
+            curl -4fsS \
+                --retry 2 \
+                --retry-delay 1 \
+                --connect-timeout 5 \
+                --max-time 15 \
+                -H "Content-Type: application/json; charset=utf-8" \
+                -H "X-goog-api-key: ${api_key}" \
+                -d @- \
+                "https://translation.googleapis.com/language/translate/v2" \
+                2>/dev/null
+        )"
 
-        translated="$(printf '%s' "$response" | python3 -c '
+        translated="$(
+            printf '%s' "$response" |
+            python3 -c '
 import json
 import sys
+
 try:
     data = json.load(sys.stdin)
     value = data["data"]["translations"][0]["translatedText"]
@@ -255,7 +214,8 @@ try:
         print(value)
 except Exception:
     pass
-' 2>/dev/null)"
+' 2>/dev/null
+        )"
 
         if [ -n "$translated" ]; then
             _TRANS_CACHE["$cache_key"]="$translated"
@@ -264,27 +224,40 @@ except Exception:
         fi
     fi
 
-    translated="$(curl -4fsS \
-        --retry 2 \
-        --retry-delay 1 \
-        -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36" \
-        --connect-timeout 5 \
-        --max-time 15 \
-        "https://translate.googleapis.com/translate_a/single" \
-        --data-urlencode "client=gtx" \
-        --data-urlencode "sl=en" \
-        --data-urlencode "tl=$SYS_LANG" \
-        --data-urlencode "dt=t" \
-        --data-urlencode "q=$source_text" 2>/dev/null |
+    # ==================================================================
+    # MÉTODO 2 - FALLBACK GOOGLE TRANSLATE
+    # ==================================================================
+    translated="$(
+        curl -4fsS \
+            --retry 2 \
+            --retry-delay 1 \
+            -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36" \
+            --connect-timeout 5 \
+            --max-time 15 \
+            "https://translate.googleapis.com/translate_a/single" \
+            --data-urlencode "client=gtx" \
+            --data-urlencode "sl=en" \
+            --data-urlencode "tl=$target_lang" \
+            --data-urlencode "dt=t" \
+            --data-urlencode "q=$source_text" 2>/dev/null |
         python3 -c '
 import json
 import sys
+
 try:
     data = json.load(sys.stdin)
-    print("".join(part[0] for part in data[0] if part and part[0]))
+    result = []
+
+    for part in data[0]:
+        if part and len(part) > 0 and part[0]:
+            result.append(part[0])
+
+    print("".join(result))
+
 except Exception:
     pass
-' 2>/dev/null)"
+' 2>/dev/null
+    )"
 
     if [ -n "$translated" ]; then
         _TRANS_CACHE["$cache_key"]="$translated"
@@ -292,6 +265,9 @@ except Exception:
         return 0
     fi
 
+    # ------------------------------------------------------------------
+    # FALLBACK FINAL
+    # ------------------------------------------------------------------
     printf '%b' "$source_text"
     return 0
 }
@@ -2289,84 +2265,135 @@ function_test_backup() {
 # ======================================================================
 function_install_languages() {
     require_database || return 0
-    
+
     export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
-    
+
     local sudo_cmd=""
     [ "$EUID" -ne 0 ] && sudo_cmd="sudo"
 
     local created_mock=0
+
     if ! command -v koha-foreach >/dev/null 2>&1; then
-        echo -e '#!/bin/bash\nexit 0' | $sudo_cmd tee /usr/local/bin/koha-foreach >/dev/null 2>&1 || {
-            echo -e '#!/bin/bash\nexit 0' > /tmp/koha-foreach
-            chmod +x /tmp/koha-foreach
-            export PATH="/tmp:$PATH"
-        }
+        echo -e '#!/bin/bash\nexit 0' |
+            $sudo_cmd tee /usr/local/bin/koha-foreach >/dev/null 2>&1 || {
+                echo -e '#!/bin/bash\nexit 0' > /tmp/koha-foreach
+                chmod +x /tmp/koha-foreach
+                export PATH="/tmp:$PATH"
+            }
+
         created_mock=1
     fi
 
-    local items=() pair code name choice
+    # ==================================================================
+    # LANGUAGE SELECTOR
+    # ==================================================================
+    local items=()
+    local pairs=()
+    local pair
+    local code
+    local name
+    local choice
+
     IFS=';' read -ra pairs <<< "$LANGUAGES_KOHA"
+
     for pair in "${pairs[@]}"; do
-        code="${pair%%:*}"; name="${pair#*:}"
+        code="${pair%%:*}"
+        name="${pair#*:}"
         items+=("$code" "$name")
     done
 
-    choice=$(whiptail --title "$(t "Koha & Panel Languages")" \
-        --cancel-button "$(t "Back")" \
-        --menu "$(t "Choose the language to install in Koha and apply to this Panel:")" 22 72 13 "${items[@]}" 3>&1 1>&2 2>&3) || {
-        [ "$created_mock" -eq 1 ] && rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
-        return 0
-    }
-    [ -z "$choice" ] && {
-        [ "$created_mock" -eq 1 ] && rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
+    choice=$(
+        whiptail \
+            --title "$(t "Koha & Panel Languages")" \
+            --cancel-button "$(t "Back")" \
+            --menu "$(t "Choose the language to install in Koha and apply to this Panel:")" \
+            22 72 13 \
+            "${items[@]}" \
+            3>&1 1>&2 2>&3
+    ) || {
+        [ "$created_mock" -eq 1 ] &&
+            rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
         return 0
     }
 
+    [ -z "$choice" ] && {
+        [ "$created_mock" -eq 1 ] &&
+            rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
+        return 0
+    }
+
+    # ==================================================================
+    # APPLY PANEL LANGUAGE IMMEDIATELY
+    # ==================================================================
     export KOHA_PANEL_LANG_FULL="$choice"
-    
+
     case "$choice" in
-        pt-BR|pt-PT)         export KOHA_PANEL_LANG="pt" ;;
-        es-ES)               export KOHA_PANEL_LANG="es" ;;
-        en-GB|en-NZ)         export KOHA_PANEL_LANG="en" ;;
-        fr-FR|fr-CA)         export KOHA_PANEL_LANG="fr" ;;
-        de-DE|de-CH)         export KOHA_PANEL_LANG="de" ;;
-        nl-NL|nl-BE)         export KOHA_PANEL_LANG="nl" ;;
-        zh-Hans-CN)          export KOHA_PANEL_LANG="zh-CN" ;;
-        zh-Hant-TW)          export KOHA_PANEL_LANG="zh-TW" ;;
-        ja-Jpan-JP)          export KOHA_PANEL_LANG="ja" ;;
-        ko-Kore-KP)          export KOHA_PANEL_LANG="ko" ;;
-        ru-RU)               export KOHA_PANEL_LANG="ru" ;;
-        uk-UA)               export KOHA_PANEL_LANG="uk" ;;
-        ar-Arab)             export KOHA_PANEL_LANG="ar" ;;
-        he-Hebr)             export KOHA_PANEL_LANG="he" ;;
-        fa-Arab)             export KOHA_PANEL_LANG="fa" ;;
-        nb-NO|nn-NO)         export KOHA_PANEL_LANG="no" ;;
-        sv-SE)               export KOHA_PANEL_LANG="sv" ;;
-        cs-CZ)               export KOHA_PANEL_LANG="cs" ;;
-        pl-PL)               export KOHA_PANEL_LANG="pl" ;;
-        it-IT)               export KOHA_PANEL_LANG="it" ;;
-        tr-TR)               export KOHA_PANEL_LANG="tr" ;;
-        *)                   export KOHA_PANEL_LANG="${choice%%-*}" ;;
+        pt-BR|pt-PT)  KOHA_PANEL_LANG="pt" ;;
+        es-ES)        KOHA_PANEL_LANG="es" ;;
+        en-GB|en-NZ)  KOHA_PANEL_LANG="en" ;;
+        fr-FR|fr-CA)  KOHA_PANEL_LANG="fr" ;;
+        de-DE|de-CH)  KOHA_PANEL_LANG="de" ;;
+        nl-NL|nl-BE)  KOHA_PANEL_LANG="nl" ;;
+        zh-Hans-CN)   KOHA_PANEL_LANG="zh-CN" ;;
+        zh-Hant-TW)   KOHA_PANEL_LANG="zh-TW" ;;
+        ja-Jpan-JP)   KOHA_PANEL_LANG="ja" ;;
+        ko-Kore-KP)   KOHA_PANEL_LANG="ko" ;;
+        ru-RU)        KOHA_PANEL_LANG="ru" ;;
+        uk-UA)        KOHA_PANEL_LANG="uk" ;;
+        ar-Arab)      KOHA_PANEL_LANG="ar" ;;
+        he-Hebr)      KOHA_PANEL_LANG="he" ;;
+        fa-Arab)      KOHA_PANEL_LANG="fa" ;;
+        nb-NO|nn-NO)  KOHA_PANEL_LANG="no" ;;
+        sv-SE)        KOHA_PANEL_LANG="sv" ;;
+        cs-CZ)        KOHA_PANEL_LANG="cs" ;;
+        pl-PL)        KOHA_PANEL_LANG="pl" ;;
+        it-IT)        KOHA_PANEL_LANG="it" ;;
+        tr-TR)        KOHA_PANEL_LANG="tr" ;;
+        *)            KOHA_PANEL_LANG="${choice%%-*}" ;;
     esac
 
+    export KOHA_PANEL_LANG
+
+    # ==================================================================
+    # PERSIST PANEL LANGUAGE
+    # ==================================================================
     if [ "${EUID:-$(id -u)}" -eq 0 ]; then
         mkdir -p "$CONFIG_DIR" 2>/dev/null
-        sed -i '/^KOHA_PANEL_LANG/d' "$TRANSLATION_CONFIG" 2>/dev/null || true
-        echo "KOHA_PANEL_LANG_FULL=\"$KOHA_PANEL_LANG_FULL\"" >> "$TRANSLATION_CONFIG"
-        echo "KOHA_PANEL_LANG=\"$KOHA_PANEL_LANG\"" >> "$TRANSLATION_CONFIG"
+
+        touch "$TRANSLATION_CONFIG"
+
+        sed -i \
+            -e '/^[[:space:]]*KOHA_PANEL_LANG_FULL=/d' \
+            -e '/^[[:space:]]*KOHA_PANEL_LANG=/d' \
+            "$TRANSLATION_CONFIG" 2>/dev/null || true
+
+        {
+            printf 'KOHA_PANEL_LANG_FULL="%s"\n' "$KOHA_PANEL_LANG_FULL"
+            printf 'KOHA_PANEL_LANG="%s"\n' "$KOHA_PANEL_LANG"
+        } >> "$TRANSLATION_CONFIG"
     fi
 
-    # Zera a memória de tradução atual e re-detecta o novo idioma
+    # ==================================================================
+    # RESET TRANSLATION CACHE
+    # ==================================================================
     _TRANS_CACHE=()
-    detect_system_language
 
+    # IMPORTANT:
+    # Use the manual selection as the source of truth.
+    SYS_LANG="$KOHA_PANEL_LANG"
+    export SYS_LANG
+
+    # ==================================================================
+    # PREPARE OS LOCALE
+    # ==================================================================
     clear
+
     display_explanation "Preparing OS for language: $choice"
-    
+
     local loc_prefix
+
     loc_prefix=$(echo "$choice" | cut -d'-' -f1,2 | sed 's/-/_/')
-    
+
     case "$choice" in
         zh-Hans-CN) loc_prefix="zh_CN" ;;
         zh-Hant-TW) loc_prefix="zh_TW" ;;
@@ -2389,53 +2416,152 @@ function_install_languages() {
     esac
 
     if [ -f /etc/locale.gen ]; then
-        $sudo_cmd sed -i -E "s/^#[[:space:]]*(${loc_prefix}[^[:space:]]*\.UTF-8[[:space:]]+UTF-8)/\1/i" /etc/locale.gen 2>/dev/null || true
+        $sudo_cmd sed -i -E \
+            "s/^#[[:space:]]*(${loc_prefix}[^[:space:]]*\.UTF-8[[:space:]]+UTF-8)/\1/i" \
+            /etc/locale.gen 2>/dev/null || true
+
         $sudo_cmd locale-gen >/dev/null 2>&1 || true
     fi
 
+    # ==================================================================
+    # INSTALL / UPDATE KOHA TRANSLATION
+    # ==================================================================
     local koha_trans_cmd
-    koha_trans_cmd="$(command -v koha-translate || echo "/usr/sbin/koha-translate")"
 
-    if $sudo_cmd "$koha_trans_cmd" --list 2>/dev/null | grep -q "$choice"; then
-        display_explanation "Language already installed. Updating templates..."
-        $sudo_cmd "$koha_trans_cmd" --update "$choice" > /tmp/koha_lang.log 2>&1
-    else
-        display_explanation "Compiling and installing language in Koha (may take a while): $choice"
-        $sudo_cmd "$koha_trans_cmd" --install "$choice" > /tmp/koha_lang.log 2>&1
-        $sudo_cmd "$koha_trans_cmd" --update "$choice" >> /tmp/koha_lang.log 2>&1 || true
+    koha_trans_cmd="$(
+        command -v koha-translate ||
+        echo "/usr/sbin/koha-translate"
+    )"
+
+    if [ ! -x "$koha_trans_cmd" ]; then
+        msg_error "" \
+            "$(t "Koha translation utility was not found.\n\nExpected:\n/usr/sbin/koha-translate")" \
+            11 74
+
+        [ "$created_mock" -eq 1 ] &&
+            rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
+
+        return 0
     fi
 
-    if $sudo_cmd "$koha_trans_cmd" --list 2>/dev/null | grep -q "$choice"; then
+    if $sudo_cmd "$koha_trans_cmd" --list 2>/dev/null |
+        grep -Fq "$choice"; then
+
+        display_explanation "Language already installed. Updating templates..."
+
+        $sudo_cmd "$koha_trans_cmd" --update "$choice" \
+            > /tmp/koha_lang.log 2>&1
+
+    else
+        display_explanation \
+            "Compiling and installing language in Koha (may take a while): $choice"
+
+        $sudo_cmd "$koha_trans_cmd" --install "$choice" \
+            > /tmp/koha_lang.log 2>&1
+
+        $sudo_cmd "$koha_trans_cmd" --update "$choice" \
+            >> /tmp/koha_lang.log 2>&1 || true
+    fi
+
+    # ==================================================================
+    # VERIFY KOHA LANGUAGE
+    # ==================================================================
+    if $sudo_cmd "$koha_trans_cmd" --list 2>/dev/null |
+        grep -Fq "$choice"; then
+
         $sudo_cmd systemctl restart memcached >/dev/null 2>&1 || true
         $sudo_cmd /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
-        
-        if prompt_yes_no "$(t "Enable language")" "$(t "Package processed.\n\nEnable it right away in the preferences (OPAC and Staff)?")" 10 70; then
-            
+
+        # ==============================================================
+        # ENABLE LANGUAGE IN KOHA
+        # ==============================================================
+        if prompt_yes_no \
+            "$(t "Enable language")" \
+            "$(t "Package processed.\n\nEnable it right away in the preferences (OPAC and Staff)?")" \
+            10 70; then
+
             local mysql_runner="mysql"
-            if ! mysql -e "SELECT 1" >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1; then
+
+            if ! mysql -e "SELECT 1" >/dev/null 2>&1 &&
+               command -v sudo >/dev/null 2>&1; then
                 mysql_runner="sudo mysql"
             fi
 
-            for pref in "language" "opaclanguages"; do
-                $mysql_runner -e "INSERT INTO ${DB_NAME}.systempreferences (variable, value, type) VALUES ('$pref', '${choice}', 'Free') ON DUPLICATE KEY UPDATE value = IF(value = '' OR value IS NULL, '${choice}', IF(value LIKE '%${choice}%', value, CONCAT(value, ',', '${choice}')));" >/dev/null 2>&1
-            done
+            # ----------------------------------------------------------
+            # OPAC
+            # ----------------------------------------------------------
+            $mysql_runner -e "
+                INSERT INTO ${DB_NAME}.systempreferences
+                    (variable, value, type)
+                VALUES
+                    ('OPACLanguages', '${choice}', 'Free')
+                ON DUPLICATE KEY UPDATE
+                    value = CASE
+                        WHEN value = '' OR value IS NULL
+                            THEN '${choice}'
+                        WHEN FIND_IN_SET('${choice}', value)
+                            THEN value
+                        ELSE CONCAT(value, ',', '${choice}')
+                    END;
+            " >/dev/null 2>&1 || true
 
-            $mysql_runner -e "INSERT INTO ${DB_NAME}.systempreferences (variable, value, type) VALUES ('StaffLanguage', '${choice}', 'Free') ON DUPLICATE KEY UPDATE value = '${choice}';" >/dev/null 2>&1 || true
+            # ----------------------------------------------------------
+            # STAFF INTERFACE - Koha 24.11+
+            # ----------------------------------------------------------
+            $mysql_runner -e "
+                INSERT INTO ${DB_NAME}.systempreferences
+                    (variable, value, type)
+                VALUES
+                    ('StaffInterfaceLanguages', '${choice}', 'Free')
+                ON DUPLICATE KEY UPDATE
+                    value = '${choice}';
+            " >/dev/null 2>&1 || true
 
-            $mysql_runner -e "DELETE FROM ${DB_NAME}.sessions;" >/dev/null 2>&1 || true
-            
-            $sudo_cmd systemctl restart memcached >/dev/null 2>&1 || true
-            $sudo_cmd /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
-            $sudo_cmd systemctl reload apache2 >/dev/null 2>&1 || true
+            # ----------------------------------------------------------
+            # Compatibilidade com versões antigas do Koha
+            # ----------------------------------------------------------
+            $mysql_runner -e "
+                UPDATE ${DB_NAME}.systempreferences
+                SET value='${choice}'
+                WHERE variable='language';
+            " >/dev/null 2>&1 || true
+
+            # ----------------------------------------------------------
+            # Limpa sessões para que o novo idioma seja reconhecido
+            # ----------------------------------------------------------
+            $mysql_runner -e \
+                "DELETE FROM ${DB_NAME}.sessions;" \
+                >/dev/null 2>&1 || true
+
+            $sudo_cmd systemctl restart memcached \
+                >/dev/null 2>&1 || true
+
+            $sudo_cmd /usr/sbin/koha-plack --restart "$INSTANCE" \
+                >/dev/null 2>&1 || true
+
+            $sudo_cmd systemctl reload apache2 \
+                >/dev/null 2>&1 || true
         fi
-        msg_ok "$(t "Language '$choice' enabled successfully.\nFine tuning in: Administration > Preferences > I18N/L10N.")" 10 74
+
+        msg_ok \
+            "$(t "Language '$choice' enabled successfully.\nFine tuning in: Administration > Preferences > I18N/L10N.")" \
+            10 74
+
     else
         local err_msg
-        err_msg=$(tail -n 12 /tmp/koha_lang.log 2>/dev/null || echo "$(t "Empty log.")")
-        msg_error "" "$(t "Failed to process language '$choice'.\n\nKoha native error details:\n$err_msg")" 18 80
+
+        err_msg=$(
+            tail -n 12 /tmp/koha_lang.log 2>/dev/null ||
+            echo "$(t "Empty log.")"
+        )
+
+        msg_error "" \
+            "$(t "Failed to process language '$choice'.\n\nKoha native error details:\n$err_msg")" \
+            18 80
     fi
 
-    [ "$created_mock" -eq 1 ] && rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
+    [ "$created_mock" -eq 1 ] &&
+        rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
 }
 
 # ======================================================================
