@@ -2346,22 +2346,15 @@ function_install_languages() {
                 chmod +x /tmp/koha-foreach
                 export PATH="/tmp:$PATH"
             }
-
         created_mock=1
     fi
 
     # ==================================================================
     # LANGUAGE SELECTOR
     # ==================================================================
-    local items=()
-    local pairs=()
-    local pair
-    local code
-    local name
-    local choice
-
+    local items=() pairs=() pair code name choice
     IFS=';' read -ra pairs <<< "$LANGUAGES_KOHA"
-
+    
     for pair in "${pairs[@]}"; do
         code="${pair%%:*}"
         name="${pair#*:}"
@@ -2377,14 +2370,12 @@ function_install_languages() {
             "${items[@]}" \
             3>&1 1>&2 2>&3
     ) || {
-        [ "$created_mock" -eq 1 ] &&
-            rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
+        [ "$created_mock" -eq 1 ] && rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
         return 0
     }
 
     [ -z "$choice" ] && {
-        [ "$created_mock" -eq 1 ] &&
-            rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
+        [ "$created_mock" -eq 1 ] && rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
         return 0
     }
 
@@ -2392,33 +2383,7 @@ function_install_languages() {
     # APPLY SELECTED LANGUAGE TO THE PANEL
     # ==================================================================
     export KOHA_PANEL_LANG_FULL="$choice"
-
-    case "$choice" in
-        pt-BR|pt-PT)  KOHA_PANEL_LANG="pt" ;;
-        es-ES)        KOHA_PANEL_LANG="es" ;;
-        en-GB|en-NZ)  KOHA_PANEL_LANG="en" ;;
-        fr-FR|fr-CA)  KOHA_PANEL_LANG="fr" ;;
-        de-DE|de-CH)  KOHA_PANEL_LANG="de" ;;
-        nl-NL|nl-BE)  KOHA_PANEL_LANG="nl" ;;
-        zh-Hans-CN)   KOHA_PANEL_LANG="zh-CN" ;;
-        zh-Hant-TW)   KOHA_PANEL_LANG="zh-TW" ;;
-        ja-Jpan-JP)   KOHA_PANEL_LANG="ja" ;;
-        ko-Kore-KP)   KOHA_PANEL_LANG="ko" ;;
-        ru-RU)        KOHA_PANEL_LANG="ru" ;;
-        uk-UA)        KOHA_PANEL_LANG="uk" ;;
-        ar-Arab)      KOHA_PANEL_LANG="ar" ;;
-        he-Hebr)      KOHA_PANEL_LANG="he" ;;
-        fa-Arab)      KOHA_PANEL_LANG="fa" ;;
-        nb-NO|nn-NO)  KOHA_PANEL_LANG="no" ;;
-        sv-SE)        KOHA_PANEL_LANG="sv" ;;
-        cs-CZ)        KOHA_PANEL_LANG="cs" ;;
-        pl-PL)        KOHA_PANEL_LANG="pl" ;;
-        it-IT)        KOHA_PANEL_LANG="it" ;;
-        tr-TR)        KOHA_PANEL_LANG="tr" ;;
-        *)            KOHA_PANEL_LANG="${choice%%-*}" ;;
-    esac
-
-    export KOHA_PANEL_LANG
+    export KOHA_PANEL_LANG="$(normalize_panel_language "$choice")"
 
     # ==================================================================
     # PERSIST PANEL LANGUAGE
@@ -2442,19 +2407,15 @@ function_install_languages() {
     # APPLY NEW LANGUAGE IMMEDIATELY
     # ==================================================================
     _TRANS_CACHE=()
-
-    SYS_LANG="$(normalize_panel_language "$KOHA_PANEL_LANG")"
-    export SYS_LANG
+    export SYS_LANG="$KOHA_PANEL_LANG"
 
     # ==================================================================
     # PREPARE SYSTEM LOCALE
     # ==================================================================
     clear
-
     display_explanation "Preparing OS for language: $choice"
 
     local loc_prefix
-
     loc_prefix=$(echo "$choice" | cut -d'-' -f1,2 | sed 's/-/_/')
 
     case "$choice" in
@@ -2490,141 +2451,75 @@ function_install_languages() {
     # KOHA TRANSLATION PACKAGE
     # ==================================================================
     local koha_trans_cmd
-
-    koha_trans_cmd="$(
-        command -v koha-translate ||
-        echo "/usr/sbin/koha-translate"
-    )"
+    koha_trans_cmd="$(command -v koha-translate || echo "/usr/sbin/koha-translate")"
 
     if [ ! -x "$koha_trans_cmd" ]; then
-        msg_error "" \
-            "$(t "Koha translation utility was not found.\n\nExpected:\n/usr/sbin/koha-translate")" \
-            11 74
-
-        [ "$created_mock" -eq 1 ] &&
-            rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
-
+        msg_error "" "$(t "Koha translation utility was not found.\n\nExpected:\n/usr/sbin/koha-translate")" 11 74
+        [ "$created_mock" -eq 1 ] && rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
         return 0
     fi
 
-    if $sudo_cmd "$koha_trans_cmd" --list 2>/dev/null |
-        grep -Fq "$choice"; then
-
+    if $sudo_cmd "$koha_trans_cmd" --list 2>/dev/null | grep -Fq "$choice"; then
         display_explanation "Language already installed. Updating templates..."
-
-        $sudo_cmd "$koha_trans_cmd" --update "$choice" \
-            > /tmp/koha_lang.log 2>&1
-
+        $sudo_cmd "$koha_trans_cmd" --update "$choice" > /tmp/koha_lang.log 2>&1
     else
-        display_explanation \
-            "Compiling and installing language in Koha (may take a while): $choice"
-
-        $sudo_cmd "$koha_trans_cmd" --install "$choice" \
-            > /tmp/koha_lang.log 2>&1
-
-        $sudo_cmd "$koha_trans_cmd" --update "$choice" \
-            >> /tmp/koha_lang.log 2>&1 || true
+        display_explanation "Compiling and installing language in Koha (may take a while): $choice"
+        $sudo_cmd "$koha_trans_cmd" --install "$choice" > /tmp/koha_lang.log 2>&1
+        $sudo_cmd "$koha_trans_cmd" --update "$choice" >> /tmp/koha_lang.log 2>&1 || true
     fi
 
     # ==================================================================
     # VERIFY KOHA LANGUAGE
     # ==================================================================
-    if $sudo_cmd "$koha_trans_cmd" --list 2>/dev/null |
-        grep -Fq "$choice"; then
-
+    if $sudo_cmd "$koha_trans_cmd" --list 2>/dev/null | grep -Fq "$choice"; then
         $sudo_cmd systemctl restart memcached >/dev/null 2>&1 || true
         $sudo_cmd /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
 
         # ==============================================================
         # ENABLE LANGUAGE IN KOHA
         # ==============================================================
-        if prompt_yes_no \
-            "$(t "Enable language")" \
-            "$(t "Package processed.\n\nEnable it right away in the preferences (OPAC and Staff)?")" \
-            10 70; then
-
+        if prompt_yes_no "$(t "Enable language")" "$(t "Package processed.\n\nEnable it right away in the preferences (OPAC and Staff)?")" 10 70; then
             local mysql_runner="mysql"
 
-            if ! mysql -e "SELECT 1" >/dev/null 2>&1 &&
-               command -v sudo >/dev/null 2>&1; then
+            if ! mysql -e "SELECT 1" >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1; then
                 mysql_runner="sudo mysql"
             fi
 
-            # ----------------------------------------------------------
-            # OPAC
-            # ----------------------------------------------------------
             $mysql_runner -e "
-                INSERT INTO ${DB_NAME}.systempreferences
-                    (variable, value, type)
-                VALUES
-                    ('OPACLanguages', '${choice}', 'Free')
-                ON DUPLICATE KEY UPDATE
-                    value = CASE
-                        WHEN value = '' OR value IS NULL
-                            THEN '${choice}'
-                        WHEN FIND_IN_SET('${choice}', value)
-                            THEN value
-                        ELSE CONCAT(value, ',', '${choice}')
-                    END;
+                INSERT INTO ${DB_NAME}.systempreferences (variable, value, type)
+                VALUES ('OPACLanguages', '${choice}', 'Free')
+                ON DUPLICATE KEY UPDATE value = CASE
+                    WHEN value = '' OR value IS NULL THEN '${choice}'
+                    WHEN FIND_IN_SET('${choice}', value) THEN value
+                    ELSE CONCAT(value, ',', '${choice}')
+                END;
+
+                INSERT INTO ${DB_NAME}.systempreferences (variable, value, type)
+                VALUES ('StaffInterfaceLanguages', '${choice}', 'Free')
+                ON DUPLICATE KEY UPDATE value = CASE
+                    WHEN value = '' OR value IS NULL THEN '${choice}'
+                    WHEN FIND_IN_SET('${choice}', value) THEN value
+                    ELSE CONCAT(value, ',', '${choice}')
+                END;
+
+                UPDATE ${DB_NAME}.systempreferences SET value='${choice}' WHERE variable='language';
+                DELETE FROM ${DB_NAME}.sessions;
             " >/dev/null 2>&1 || true
 
-            # ----------------------------------------------------------
-            # STAFF INTERFACE
-            # ----------------------------------------------------------
-            $mysql_runner -e "
-                INSERT INTO ${DB_NAME}.systempreferences
-                    (variable, value, type)
-                VALUES
-                    ('StaffInterfaceLanguages', '${choice}', 'Free')
-                ON DUPLICATE KEY UPDATE
-                    value = '${choice}';
-            " >/dev/null 2>&1 || true
-
-            # ----------------------------------------------------------
-            # Legacy compatibility
-            # ----------------------------------------------------------
-            $mysql_runner -e "
-                UPDATE ${DB_NAME}.systempreferences
-                SET value='${choice}'
-                WHERE variable='language';
-            " >/dev/null 2>&1 || true
-
-            # ----------------------------------------------------------
-            # Clear sessions
-            # ----------------------------------------------------------
-            $mysql_runner -e \
-                "DELETE FROM ${DB_NAME}.sessions;" \
-                >/dev/null 2>&1 || true
-
-            $sudo_cmd systemctl restart memcached \
-                >/dev/null 2>&1 || true
-
-            $sudo_cmd /usr/sbin/koha-plack --restart "$INSTANCE" \
-                >/dev/null 2>&1 || true
-
-            $sudo_cmd systemctl reload apache2 \
-                >/dev/null 2>&1 || true
+            $sudo_cmd systemctl restart memcached >/dev/null 2>&1 || true
+            $sudo_cmd /usr/sbin/koha-plack --restart "$INSTANCE" >/dev/null 2>&1 || true
+            $sudo_cmd systemctl reload apache2 >/dev/null 2>&1 || true
         fi
 
-        msg_ok \
-            "$(t "Language '$choice' enabled successfully.\nFine tuning in: Administration > Preferences > I18N/L10N.")" \
-            10 74
+        msg_ok "$(t "Language '$choice' enabled successfully.\nFine tuning in: Administration > Preferences > I18N/L10N.")" 10 74
 
     else
         local err_msg
-
-        err_msg=$(
-            tail -n 12 /tmp/koha_lang.log 2>/dev/null ||
-            echo "$(t "Empty log.")"
-        )
-
-        msg_error "" \
-            "$(t "Failed to process language '$choice'.\n\nKoha native error details:\n$err_msg")" \
-            18 80
+        err_msg=$(tail -n 12 /tmp/koha_lang.log 2>/dev/null || echo "$(t "Empty log.")")
+        msg_error "" "$(t "Failed to process language '$choice'.\n\nKoha native error details:\n$err_msg")" 18 80
     fi
 
-    [ "$created_mock" -eq 1 ] &&
-        rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
+    [ "$created_mock" -eq 1 ] && rm -f /tmp/koha-foreach /usr/local/bin/koha-foreach 2>/dev/null
 }
 
 # ======================================================================
