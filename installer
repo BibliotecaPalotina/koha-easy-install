@@ -75,10 +75,38 @@ declare -A _TRANS_CACHE
 
 t() {
     local text="$1"
+    
     if [[ "$SYS_LANG" == "en" ]]; then
         printf '%b' "$text"
         return
     fi
+
+    if ! command -v curl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
+        if [[ "$SYS_LANG" == "pt" ]]; then
+            case "$text" in
+                "Root privileges required.") printf 'Privilégios de administrador (root) são necessários.'; return ;;
+                "Please enter your administrative password:") printf 'Por favor, digite a sua senha de administrador:'; return ;;
+                "ERROR: run as root: su - -c 'bash config.sh'") printf "ERRO: execute como root: sudo config.sh"; return ;;
+                "Installing panel dependencies... Please wait.") printf "Instalando dependências do painel... Por favor, aguarde."; return ;;
+                "APT is locked. Aborting.") printf "O instalador de pacotes (APT) está bloqueado. Abortando."; return ;;
+                "Could not install dependencies. Aborting.") printf "Não foi possível instalar as dependências. Abortando."; return ;;
+            esac
+        elif [[ "$SYS_LANG" == "es" ]]; then
+            case "$text" in
+                "Root privileges required.") printf 'Se requieren privilegios de administrador (root).'; return ;;
+                "Please enter your administrative password:") printf 'Por favor, introduzca su contraseña de administrador:'; return ;;
+                "ERROR: run as root: su - -c 'bash config.sh'") printf "ERROR: ejecute como root: sudo config.sh"; return ;;
+                "Installing panel dependencies... Please wait.") printf "Instalando dependencias del panel... Por favor, espere."; return ;;
+                "APT is locked. Aborting.") printf "El gestor de paquetes (APT) está bloqueado. Abortando."; return ;;
+                "Could not install dependencies. Aborting.") printf "No se pudieron instalar las dependencias. Abortando."; return ;;
+            esac
+        fi
+        
+        # Se for um idioma que não está no dicionário offline e não tem curl, mostra original
+        printf '%b' "$text"
+        return
+    fi
+
     if [[ -n "${_TRANS_CACHE["$text"]+x}" ]]; then
         printf '%b' "${_TRANS_CACHE["$text"]}"
         return
