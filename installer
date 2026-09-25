@@ -96,66 +96,77 @@ if [ -f "$CACHE_FILE" ]; then
     done < "$CACHE_FILE"
 fi
 
+# Dicionário embutido para o Menu Principal (evita bloqueio de 16 requests do Google)
+declare -A _MAIN_MENU_PT=(
+    ["Control Dashboard"]="Painel de Controle"
+    ["Exit"]="Sair"
+    ["Select an option:"]="Selecione uma opção:"
+    ["⚙  Install Koha server"]="⚙  Instalar servidor Koha"
+    ["ℹ  View first-access credentials"]="ℹ  Ver credenciais do 1º acesso"
+    ["↻  Restore database"]="↻  Restaurar banco de dados"
+    ["▣  Backup center"]="▣  Central de backups"
+    ["⌁  Search engine & indexing"]="⌁  Motor de busca e indexação"
+    ["☁  Publish system to internet"]="☁  Publicar sistema na internet"
+    ["◈  Diagnostics & maintenance center"]="◈  Centro de diagnóstico e manutenção"
+    ["⚠  Security center"]="⚠  Central de segurança"
+    ["⚙  Koha settings & parameters"]="⚙  Configurações e parâmetros do Koha"
+    ["▤  General tools"]="▤  Ferramentas gerais"
+    ["⏱  Schedules & cron tasks"]="⏱  Agendamentos e rotinas"
+    ["✦  Koha languages"]="✦  Idiomas do Koha"
+    ["⟳  Update center"]="⟳  Central de atualizações"
+    ["ℹ  About the program & support"]="ℹ  Sobre o programa e suporte"
+    ["↻  Reboot server"]="↻  Reiniciar servidor"
+    ["✖  Exit"]="✖  Sair"
+)
+
 t() {
     local source_text="${1:-}"
     [ -z "$source_text" ] && return 0
     
     local target_lang="$(normalize_panel_language "${KOHA_PANEL_LANG:-en}")"
 
-    # Se for inglês, devolve direto sem usar a rede
     if [ "$target_lang" = "en" ]; then
         printf '%b' "$source_text"
         return 0
     fi
 
-    # 2. Busca na memória (que acabou de vir do HD)
+    # Tradução instantânea para o menu principal
+    if [ "$target_lang" = "pt" ]; then
+        if [[ -n "${_MAIN_MENU_PT["$source_text"]+x}" ]]; then
+            printf '%b' "${_MAIN_MENU_PT["$source_text"]}"
+            return 0
+        fi
+    fi
+
+    # Busca na memória (que acabou de vir do HD)
     if [[ -n "${_TRANS_CACHE["$source_text"]+x}" ]]; then
         printf '%b' "${_TRANS_CACHE["$source_text"]}"
         return 0
     fi
 
-    # Se não houver curl ou python instalados, devolve em inglês por segurança
     if ! command -v curl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
         printf '%b' "$source_text"
         return 0
     fi
 
+    # Pausa de segurança para não ser bloqueado pelo Google (Rate Limit)
+    sleep 0.2
+
     local translated=""
-    local api_key=""
     
-    if [ -n "${GOOGLE_TRANSLATE_API_KEY:-}" ]; then
-        api_key="$GOOGLE_TRANSLATE_API_KEY"
-    elif [ -f "$TRANSLATION_CONFIG" ]; then
-        api_key="$(sed -n 's/^[[:space:]]*GOOGLE_TRANSLATE_API_KEY[[:space:]]*=[[:space:]]*//p' "$TRANSLATION_CONFIG" 2>/dev/null | head -n 1 | tr -d '\"'\' )"
-    fi
-
-    # METODO 1 - GOOGLE CLOUD API (Se configurado)
-    if [ -n "$api_key" ]; then
-        local json_payload response
-        json_payload="$(python3 - "$source_text" "$target_lang" <<'PY'
-import json, sys
-print(json.dumps({"q": sys.argv[1], "source": "en", "target": sys.argv[2], "format": "text"}, ensure_ascii=False))
-PY
-)"
-        response="$(printf '%s' "$json_payload" | curl -4fsS --retry 1 --connect-timeout 3 --max-time 10 -H "Content-Type: application/json; charset=utf-8" -H "X-goog-api-key: ${api_key}" -d @- "https://translation.googleapis.com/language/translate/v2" 2>/dev/null)"
-        translated="$(printf '%s' "$response" | python3 -c 'import json, sys; d=json.load(sys.stdin); print(d["data"]["translations"][0]["translatedText"])' 2>/dev/null)"
-    fi
-
-    # METODO 2 - GOOGLE TRANSLATE GRATUITO (Fallback rápido com -G corrigido)
-    if [ -z "$translated" ]; then
-        translated="$(
-            curl -4fsS -G \
-                --retry 1 \
-                --connect-timeout 3 \
-                --max-time 10 \
-                -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-                "https://translate.googleapis.com/translate_a/single" \
-                --data-urlencode "client=gtx" \
-                --data-urlencode "sl=en" \
-                --data-urlencode "tl=$target_lang" \
-                --data-urlencode "dt=t" \
-                --data-urlencode "q=$source_text" 2>/dev/null |
-            python3 -c '
+    translated="$(
+        curl -4fsS -G \
+            --retry 1 \
+            --connect-timeout 3 \
+            --max-time 10 \
+            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
+            "https://translate.googleapis.com/translate_a/single" \
+            --data-urlencode "client=gtx" \
+            --data-urlencode "sl=en" \
+            --data-urlencode "tl=$target_lang" \
+            --data-urlencode "dt=t" \
+            --data-urlencode "q=$source_text" 2>/dev/null |
+        python3 -c '
 import json, sys
 try:
     data = json.load(sys.stdin)
@@ -163,10 +174,8 @@ try:
 except:
     pass
 ' 2>/dev/null
-        )"
-    fi
+    )"
 
-    # 4. Se a tradução foi feita via rede, grava no HD para nunca mais precisar de internet
     if [ -n "$translated" ] && [ "$translated" != "$source_text" ]; then
         _TRANS_CACHE["$source_text"]="$translated"
         local current_cache="${CONFIG_DIR}/translations_${target_lang}.cache"
@@ -175,11 +184,9 @@ except:
         return 0
     fi
 
-    # Se tudo falhar
     printf '%b' "$source_text"
     return 0
 }
-
 # ======================================================================
 # 3. SHIELDED APT
 # ======================================================================
