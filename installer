@@ -362,8 +362,20 @@ apt_install() {
 # ======================================================================
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
     echo ""
-    # ... (seu código que pede senha continua aqui) ...
-    echo "$(t "ERROR: run as root: su - -c 'bash config.sh'")"
+    echo "+---------------------------------------------------------------+"
+    printf "| %-61.61s |\n" "$(t "Root privileges required.")"
+    printf "| %-61.61s |\n" "$(t "Please enter your administrative password:")"
+    echo "+---------------------------------------------------------------+"
+    echo ""
+    if [ -f "$0" ]; then
+        if command -v sudo >/dev/null 2>&1 && (sudo -n true 2>/dev/null || sudo -v 2>/dev/null); then
+            exec sudo -E env "KOHA_PANEL_LANG=${KOHA_PANEL_LANG}" "KOHA_PANEL_LANG_FULL=${KOHA_PANEL_LANG_FULL}" bash "$0" "$@"
+        elif command -v su >/dev/null 2>&1; then
+            printf -v _args_quoted '%q ' "$@"
+            exec su root -c "env KOHA_PANEL_LANG='${KOHA_PANEL_LANG}' KOHA_PANEL_LANG_FULL='${KOHA_PANEL_LANG_FULL}' bash '$0' $_args_quoted"
+        fi
+    fi
+    echo "$(t "ERROR: run as root: su -c 'bash config.sh'")"
     exit 1
 fi
 
@@ -371,7 +383,6 @@ REAL_USER="${SUDO_USER:-${USER:-root}}"
 REAL_HOME="$(getent passwd "$REAL_USER" 2>/dev/null | cut -d: -f6)"
 [ -z "$REAL_HOME" ] && REAL_HOME="/root"
 [ -d "$REAL_HOME" ] || REAL_HOME="/root"
-
 # ======================================================================
 # 4.5. PANEL LOCK (ROOT ONLY)
 # ======================================================================
