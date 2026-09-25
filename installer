@@ -4025,6 +4025,31 @@ EOF
 }
 
 # ======================================================================
+# PRIMEIRA EXECUÇÃO: IDIOMA OBRIGATÓRIO SE NÃO ESTIVER CONFIGURADO
+# ======================================================================
+if [ ! -f "$TRANSLATION_CONFIG" ]; then
+    _init_choice=$(whiptail --title "Language / Idioma" \
+        --nocancel \
+        --menu "Select your language / Selecione o idioma:" 16 70 5 \
+        "pt-BR" "Português (Brasil)" \
+        "es-ES" "Español" \
+        "en-GB" "English (UK)" \
+        "pt-PT" "Português (Portugal)" \
+        "fr-FR" "Français" \
+        3>&1 1>&2 2>&3)
+
+    if [ -n "$_init_choice" ]; then
+        KOHA_PANEL_LANG_FULL="$_init_choice"
+        KOHA_PANEL_LANG="$(normalize_panel_language "$_init_choice")"
+        export KOHA_PANEL_LANG_FULL KOHA_PANEL_LANG
+        SYS_LANG="$KOHA_PANEL_LANG"
+        export SYS_LANG
+        mkdir -p "$CONFIG_DIR" 2>/dev/null
+        printf 'KOHA_PANEL_LANG_FULL="%s"\nKOHA_PANEL_LANG="%s"\n' "$KOHA_PANEL_LANG_FULL" "$KOHA_PANEL_LANG" > "$TRANSLATION_CONFIG"
+    fi
+fi
+
+# ======================================================================
 # MAIN MENU (16 OPTIONS)
 # ======================================================================
 export NEWT_COLORS='
