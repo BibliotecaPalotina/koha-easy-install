@@ -32,112 +32,6 @@ UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-insta
 
 
 # ======================================================================
-# 2. LANGUAGE / IDIOMA
-# ======================================================================
-
-LANGUAGES_KOHA="en-GB:English (UK);en-NZ:English (NZ);pt-BR:Português (Brasil);pt-PT:Português (Portugal);es-ES:Español;sq-AL:Albanian;am-Ethi:Amharic;ar-Arab:Arabic;hy-Armn:Armenian;az-AZ:Azerbaijani;be-BY:Belarusian;bn-IN:Bengali;bg-Cyrl:Bulgarian;my:Burmese;ca-ES:Català;cs-CZ:Čeština;zh-Hans-CN:Chinese (Simplified);zh-Hant-TW:Chinese (Traditional);da-DK:Dansk;de-DE:Deutsch;de-CH:Deutsch (Schweiz);et:Estonian;eo:Esperanto;eu:Euskara;fr-FR:Français;fr-CA:Français (Canada);gl:Galego;ka:Georgian;el-GR:Greek;he-Hebr:Hebrew;hi:Hindi;hr-HR:Hrvatski;hu-HU:Magyar;ia:Interlingua;ga:Irish;is-IS:Íslenska;it-IT:Italiano;ja-Jpan-JP:Japanese;kn-Knda:Kannada;kk-KZ:Kazakh;km-KH:Khmer;rw-RW:Kinyarwanda;ko-Kore-KP:Korean;ku-Arab:Kurdish;lo-Laoo:Lao;lv:Latvian;ms-MY:Malay;ml:Malayalam;mi-NZ:Maori;mr:Marathi;ne-NE:Nepali;nl-NL:Nederlands;nl-BE:Nederlands (BE);nb-NO:Norsk Bokmål;nn-NO:Norsk Nynorsk;fa-Arab:Persian;pl-PL:Polski;ro-RO:Română;ru-RU:Russian;gd:Scottish Gaelic;sr-Cyrl:Serbian;si:Sinhala;sk-SK:Slovenčina;sl-SI:Slovenščina;fi-FI:Suomi;sv-SE:Svenska;sw-KE:Swahili;tl-PH:Tagalog;ta:Tamil;te:Telugu;th-TH:Thai;tr-TR:Türkçe;uk-UA:Ukrainian;ur-Arab:Urdu;uz:Uzbek;vi-VN:Vietnamese;cy-GB:Welsh"
-
-TRANSLATION_CONFIG="/etc/koha-easy-install/translation.conf"
-CONFIG_DIR="/etc/koha-easy-install"
-
-# ----------------------------------------------------------------------
-# Load saved language configuration
-# ----------------------------------------------------------------------
-if [ -f "$TRANSLATION_CONFIG" ]; then
-    # shellcheck disable=SC1090
-    source "$TRANSLATION_CONFIG" 2>/dev/null || true
-fi
-
-# ----------------------------------------------------------------------
-# Defaults
-# ----------------------------------------------------------------------
-[ -z "${KOHA_PANEL_LANG_FULL:-}" ] && KOHA_PANEL_LANG_FULL="en-GB"
-[ -z "${KOHA_PANEL_LANG:-}" ] && KOHA_PANEL_LANG="en"
-
-export KOHA_PANEL_LANG_FULL
-export KOHA_PANEL_LANG
-
-# ----------------------------------------------------------------------
-# Normalize language code used internally by the panel
-# ----------------------------------------------------------------------
-normalize_panel_language() {
-    case "$1" in
-        pt-*|pt_BR|pt_PT|por)
-            printf '%s' "pt"
-            ;;
-        en-*|en_GB|en_NZ|eng)
-            printf '%s' "en"
-            ;;
-        es-*|es_ES|spa)
-            printf '%s' "es"
-            ;;
-        fr-*|fra|fre)
-            printf '%s' "fr"
-            ;;
-        de-*|de_DE|de_CH|deu|ger)
-            printf '%s' "de"
-            ;;
-        it-*|ita)
-            printf '%s' "it"
-            ;;
-        nl-*|nld|dut)
-            printf '%s' "nl"
-            ;;
-        pl-*|pol)
-            printf '%s' "pl"
-            ;;
-        ru-*|rus)
-            printf '%s' "ru"
-            ;;
-        uk-*|ukr)
-            printf '%s' "uk"
-            ;;
-        ja-*|jpn)
-            printf '%s' "ja"
-            ;;
-        ko-*|kor)
-            printf '%s' "ko"
-            ;;
-        zh-Hans-*|zh-CN)
-            printf '%s' "zh-CN"
-            ;;
-        zh-Hant-*|zh-TW)
-            printf '%s' "zh-TW"
-            ;;
-        ar-*|ara)
-            printf '%s' "ar"
-            ;;
-        he-*|heb)
-            printf '%s' "he"
-            ;;
-        fa-*|fas|per)
-            printf '%s' "fa"
-            ;;
-        tr-*|tur)
-            printf '%s' "tr"
-            ;;
-        cs-*|ces|cze)
-            printf '%s' "cs"
-            ;;
-        sv-*|swe)
-            printf '%s' "sv"
-            ;;
-        nb-*|nn-*|no|nor)
-            printf '%s' "no"
-            ;;
-        ca-*|cat)
-            printf '%s' "ca"
-            ;;
-        *)
-            printf '%s' "${1%%-*}"
-            ;;
-    esac
-}
-
-SYS_LANG="$(normalize_panel_language "$KOHA_PANEL_LANG")"
-export SYS_LANG
-
-# ======================================================================
 # TRANSLATION ENGINE / MOTOR DE TRADUÇÃO DO PAINEL
 # ======================================================================
 
@@ -274,7 +168,7 @@ except Exception:
         fi
     fi
 
-# ==================================================================
+    # ==================================================================
     # METHOD 2 - GOOGLE TRANSLATE FALLBACK
     # ==================================================================
     translated="$(
@@ -309,6 +203,18 @@ except Exception:
 ' 2>/dev/null
     )"
 
+    if [ -n "$translated" ]; then
+        _TRANS_CACHE["$cache_key"]="$translated"
+        printf '%b' "$translated"
+        return 0
+    fi
+
+    # ------------------------------------------------------------------
+    # Final fallback
+    # ------------------------------------------------------------------
+    printf '%b' "$source_text"
+    return 0
+}
 # ======================================================================
 # 3. SHIELDED APT
 # ======================================================================
