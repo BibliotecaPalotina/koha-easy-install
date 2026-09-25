@@ -38,6 +38,7 @@ LANGUAGES_KOHA="en-GB:English (UK);en-NZ:English (NZ);pt-BR:Português (Brasil);
 
 TRANSLATION_CONFIG="/etc/koha-easy-install/translation.conf"
 CONFIG_DIR="/etc/koha-easy-install"
+LANG_REPO_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/lang"
 
 if [ -f "$TRANSLATION_CONFIG" ]; then
     source "$TRANSLATION_CONFIG" 2>/dev/null || true
@@ -88,36 +89,20 @@ declare -A _TRANS_CACHE
 mkdir -p "$CONFIG_DIR" 2>/dev/null
 CACHE_FILE="${CONFIG_DIR}/translations_${SYS_LANG:-en}.cache"
 
-# 1. Carrega o cache persistente (HD) para a memória em alta velocidade
+# Baixa o arquivo do GitHub se não for inglês e não existir no HD
+if [ ! -f "$CACHE_FILE" ] && [ "${SYS_LANG:-en}" != "en" ]; then
+    if command -v curl >/dev/null 2>&1; then
+        curl -4fsS --connect-timeout 3 --max-time 10 "${LANG_REPO_URL}/${SYS_LANG}.cache" -o "$CACHE_FILE" 2>/dev/null || true
+    fi
+fi
+
+# Carrega o cache persistente (HD) para a memória
 if [ -f "$CACHE_FILE" ]; then
     while IFS='=' read -r k_b64 v_b64; do
         [ -n "$k_b64" ] && [ -n "$v_b64" ] && \
             _TRANS_CACHE["$(printf '%s' "$k_b64" | base64 -d 2>/dev/null)"]="$(printf '%s' "$v_b64" | base64 -d 2>/dev/null)"
     done < "$CACHE_FILE"
 fi
-
-# Dicionário embutido para o Menu Principal (evita bloqueio de 16 requests do Google)
-declare -A _MAIN_MENU_PT=(
-    ["Control Dashboard"]="Painel de Controle"
-    ["Exit"]="Sair"
-    ["Select an option:"]="Selecione uma opção:"
-    ["⚙  Install Koha server"]="⚙  Instalar servidor Koha"
-    ["ℹ  View first-access credentials"]="ℹ  Ver credenciais do 1º acesso"
-    ["↻  Restore database"]="↻  Restaurar banco de dados"
-    ["▣  Backup center"]="▣  Central de backups"
-    ["⌁  Search engine & indexing"]="⌁  Motor de busca e indexação"
-    ["☁  Publish system to internet"]="☁  Publicar sistema na internet"
-    ["◈  Diagnostics & maintenance center"]="◈  Centro de diagnóstico e manutenção"
-    ["⚠  Security center"]="⚠  Central de segurança"
-    ["⚙  Koha settings & parameters"]="⚙  Configurações e parâmetros do Koha"
-    ["▤  General tools"]="▤  Ferramentas gerais"
-    ["⏱  Schedules & cron tasks"]="⏱  Agendamentos e rotinas"
-    ["✦  Koha languages"]="✦  Idiomas do Koha"
-    ["⟳  Update center"]="⟳  Central de atualizações"
-    ["ℹ  About the program & support"]="ℹ  Sobre o programa e suporte"
-    ["↻  Reboot server"]="↻  Reiniciar servidor"
-    ["✖  Exit"]="✖  Sair"
-)
 
 t() {
     local source_text="${1:-}"
@@ -130,63 +115,17 @@ t() {
         return 0
     fi
 
-    # Tradução instantânea para o menu principal
-    if [ "$target_lang" = "pt" ]; then
-        if [[ -n "${_MAIN_MENU_PT["$source_text"]+x}" ]]; then
-            printf '%b' "${_MAIN_MENU_PT["$source_text"]}"
-            return 0
-        fi
-    fi
-
-    # Busca na memória (que acabou de vir do HD)
+    # Busca na memória
     if [[ -n "${_TRANS_CACHE["$source_text"]+x}" ]]; then
         printf '%b' "${_TRANS_CACHE["$source_text"]}"
         return 0
     fi
 
-    if ! command -v curl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
-        printf '%b' "$source_text"
-        return 0
-    fi
-
-    # Pausa de segurança para não ser bloqueado pelo Google (Rate Limit)
-    sleep 0.2
-
-    local translated=""
-    
-    translated="$(
-        curl -4fsS -G \
-            --retry 1 \
-            --connect-timeout 3 \
-            --max-time 10 \
-            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-            "https://translate.googleapis.com/translate_a/single" \
-            --data-urlencode "client=gtx" \
-            --data-urlencode "sl=en" \
-            --data-urlencode "tl=$target_lang" \
-            --data-urlencode "dt=t" \
-            --data-urlencode "q=$source_text" 2>/dev/null |
-        python3 -c '
-import json, sys
-try:
-    data = json.load(sys.stdin)
-    print("".join([p[0] for p in data[0] if p[0]]))
-except:
-    pass
-' 2>/dev/null
-    )"
-
-    if [ -n "$translated" ] && [ "$translated" != "$source_text" ]; then
-        _TRANS_CACHE["$source_text"]="$translated"
-        local current_cache="${CONFIG_DIR}/translations_${target_lang}.cache"
-        printf '%s=%s\n' "$(printf '%s' "$source_text" | base64 -w0 2>/dev/null)" "$(printf '%s' "$translated" | base64 -w0 2>/dev/null)" >> "$current_cache"
-        printf '%b' "$translated"
-        return 0
-    fi
-
+    # Fallback silencioso: se não achar a tradução, exibe o original em inglês
     printf '%b' "$source_text"
     return 0
 }
+
 # ======================================================================
 # 3. SHIELDED APT
 # ======================================================================
@@ -2235,10 +2174,23 @@ function_install_languages() {
     fi
 
     # ==================================================================
-    # APPLY NEW LANGUAGE IMMEDIATELY
+    # APPLY NEW LANGUAGE IMMEDIATELY & DOWNLOAD DICTIONARY
     # ==================================================================
     _TRANS_CACHE=()
     export SYS_LANG="$KOHA_PANEL_LANG"
+    local new_cache="${CONFIG_DIR}/translations_${SYS_LANG}.cache"
+    
+    if [ "$SYS_LANG" != "en" ]; then
+        display_explanation "Downloading panel language pack ($SYS_LANG) from GitHub..."
+        curl -4fsS --connect-timeout 3 --max-time 10 "${LANG_REPO_URL}/${SYS_LANG}.cache" -o "$new_cache" 2>/dev/null || true
+        
+        if [ -f "$new_cache" ]; then
+            while IFS='=' read -r k_b64 v_b64; do
+                [ -n "$k_b64" ] && [ -n "$v_b64" ] && \
+                    _TRANS_CACHE["$(printf '%s' "$k_b64" | base64 -d 2>/dev/null)"]="$(printf '%s' "$v_b64" | base64 -d 2>/dev/null)"
+            done < "$new_cache"
+        fi
+    fi
 
     # ==================================================================
     # PREPARE SYSTEM LOCALE
@@ -3898,6 +3850,21 @@ if [ ! -f "$TRANSLATION_CONFIG" ]; then
         export SYS_LANG
         mkdir -p "$CONFIG_DIR" 2>/dev/null
         printf 'KOHA_PANEL_LANG_FULL="%s"\nKOHA_PANEL_LANG="%s"\n' "$KOHA_PANEL_LANG_FULL" "$KOHA_PANEL_LANG" > "$TRANSLATION_CONFIG"
+
+        # Oguejy ha oñemoinge ñe'ẽryru apytu'ũme (RAM) ypykuehápe
+        if [ "$SYS_LANG" != "en" ]; then
+            _new_init_cache="${CONFIG_DIR}/translations_${SYS_LANG}.cache"
+            if command -v curl >/dev/null 2>&1; then
+                curl -4fsS --connect-timeout 3 --max-time 10 "${LANG_REPO_URL}/${SYS_LANG}.cache" -o "$_new_init_cache" 2>/dev/null || true
+            fi
+            if [ -f "$_new_init_cache" ]; then
+                _TRANS_CACHE=()
+                while IFS='=' read -r k_b64 v_b64; do
+                    [ -n "$k_b64" ] && [ -n "$v_b64" ] && \
+                        _TRANS_CACHE["$(printf '%s' "$k_b64" | base64 -d 2>/dev/null)"]="$(printf '%s' "$v_b64" | base64 -d 2>/dev/null)"
+                done < "$_new_init_cache"
+            fi
+        fi
     fi
 fi
 
