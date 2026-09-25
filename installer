@@ -111,6 +111,10 @@ except Exception:
     fi
 }
 
+choose_timezone() {
+    whiptail --title "$(t "Timezone")" --inputbox "$(t "Confirm your timezone (e.g. America/Sao_Paulo):")" 10 60 "America/Sao_Paulo" 3>&1 1>&2 2>&3
+}
+
 # ======================================================================
 # 3. SHIELDED APT
 # ======================================================================
@@ -1435,7 +1439,7 @@ function_install_koha() {
     local tz
     tz=$(choose_timezone) && [ -n "$tz" ] && timedatectl set-timezone "$tz" >/dev/null 2>&1
 
-    wait_for_apt_locks || return 1
+    wait_for_apt_locks || { msg_error "" "$(t "APT is locked by another process or dpkg failed. Cannot continue.")"; return 1; }
 
     display_explanation "Configuring locales and UTF-8..."
     apt_update_indices || return 1
