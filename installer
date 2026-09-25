@@ -85,185 +85,101 @@ export SYS_LANG
 # ======================================================================
 
 declare -A _TRANS_CACHE
+mkdir -p "$CONFIG_DIR" 2>/dev/null
+CACHE_FILE="${CONFIG_DIR}/translations_${SYS_LANG:-en}.cache"
+
+# 1. Carrega o cache persistente (HD) para a memória em alta velocidade
+if [ -f "$CACHE_FILE" ]; then
+    while IFS='=' read -r k_b64 v_b64; do
+        [ -n "$k_b64" ] && [ -n "$v_b64" ] && \
+            _TRANS_CACHE["$(printf '%s' "$k_b64" | base64 -d 2>/dev/null)"]="$(printf '%s' "$v_b64" | base64 -d 2>/dev/null)"
+    done < "$CACHE_FILE"
+fi
 
 t() {
-    local text_pt="${1:-}"
-    local text_en="${2:-$1}"
-    local source_text=""
-    local translated=""
-    local cache_key=""
-    local api_key=""
-    local response=""
-    local json_payload=""
-    local target_lang="${KOHA_PANEL_LANG:-en}"
+    local source_text="${1:-}"
+    [ -z "$source_text" ] && return 0
+    
+    local target_lang="$(normalize_panel_language "${KOHA_PANEL_LANG:-en}")"
 
-    # ------------------------------------------------------------------
-    # Always use the manually selected panel language when available.
-    # ------------------------------------------------------------------
-    target_lang="$(normalize_panel_language "$target_lang")"
-
-    # ------------------------------------------------------------------
-    # Portuguese
-    # ------------------------------------------------------------------
-    if [[ "$target_lang" == "pt" && -n "${2:-}" ]]; then
-        printf '%b' "$text_pt"
-        return 0
-    fi
-
-    # ------------------------------------------------------------------
-    # English
-    # ------------------------------------------------------------------
-    if [[ "$target_lang" == "en" ]]; then
-        printf '%b' "$text_en"
-        return 0
-    fi
-
-    # ------------------------------------------------------------------
-    # All other languages:
-    # use English as the translation source.
-    # ------------------------------------------------------------------
-    source_text="$text_en"
-    cache_key="${target_lang}|${source_text}"
-
-    # ------------------------------------------------------------------
-    # Translation cache
-    # ------------------------------------------------------------------
-    if [[ -n "${_TRANS_CACHE["$cache_key"]+x}" ]]; then
-        printf '%b' "${_TRANS_CACHE["$cache_key"]}"
-        return 0
-    fi
-
-    # ------------------------------------------------------------------
-    # Read optional Google Cloud API key
-    # ------------------------------------------------------------------
-    if [ -n "${GOOGLE_TRANSLATE_API_KEY:-}" ]; then
-        api_key="$GOOGLE_TRANSLATE_API_KEY"
-
-    elif [ -f "$TRANSLATION_CONFIG" ]; then
-        api_key="$(
-            sed -n \
-                's/^[[:space:]]*GOOGLE_TRANSLATE_API_KEY[[:space:]]*=[[:space:]]*//p' \
-                "$TRANSLATION_CONFIG" 2>/dev/null |
-            head -n 1 |
-            sed 's/^"//; s/"$//; s/^'\''//; s/'\''$//'
-        )"
-    fi
-
-    # ------------------------------------------------------------------
-    # Required local dependencies
-    # ------------------------------------------------------------------
-    if ! command -v curl >/dev/null 2>&1 || \
-       ! command -v python3 >/dev/null 2>&1; then
+    # Se for inglês, devolve direto sem usar a rede
+    if [ "$target_lang" = "en" ]; then
         printf '%b' "$source_text"
         return 0
     fi
 
-    # ==================================================================
-    # METHOD 1 - GOOGLE CLOUD TRANSLATION API
-    # ==================================================================
-    if [ -n "$api_key" ]; then
-
-        json_payload="$(
-            python3 - "$source_text" "$target_lang" <<'PY'
-import json
-import sys
-
-text = sys.argv[1]
-target = sys.argv[2]
-
-print(json.dumps({
-    "q": text,
-    "source": "en",
-    "target": target,
-    "format": "text"
-}, ensure_ascii=False))
-PY
-        )"
-
-        response="$(
-            printf '%s' "$json_payload" |
-            curl -4fsS \
-                --retry 2 \
-                --retry-delay 1 \
-                --connect-timeout 5 \
-                --max-time 15 \
-                -H "Content-Type: application/json; charset=utf-8" \
-                -H "X-goog-api-key: ${api_key}" \
-                -d @- \
-                "https://translation.googleapis.com/language/translate/v2" \
-                2>/dev/null
-        )"
-
-        translated="$(
-            printf '%s' "$response" |
-            python3 -c '
-import json
-import sys
-
-try:
-    data = json.load(sys.stdin)
-    value = data["data"]["translations"][0]["translatedText"]
-    if value:
-        print(value)
-except Exception:
-    pass
-' 2>/dev/null
-        )"
-
-        if [ -n "$translated" ]; then
-            _TRANS_CACHE["$cache_key"]="$translated"
-            printf '%b' "$translated"
-            return 0
-        fi
+    # 2. Busca na memória (que acabou de vir do HD)
+    if [[ -n "${_TRANS_CACHE["$source_text"]+x}" ]]; then
+        printf '%b' "${_TRANS_CACHE["$source_text"]}"
+        return 0
     fi
 
-    # ==================================================================
-    # METHOD 2 - GOOGLE TRANSLATE FALLBACK
-    # ==================================================================
-    translated="$(
-        curl -4fsS -G \
-            --retry 2 \
-            --retry-delay 1 \
-            -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36" \
-            --connect-timeout 5 \
-            --max-time 15 \
-            "https://translate.googleapis.com/translate_a/single" \
-            --data-urlencode "client=gtx" \
-            --data-urlencode "sl=en" \
-            --data-urlencode "tl=$target_lang" \
-            --data-urlencode "dt=t" \
-            --data-urlencode "q=$source_text" 2>/dev/null |
-        python3 -c '
-import json
-import sys
+    # Se não houver curl ou python instalados, devolve em inglês por segurança
+    if ! command -v curl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
+        printf '%b' "$source_text"
+        return 0
+    fi
 
+    local translated=""
+    local api_key=""
+    
+    if [ -n "${GOOGLE_TRANSLATE_API_KEY:-}" ]; then
+        api_key="$GOOGLE_TRANSLATE_API_KEY"
+    elif [ -f "$TRANSLATION_CONFIG" ]; then
+        api_key="$(sed -n 's/^[[:space:]]*GOOGLE_TRANSLATE_API_KEY[[:space:]]*=[[:space:]]*//p' "$TRANSLATION_CONFIG" 2>/dev/null | head -n 1 | tr -d '\"'\' )"
+    fi
+
+    # METODO 1 - GOOGLE CLOUD API (Se configurado)
+    if [ -n "$api_key" ]; then
+        local json_payload response
+        json_payload="$(python3 - "$source_text" "$target_lang" <<'PY'
+import json, sys
+print(json.dumps({"q": sys.argv[1], "source": "en", "target": sys.argv[2], "format": "text"}, ensure_ascii=False))
+PY
+)"
+        response="$(printf '%s' "$json_payload" | curl -4fsS --retry 1 --connect-timeout 3 --max-time 10 -H "Content-Type: application/json; charset=utf-8" -H "X-goog-api-key: ${api_key}" -d @- "https://translation.googleapis.com/language/translate/v2" 2>/dev/null)"
+        translated="$(printf '%s' "$response" | python3 -c 'import json, sys; d=json.load(sys.stdin); print(d["data"]["translations"][0]["translatedText"])' 2>/dev/null)"
+    fi
+
+    # METODO 2 - GOOGLE TRANSLATE GRATUITO (Fallback rápido com -G corrigido)
+    if [ -z "$translated" ]; then
+        translated="$(
+            curl -4fsS -G \
+                --retry 1 \
+                --connect-timeout 3 \
+                --max-time 10 \
+                -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
+                "https://translate.googleapis.com/translate_a/single" \
+                --data-urlencode "client=gtx" \
+                --data-urlencode "sl=en" \
+                --data-urlencode "tl=$target_lang" \
+                --data-urlencode "dt=t" \
+                --data-urlencode "q=$source_text" 2>/dev/null |
+            python3 -c '
+import json, sys
 try:
     data = json.load(sys.stdin)
-    result = []
-
-    for part in data[0]:
-        if part and len(part) > 0 and part[0]:
-            result.append(part[0])
-
-    print("".join(result))
-
-except Exception:
+    print("".join([p[0] for p in data[0] if p[0]]))
+except:
     pass
 ' 2>/dev/null
-    )"
+        )"
+    fi
 
-    if [ -n "$translated" ]; then
-        _TRANS_CACHE["$cache_key"]="$translated"
+    # 4. Se a tradução foi feita via rede, grava no HD para nunca mais precisar de internet
+    if [ -n "$translated" ] && [ "$translated" != "$source_text" ]; then
+        _TRANS_CACHE["$source_text"]="$translated"
+        local current_cache="${CONFIG_DIR}/translations_${target_lang}.cache"
+        printf '%s=%s\n' "$(printf '%s' "$source_text" | base64 -w0 2>/dev/null)" "$(printf '%s' "$translated" | base64 -w0 2>/dev/null)" >> "$current_cache"
         printf '%b' "$translated"
         return 0
     fi
 
-    # ------------------------------------------------------------------
-    # Final fallback
-    # ------------------------------------------------------------------
+    # Se tudo falhar
     printf '%b' "$source_text"
     return 0
 }
+
 # ======================================================================
 # 3. SHIELDED APT
 # ======================================================================
