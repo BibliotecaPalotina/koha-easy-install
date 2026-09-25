@@ -39,35 +39,112 @@ PANEL_VERSION=" β-0.9.2"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
 # ======================================================================
-# 2. LANGUAGE (AUTOMATIC SYSTEM LOCALE DETECTION)
+# 2. LANGUAGE / IDIOMA
 # ======================================================================
+TRANSLATION_CONFIG="/etc/koha-easy-install/translation.conf"
+
+preserve_panel_language() {
+    local detected=""
+
+    if [ -n "${KOHA_PANEL_LANG:-}" ]; then
+        printf '%s' "$KOHA_PANEL_LANG"
+        return 0
+    fi
+
+    if [ -n "${LANGUAGE:-}" ]; then
+        detected="${LANGUAGE%%:*}"
+    fi
+
+    case "$detected" in
+        ""|C|C.*|POSIX|POSIX.*) detected="" ;;
+    esac
+
+    if [ -z "$detected" ] && [ -n "${LC_ALL:-}" ]; then
+        case "$LC_ALL" in
+            C|C.*|POSIX|POSIX.*) ;;
+            *) detected="$LC_ALL" ;;
+        esac
+    fi
+
+    if [ -z "$detected" ] && [ -n "${LC_MESSAGES:-}" ]; then
+        case "$LC_MESSAGES" in
+            C|C.*|POSIX|POSIX.*) ;;
+            *) detected="$LC_MESSAGES" ;;
+        esac
+    fi
+
+    if [ -z "$detected" ] && [ -n "${LANG:-}" ]; then
+        case "$LANG" in
+            C|C.*|POSIX|POSIX.*) ;;
+            *) detected="$LANG" ;;
+        esac
+    fi
+
+    [ -z "$detected" ] && detected="en_US.UTF-8"
+    printf '%s' "$detected"
+}
+
+if [ -z "${KOHA_PANEL_LANG:-}" ]; then
+    KOHA_PANEL_LANG="$(preserve_panel_language)"
+    export KOHA_PANEL_LANG
+fi
+
 detect_system_language() {
     local locale_value lang
 
-    locale_value="${LC_ALL:-}"
-    [ -z "$locale_value" ] && locale_value="${LC_MESSAGES:-}"
+    locale_value="${KOHA_PANEL_LANG:-}"
     [ -z "$locale_value" ] && locale_value="${LANGUAGE%%:*}"
-    [ -z "$locale_value" ] && locale_value="${LANG:-}"
-    [ -z "$locale_value" ] && locale_value="en_US"
 
-    case "$locale_value" in
-        C|POSIX|C.*|POSIX.*)
-            locale_value="${LANGUAGE%%:*}"
-            [ -z "$locale_value" ] && locale_value="${LANG:-en_US}"
+    if [ -z "$locale_value" ]; then
+        locale_value="${LC_ALL:-}"
+        case "$locale_value" in C|C.*|POSIX|POSIX.*) locale_value="" ;; esac
+    fi
+
+    if [ -z "$locale_value" ]; then
+        locale_value="${LC_MESSAGES:-}"
+        case "$locale_value" in C|C.*|POSIX|POSIX.*) locale_value="" ;; esac
+    fi
+
+    if [ -z "$locale_value" ]; then
+        locale_value="${LANG:-}"
+        case "$locale_value" in C|C.*|POSIX|POSIX.*) locale_value="" ;; esac
+    fi
+
+    [ -z "$locale_value" ] && locale_value="en_US.UTF-8"
+
+    KOHA_SYS_LANG="$(printf '%s' "${locale_value%%.*}" | tr '_' '-')"
+
+    lang="${locale_value%%.*}"
+    lang="${lang%%_*}"
+    lang="${lang%%-*}"
+    lang="$(printf '%s' "$lang" | tr '[:upper:]' '[:lower:]')"
+
+    case "$lang" in
+        pt|por) SYS_LANG="pt" ;;
+        en|eng) SYS_LANG="en" ;;
+        es|spa) SYS_LANG="es" ;;
+        fr|fra|fre) SYS_LANG="fr" ;;
+        de|deu|ger) SYS_LANG="de" ;;
+        it|ita) SYS_LANG="it" ;;
+        ca) SYS_LANG="ca" ;;
+        nl) SYS_LANG="nl" ;;
+        pl) SYS_LANG="pl" ;;
+        ru) SYS_LANG="ru" ;;
+        uk) SYS_LANG="uk" ;;
+        zh) SYS_LANG="zh-CN" ;;
+        ja) SYS_LANG="ja" ;;
+        ko) SYS_LANG="ko" ;;
+        ar) SYS_LANG="ar" ;;
+        *)
+            [ -z "$lang" ] && lang="en"
+            SYS_LANG="$lang"
             ;;
     esac
-
-    KOHA_SYS_LANG="$(echo "${locale_value%%.*}" | tr '_' '-')"
-    lang="${locale_value%%_*}"
-    lang="${lang%%-*}"
-    lang="${lang%%.*}"
-
-    [ -z "$lang" ] && lang="en"
-    SYS_LANG="$lang"
 }
 
 detect_system_language
-[ -z "$KOHA_SYS_LANG" ] && KOHA_SYS_LANG="en"
+
+[ -z "$KOHA_SYS_LANG" ] && KOHA_SYS_LANG="en-US"
 [ -z "$SYS_LANG" ] && SYS_LANG="en"
 
 declare -A _TRANS_CACHE
@@ -76,56 +153,92 @@ t() {
     local pt_text="$1"
     local en_text="${2:-$1}"
     local source_text
-    local translated
+    local translated=""
+    local cache_key
+    local api_key=""
+    local response=""
+    local json_payload=""
 
-    # Se for Português
-    if [[ "$SYS_LANG" == "pt" ]]; then
-        if [[ -n "${2:-}" ]]; then
-            printf '%b' "$pt_text"
-            return
-        else
-            source_text="$en_text"
-        fi
-
-    elif [[ "$SYS_LANG" == "en" ]]; then
-        printf '%b' "$en_text"
-        return
-    # Outros idiomas (Espanhol, Francês, etc)
-    else
-        source_text="$en_text"
+    if [[ "$SYS_LANG" == "pt" && -n "${2:-}" ]]; then
+        printf '%b' "$pt_text"
+        return 0
     fi
 
-    if [[ -n "${_TRANS_CACHE["${SYS_LANG}|${source_text}"]+x}" ]]; then
-        printf '%b' "${_TRANS_CACHE["${SYS_LANG}|${source_text}"]}"
-        return
+    if [[ "$SYS_LANG" == "en" ]]; then
+        printf '%b' "$en_text"
+        return 0
+    fi
+
+    source_text="$en_text"
+    cache_key="${SYS_LANG}|${source_text}"
+
+    if [[ -n "${_TRANS_CACHE["$cache_key"]+x}" ]]; then
+        printf '%b' "${_TRANS_CACHE["$cache_key"]}"
+        return 0
+    fi
+
+    if [ -n "${GOOGLE_TRANSLATE_API_KEY:-}" ]; then
+        api_key="$GOOGLE_TRANSLATE_API_KEY"
+    elif [ -f "$TRANSLATION_CONFIG" ]; then
+        api_key="$(sed -n 's/^[[:space:]]*GOOGLE_TRANSLATE_API_KEY[[:space:]]*=[[:space:]]*//p' "$TRANSLATION_CONFIG" 2>/dev/null | head -n 1 | sed 's/^"//; s/"$//; s/^'\''//; s/'\''$//')"
     fi
 
     if ! command -v curl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
-        if [[ "$SYS_LANG" == "pt" ]]; then
-            case "$source_text" in
-                "Root privileges required.") printf 'Privilégios de administrador (root) são necessários.'; return ;;
-                "Please enter your administrative password:") printf 'Por favor, digite a sua senha de administrador:'; return ;;
-                "ERROR: run as root: su - -c 'bash config.sh'") printf "ERRO: execute como root: sudo config.sh"; return ;;
-                "Installing panel dependencies... Please wait.") printf "Instalando dependências do painel... Por favor, aguarde."; return ;;
-                "APT is locked. Aborting.") printf "O instalador de pacotes (APT) está bloqueado. Abortando."; return ;;
-                "Could not install dependencies. Aborting.") printf "Não foi possível instalar as dependências. Abortando."; return ;;
-            esac
-        elif [[ "$SYS_LANG" == "es" ]]; then
-            case "$source_text" in
-                "Root privileges required.") printf 'Se requieren privilegios de administrador (root).'; return ;;
-                "Please enter your administrative password:") printf 'Por favor, introduzca su contraseña de administrador:'; return ;;
-                "ERROR: run as root: su - -c 'bash config.sh'") printf "ERROR: ejecute como root: sudo config.sh"; return ;;
-                "Installing panel dependencies... Please wait.") printf "Instalando dependencias del panel... Por favor, espere."; return ;;
-                "APT is locked. Aborting.") printf "El gestor de paquetes (APT) está bloqueado. Abortando."; return ;;
-                "Could not install dependencies. Aborting.") printf "No se pudieron instalar las dependencias. Abortando."; return ;;
-            esac
-        fi
+        case "$SYS_LANG" in
+            pt)
+                case "$source_text" in
+                    "Root privileges required.") printf 'Privilégios de administrador (root) são necessários.'; return 0 ;;
+                    "Please enter your administrative password:") printf 'Por favor, digite a sua senha de administrador:'; return 0 ;;
+                    "Installing panel dependencies... Please wait.") printf 'Instalando dependências do painel... Por favor, aguarde.'; return 0 ;;
+                    "APT is locked. Aborting.") printf 'O APT está bloqueado. Abortando.'; return 0 ;;
+                    "Could not install dependencies. Aborting.") printf 'Não foi possível instalar as dependências. Abortando.'; return 0 ;;
+                esac
+                ;;
+        esac
         printf '%b' "$source_text"
-        return
+        return 0
     fi
 
-    translated=$(curl -fsS -G \
-        -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+    if [ -n "$api_key" ]; then
+        json_payload="$(python3 - "$source_text" "$SYS_LANG" <<'PY'
+import json
+import sys
+text = sys.argv[1]
+target = sys.argv[2]
+print(json.dumps({
+    "q": text,
+    "source": "en",
+    "target": target,
+    "format": "text"
+}, ensure_ascii=False))
+PY
+        )"
+
+        response="$(printf '%s' "$json_payload" | curl -4fsS --retry 2 --retry-delay 1 --connect-timeout 5 --max-time 15 -H "Content-Type: application/json; charset=utf-8" -H "x-goog-api-key: ${api_key}" -d @- "https://translation.googleapis.com/language/translate/v2" 2>/dev/null)"
+
+        translated="$(printf '%s' "$response" | python3 -c '
+import json
+import sys
+try:
+    data = json.load(sys.stdin)
+    value = data["data"]["translations"][0]["translatedText"]
+    if value:
+        print(value)
+except Exception:
+    pass
+' 2>/dev/null)"
+
+        if [ -n "$translated" ]; then
+            _TRANS_CACHE["$cache_key"]="$translated"
+            printf '%b' "$translated"
+            return 0
+        fi
+    fi
+
+    translated="$(curl -4fsS \
+        --retry 2 \
+        --retry-delay 1 \
+        -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36" \
         --connect-timeout 5 \
         --max-time 15 \
         "https://translate.googleapis.com/translate_a/single" \
@@ -135,20 +248,23 @@ t() {
         --data-urlencode "dt=t" \
         --data-urlencode "q=$source_text" 2>/dev/null |
         python3 -c '
-import sys, json
+import json
+import sys
 try:
     data = json.load(sys.stdin)
     print("".join(part[0] for part in data[0] if part and part[0]))
 except Exception:
     pass
-' 2>/dev/null)
+' 2>/dev/null)"
 
     if [ -n "$translated" ]; then
-        _TRANS_CACHE["${SYS_LANG}|${source_text}"]="$translated"
+        _TRANS_CACHE["$cache_key"]="$translated"
         printf '%b' "$translated"
-    else
-        printf '%b' "$source_text"
+        return 0
     fi
+
+    printf '%b' "$source_text"
+    return 0
 }
 
 # ======================================================================
@@ -223,7 +339,7 @@ if [ "${EUID:-$(id -u)}" -ne 0 ]; then
     echo ""
     if [ -f "$0" ]; then
         if command -v sudo >/dev/null 2>&1 && (sudo -n true 2>/dev/null || sudo -v 2>/dev/null); then
-            exec sudo -E bash "$0" "$@"
+            exec sudo -E env "KOHA_PANEL_LANG=${KOHA_PANEL_LANG}" bash "$0" "$@"
         elif command -v su >/dev/null 2>&1; then
             printf -v _args_quoted '%q ' "$@"
             exec su - root -c "bash '$0' $_args_quoted"
