@@ -323,6 +323,66 @@ adjust_elasticsearch_heap() {
 get_ssh_ports() {
     ss -lntp 2>/dev/null | awk '/sshd/ {print $4}' | awk -F: '{print $NF}' | sort -u
 }
+
+# ======================================================================
+# GUI & HELPER FUNCTIONS
+# ======================================================================
+msg_info() { whiptail --title "$1" --msgbox "$2" ${3:-12} ${4:-74} 3>&1 1>&2 2>&3; }
+msg_ok() { whiptail --title "OK" --msgbox "$1" ${2:-10} ${3:-70} 3>&1 1>&2 2>&3; }
+msg_error() { whiptail --title "${1:-Error}" --msgbox "$2" ${3:-10} ${4:-74} 3>&1 1>&2 2>&3; }
+prompt_yes_no() { whiptail --title "$1" --yesno "$2" ${3:-12} ${4:-74} 3>&1 1>&2 2>&3; }
+display_explanation() { echo -e "\e[1;36m>>> $1\e[0m"; }
+pause_terminal() { read -r -p "$(t "Press [ENTER] to return to menu...")"; }
+
+get_database_password() {
+    local pass
+    if [ -f "/root/credenciais_koha.txt" ]; then
+        pass=$(grep -i '^ *Password *:' /root/credenciais_koha.txt | awk -F ':' '{print $2}' | xargs)
+    fi
+    if [ -z "$pass" ] && [ -f "$KOHA_CONF" ]; then
+        pass=$(xmllint --xpath 'string(/config/pass)' "$KOHA_CONF" 2>/dev/null || true)
+    fi
+    [ -z "$pass" ] && pass="koha_library"
+    printf '%s' "$pass"
+}
+
+is_koha_installed() { [ -f "$KOHA_CONF" ] && return 0 || return 1; }
+
+is_database_ready() {
+    mysql -Nse "SELECT 1 FROM information_schema.schemata WHERE schema_name='${DB_NAME}';" 2>/dev/null | grep -q 1 && return 0 || return 1
+}
+
+require_koha() {
+    if ! is_koha_installed; then msg_error "" "$(t "Koha is not installed yet.")" 8 60; return 1; fi
+    return 0
+}
+
+require_database() {
+    if ! is_database_ready; then msg_error "" "$(t "Database not found. Finish the installation first.")" 8 60; return 1; fi
+    return 0
+}
+
+adjust_elasticsearch_heap() {
+    local es_conf="/etc/elasticsearch/jvm.options"
+    [ -f "$es_conf" ] || return 1
+    local ram_gb
+    ram_gb=$(awk '/MemTotal:/ {printf "%.0f", $2/1024/1024}' /proc/meminfo)
+    local heap="1g"
+    if [ "$ram_gb" -ge 16 ]; then heap="4g"
+    elif [ "$ram_gb" -ge 8 ]; then heap="2g"
+    elif [ "$ram_gb" -ge 4 ]; then heap="1g"
+    else heap="512m"; fi
+    sed -i 's/^-Xms.*/-Xms'"$heap"'/' "$es_conf" 2>/dev/null
+    sed -i 's/^-Xmx.*/-Xmx'"$heap"'/' "$es_conf" 2>/dev/null
+    grep -q '^-Xms' "$es_conf" || echo "-Xms${heap}" >> "$es_conf"
+    grep -q '^-Xmx' "$es_conf" || echo "-Xmx${heap}" >> "$es_conf"
+    return 0
+}
+
+get_ssh_ports() {
+    ss -lntp 2>/dev/null | awk '/sshd/ {print $4}' | awk -F: '{print $NF}' | sort -u
+}
+
 # ======================================================================
 # FILE EXPLORER
 # ======================================================================
