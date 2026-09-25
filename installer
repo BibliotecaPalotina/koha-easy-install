@@ -418,8 +418,8 @@ done
 if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
     echo "$(t "Installing panel dependencies... Please wait.")"
     wait_for_apt_locks || { echo "$(t "APT is locked. Aborting.")"; exit 1; }
-    apt_update_indices >/dev/null 2>&1
-    apt_install "${MISSING_DEPS[@]}" >/dev/null 2>&1 || {
+    apt_update_indices
+    apt_install "${MISSING_DEPS[@]}" || {
         echo "$(t "Could not install dependencies. Aborting.")"
         exit 1
     }
