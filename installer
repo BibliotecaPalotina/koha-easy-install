@@ -30,10 +30,57 @@ trap on_exit EXIT INT TERM HUP
 PANEL_VERSION=" β-0.9.2"
 UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-install/refs/heads/main/installer"
 
+
 # ======================================================================
-# TRANSLATION ENGINE / MOTOR DE TRADUÇÃO DO PAINEL
+# 2. LANGUAGE / IDIOMA
 # ======================================================================
 
+LANGUAGES_KOHA="en-GB:English (UK);en-NZ:English (NZ);pt-BR:Português (Brasil);pt-PT:Português (Portugal);es-ES:Español;fr-FR:Français;de-DE:Deutsch;it-IT:Italiano;nl-NL:Nederlands;pl-PL:Polski;ru-RU:Русский"
+
+TRANSLATION_CONFIG="/etc/koha-easy-install/translation.conf"
+CONFIG_DIR="/etc/koha-easy-install"
+
+# ---------------------------------------------------------------
+# Load saved panel language
+# ---------------------------------------------------------------
+if [ -f "$TRANSLATION_CONFIG" ]; then
+    source "$TRANSLATION_CONFIG" 2>/dev/null || true
+fi
+
+# ---------------------------------------------------------------
+# Default language
+# ---------------------------------------------------------------
+if [ -z "${KOHA_PANEL_LANG_FULL:-}" ]; then
+    KOHA_PANEL_LANG_FULL="en-GB"
+fi
+
+if [ -z "${KOHA_PANEL_LANG:-}" ]; then
+    case "$KOHA_PANEL_LANG_FULL" in
+        pt-BR|pt-PT) KOHA_PANEL_LANG="pt" ;;
+        es-ES)       KOHA_PANEL_LANG="es" ;;
+        en-GB|en-NZ) KOHA_PANEL_LANG="en" ;;
+        fr-FR|fr-CA) KOHA_PANEL_LANG="fr" ;;
+        de-DE|de-CH) KOHA_PANEL_LANG="de" ;;
+        it-IT)       KOHA_PANEL_LANG="it" ;;
+        nl-NL|nl-BE) KOHA_PANEL_LANG="nl" ;;
+        pl-PL)       KOHA_PANEL_LANG="pl" ;;
+        ru-RU)       KOHA_PANEL_LANG="ru" ;;
+        *)            KOHA_PANEL_LANG="${KOHA_PANEL_LANG_FULL%%-*}" ;;
+    esac
+fi
+
+export KOHA_PANEL_LANG_FULL
+export KOHA_PANEL_LANG
+
+# ---------------------------------------------------------------
+# Internal language variable
+# ---------------------------------------------------------------
+SYS_LANG="$KOHA_PANEL_LANG"
+export SYS_LANG
+
+# ---------------------------------------------------------------
+# Translation cache
+# ---------------------------------------------------------------
 declare -A _TRANS_CACHE
 
 t() {
