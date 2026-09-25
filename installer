@@ -43,25 +43,24 @@ UPDATE_URL="https://raw.githubusercontent.com/BibliotecaPalotina/koha-easy-insta
 # ======================================================================
 detect_system_language() {
     local locale_value lang
-    locale_value="$(locale | grep '^LC_MESSAGES=' | cut -d= -f2 | tr -d '\"' 2>/dev/null)"
-    [ -z "$locale_value" ] && locale_value="${LC_ALL:-}"
+
+    locale_value="${LC_ALL:-}"
     [ -z "$locale_value" ] && locale_value="${LC_MESSAGES:-}"
-    [ -z "$locale_value" ] && locale_value="${LANG:-}"
     [ -z "$locale_value" ] && locale_value="${LANGUAGE%%:*}"
+    [ -z "$locale_value" ] && locale_value="${LANG:-}"
     [ -z "$locale_value" ] && locale_value="en_US"
 
     case "$locale_value" in
         C|POSIX|C.*|POSIX.*)
-            SYS_LANG="en"
-            KOHA_SYS_LANG="en"
-            return
+            locale_value="${LANGUAGE%%:*}"
+            [ -z "$locale_value" ] && locale_value="${LANG:-en_US}"
             ;;
     esac
 
     KOHA_SYS_LANG="$(echo "${locale_value%%.*}" | tr '_' '-')"
     lang="${locale_value%%_*}"
-    lang="${lang%%.*}"
     lang="${lang%%-*}"
+    lang="${lang%%.*}"
 
     [ -z "$lang" ] && lang="en"
     SYS_LANG="$lang"
@@ -74,16 +73,36 @@ detect_system_language
 declare -A _TRANS_CACHE
 
 t() {
-    local text="$1"
-    
-    if [[ "$SYS_LANG" == "en" ]]; then
-        printf '%b' "$text"
+    local pt_text="$1"
+    local en_text="${2:-$1}"
+    local source_text
+    local translated
+
+    # Se for Português
+    if [[ "$SYS_LANG" == "pt" ]]; then
+        if [[ -n "${2:-}" ]]; then
+            printf '%b' "$pt_text"
+            return
+        else
+            source_text="$en_text"
+        fi
+
+    elif [[ "$SYS_LANG" == "en" ]]; then
+        printf '%b' "$en_text"
+        return
+    # Outros idiomas (Espanhol, Francês, etc)
+    else
+        source_text="$en_text"
+    fi
+
+    if [[ -n "${_TRANS_CACHE["${SYS_LANG}|${source_text}"]+x}" ]]; then
+        printf '%b' "${_TRANS_CACHE["${SYS_LANG}|${source_text}"]}"
         return
     fi
 
     if ! command -v curl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
         if [[ "$SYS_LANG" == "pt" ]]; then
-            case "$text" in
+            case "$source_text" in
                 "Root privileges required.") printf 'Privilégios de administrador (root) são necessários.'; return ;;
                 "Please enter your administrative password:") printf 'Por favor, digite a sua senha de administrador:'; return ;;
                 "ERROR: run as root: su - -c 'bash config.sh'") printf "ERRO: execute como root: sudo config.sh"; return ;;
@@ -92,7 +111,7 @@ t() {
                 "Could not install dependencies. Aborting.") printf "Não foi possível instalar as dependências. Abortando."; return ;;
             esac
         elif [[ "$SYS_LANG" == "es" ]]; then
-            case "$text" in
+            case "$source_text" in
                 "Root privileges required.") printf 'Se requieren privilegios de administrador (root).'; return ;;
                 "Please enter your administrative password:") printf 'Por favor, introduzca su contraseña de administrador:'; return ;;
                 "ERROR: run as root: su - -c 'bash config.sh'") printf "ERROR: ejecute como root: sudo config.sh"; return ;;
@@ -101,18 +120,10 @@ t() {
                 "Could not install dependencies. Aborting.") printf "No se pudieron instalar las dependencias. Abortando."; return ;;
             esac
         fi
-        
-        # Se for um idioma que não está no dicionário offline e não tem curl, mostra original
-        printf '%b' "$text"
+        printf '%b' "$source_text"
         return
     fi
 
-    if [[ -n "${_TRANS_CACHE["$text"]+x}" ]]; then
-        printf '%b' "${_TRANS_CACHE["$text"]}"
-        return
-    fi
-
-    local translated
     translated=$(curl -fsS -G \
         -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
         --connect-timeout 5 \
@@ -122,7 +133,7 @@ t() {
         --data-urlencode "sl=en" \
         --data-urlencode "tl=$SYS_LANG" \
         --data-urlencode "dt=t" \
-        --data-urlencode "q=$text" 2>/dev/null |
+        --data-urlencode "q=$source_text" 2>/dev/null |
         python3 -c '
 import sys, json
 try:
@@ -133,40 +144,10 @@ except Exception:
 ' 2>/dev/null)
 
     if [ -n "$translated" ]; then
-        _TRANS_CACHE["$text"]="$translated"
+        _TRANS_CACHE["${SYS_LANG}|${source_text}"]="$translated"
         printf '%b' "$translated"
     else
-        printf '%b' "$text"
-    fi
-}
-
-choose_timezone() {
-    local current_tz selected_tz
-    
-    current_tz=$(timedatectl show -p Timezone --value 2>/dev/null)
-    case "$current_tz" in ""|"n/a") current_tz="UTC" ;; esac
-
-    if whiptail --title "$(t "Timezone")" --yesno "$(t "Is your timezone currently set to:")\n\n>>> ${current_tz} <<<\n\n$(t "Is this correct?")" 12 60 3>&1 1>&2 2>&3; then
-        printf '%s' "$current_tz"
-        return 0
-    fi
-
-    local tz_list=()
-    while IFS= read -r tz; do
-        [ -n "$tz" ] && tz_list+=("$tz" "")
-    done < <(timedatectl list-timezones 2>/dev/null)
-
-    if [ ${#tz_list[@]} -eq 0 ]; then
-        tz_list=("UTC" "" "America/New_York" "" "Europe/London" "" "Asia/Tokyo" "" "Australia/Sydney" "")
-    fi
-
-    selected_tz=$(whiptail --title "$(t "Select Timezone")" \
-        --menu "$(t "Choose your timezone from the list:")" 22 70 14 "${tz_list[@]}" 3>&1 1>&2 2>&3)
-    
-    if [ -n "$selected_tz" ]; then
-        printf '%s' "$selected_tz"
-    else
-        printf '%s' "$current_tz"
+        printf '%b' "$source_text"
     fi
 }
 
