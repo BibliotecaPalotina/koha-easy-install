@@ -1386,7 +1386,11 @@ configure_firewall() {
 }
 
 write_banner() {
-    local ip="$1" user="$2"
+    local ip="${1:-}"
+    [ -z "$ip" ] && ip="$(get_server_ip 2>/dev/null || hostname -I | awk '{print $1}')"
+    [ -z "$ip" ] && ip="127.0.0.1"
+
+    local user="${2:-koha_library}"
     
     # Detecta URLs do Cloudflare Tunnel se configurado
     local cf_opac="" cf_staff=""
@@ -1395,47 +1399,44 @@ write_banner() {
         cf_staff=$(grep -B1 "localhost:8080$" /etc/cloudflared/config.yml | grep "hostname:" | awk '{print $NF}' 2>/dev/null)
     fi
 
-    local url_staff="http://${ip}:8080"
-    local url_opac="http://${ip}:80"
-
     local staff_cf_text opac_cf_text
     staff_cf_text="$(t "(Configure in panel)")"
     opac_cf_text="$(t "(Configure in panel)")"
 
-    if [ -n "$cf_staff" ]; then
-        staff_cf_text="https://${cf_staff}"
-    fi
-    if [ -n "$cf_opac" ]; then
-        opac_cf_text="https://${cf_opac}"
-    fi
+    [ -n "$cf_staff" ] && staff_cf_text="https://${cf_staff}"
+    [ -n "$cf_opac" ] && opac_cf_text="https://${cf_opac}"
 
     # Define o usuário e comando SSH
     local ssh_user="${REAL_USER:-servidor}"
     [ "$ssh_user" = "root" ] && ssh_user="servidor"
-    local str_ssh
-    str_ssh="$(t "SSH ACCESS       : ssh ${ssh_user}@${ip}")"
 
-    local t_head t_suite l_ctrl l_urls l_user l_pass
+    local t_head t_suite l_ctrl l_ssh l_urls l_staff l_opac l_staff_loc l_opac_loc l_staff_cf l_opac_cf l_user l_pass
     t_head="      K O H A    L I B R A R Y      "
     t_suite=" PUBLIC CATALOG & AUTOMATION SUITE"
     l_ctrl="$(t "CONTROL DASHBOARD : config.sh")"
-    l_urls="$(t "URLS / WEB ACCESS   :")"
-    l_user="$(t "- User (Admin)    : ")"
-    l_pass="$(t "- Password (Root) : ")"
+    l_ssh="$(t "SSH ACCESS        : ssh ${ssh_user}@${ip}")"
+    l_urls="$(t "URLS / WEB ACCESS :")"
+    l_staff="$(t "- Staff (Network) : http://${ip}:8080")"
+    l_opac="$(t "- OPAC  (Network) : http://${ip}:80")"
+    l_staff_loc="$(t "- Staff (Local)   : http://localhost:8080")"
+    l_opac_loc="$(t "- OPAC  (Local)   : http://localhost:80")"
+    l_staff_cf="$(t "- Staff (Cloud)   : ${staff_cf_text}")"
+    l_opac_cf="$(t "- OPAC  (Cloud)   : ${opac_cf_text}")"
+    l_user="$(t "- User (Admin)    : ${user}")"
+    l_pass="$(t "- Password (Root) : cat /root/credenciais_koha.txt")"
 
-    # Formata para exatamente 52 caracteres úteis para fechar alinhado com as colunas |  |
-    local f_ctrl f_ssh f_urls f_staff f_opac f_staff_loc f_opac_loc f_staff_cf f_opac_cf f_user f_pass
+    # Formata para exatamente 52 caracteres úteis para fechar alinhado com as colunas
+    local f_ctrl f_ssh f_staff f_opac f_staff_loc f_opac_loc f_staff_cf f_opac_cf f_user f_pass
     f_ctrl=$(printf "%-52.52s" "$l_ctrl")
-    f_ssh=$(printf "%-52.52s" "$str_ssh")
-    f_urls=$(printf "%-52.52s" "$l_urls")
-    f_staff=$(printf "%-52.52s" "$(t "- Staff (Net/IP)  : ")$url_staff")
-    f_opac=$(printf "%-52.52s" "$(t "- OPAC  (Net/IP)  : ")$url_opac")
-    f_staff_loc=$(printf "%-52.52s" "- Staff (Localhost): http://127.0.0.1:8080")
-    f_opac_loc=$(printf "%-52.52s" "- OPAC  (Localhost): http://127.0.0.1:80")
-    f_staff_cf=$(printf "%-52.52s" "- Staff (Cloudfl) : $staff_cf_text")
-    f_opac_cf=$(printf "%-52.52s" "- OPAC  (Cloudfl) : $opac_cf_text")
-    f_user=$(printf "%-52.52s" "${l_user}${user}")
-    f_pass=$(printf "%-52.52s" "${l_pass}cat /root/credenciais_koha.txt")
+    f_ssh=$(printf "%-52.52s" "$l_ssh")
+    f_staff=$(printf "%-52.52s" "$l_staff")
+    f_opac=$(printf "%-52.52s" "$l_opac")
+    f_staff_loc=$(printf "%-52.52s" "$l_staff_loc")
+    f_opac_loc=$(printf "%-52.52s" "$l_opac_loc")
+    f_staff_cf=$(printf "%-52.52s" "$l_staff_cf")
+    f_opac_cf=$(printf "%-52.52s" "$l_opac_cf")
+    f_user=$(printf "%-52.52s" "$l_user")
+    f_pass=$(printf "%-52.52s" "$l_pass")
 
     cat > /etc/issue << EOF
 \S
@@ -1451,7 +1452,7 @@ write_banner() {
          |--|  ${f_ctrl}  |--|
          |  |  ${f_ssh}  |  |
          |  |======================================================|  |
-         |  |  ${f_urls}  |  |
+         |  |  ${l_urls}                                            |  |
          |  |  ${f_staff}  |  |
          |  |  ${f_opac}  |  |
          |  |  ${f_staff_loc}  |  |
