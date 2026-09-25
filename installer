@@ -47,40 +47,116 @@ if [ -f "$TRANSLATION_CONFIG" ]; then
     source "$TRANSLATION_CONFIG" 2>/dev/null || true
 fi
 
-# ---------------------------------------------------------------
-# Default language
-# ---------------------------------------------------------------
-if [ -z "${KOHA_PANEL_LANG_FULL:-}" ]; then
-    KOHA_PANEL_LANG_FULL="en-GB"
+# ======================================================================
+# 2. LANGUAGE / IDIOMA
+# ======================================================================
+
+LANGUAGES_KOHA="en-GB:English (UK);en-NZ:English (NZ);pt-BR:Português (Brasil);pt-PT:Português (Portugal);es-ES:Español;sq-AL:Albanian;am-Ethi:Amharic;ar-Arab:Arabic;hy-Armn:Armenian;az-AZ:Azerbaijani;be-BY:Belarusian;bn-IN:Bengali;bg-Cyrl:Bulgarian;my:Burmese;ca-ES:Català;cs-CZ:Čeština;zh-Hans-CN:Chinese (Simplified);zh-Hant-TW:Chinese (Traditional);da-DK:Dansk;de-DE:Deutsch;de-CH:Deutsch (Schweiz);et:Estonian;eo:Esperanto;eu:Euskara;fr-FR:Français;fr-CA:Français (Canada);gl:Galego;ka:Georgian;el-GR:Greek;he-Hebr:Hebrew;hi:Hindi;hr-HR:Hrvatski;hu-HU:Magyar;ia:Interlingua;ga:Irish;is-IS:Íslenska;it-IT:Italiano;ja-Jpan-JP:Japanese;kn-Knda:Kannada;kk-KZ:Kazakh;km-KH:Khmer;rw-RW:Kinyarwanda;ko-Kore-KP:Korean;ku-Arab:Kurdish;lo-Laoo:Lao;lv:Latvian;ms-MY:Malay;ml:Malayalam;mi-NZ:Maori;mr:Marathi;ne-NE:Nepali;nl-NL:Nederlands;nl-BE:Nederlands (BE);nb-NO:Norsk Bokmål;nn-NO:Norsk Nynorsk;fa-Arab:Persian;pl-PL:Polski;ro-RO:Română;ru-RU:Russian;gd:Scottish Gaelic;sr-Cyrl:Serbian;si:Sinhala;sk-SK:Slovenčina;sl-SI:Slovenščina;fi-FI:Suomi;sv-SE:Svenska;sw-KE:Swahili;tl-PH:Tagalog;ta:Tamil;te:Telugu;th-TH:Thai;tr-TR:Türkçe;uk-UA:Ukrainian;ur-Arab:Urdu;uz:Uzbek;vi-VN:Vietnamese;cy-GB:Welsh"
+
+TRANSLATION_CONFIG="/etc/koha-easy-install/translation.conf"
+CONFIG_DIR="/etc/koha-easy-install"
+
+# ----------------------------------------------------------------------
+# Load saved language configuration
+# ----------------------------------------------------------------------
+if [ -f "$TRANSLATION_CONFIG" ]; then
+    # shellcheck disable=SC1090
+    source "$TRANSLATION_CONFIG" 2>/dev/null || true
 fi
 
-if [ -z "${KOHA_PANEL_LANG:-}" ]; then
-    case "$KOHA_PANEL_LANG_FULL" in
-        pt-BR|pt-PT) KOHA_PANEL_LANG="pt" ;;
-        es-ES)       KOHA_PANEL_LANG="es" ;;
-        en-GB|en-NZ) KOHA_PANEL_LANG="en" ;;
-        fr-FR|fr-CA) KOHA_PANEL_LANG="fr" ;;
-        de-DE|de-CH) KOHA_PANEL_LANG="de" ;;
-        it-IT)       KOHA_PANEL_LANG="it" ;;
-        nl-NL|nl-BE) KOHA_PANEL_LANG="nl" ;;
-        pl-PL)       KOHA_PANEL_LANG="pl" ;;
-        ru-RU)       KOHA_PANEL_LANG="ru" ;;
-        *)            KOHA_PANEL_LANG="${KOHA_PANEL_LANG_FULL%%-*}" ;;
-    esac
-fi
+# ----------------------------------------------------------------------
+# Defaults
+# ----------------------------------------------------------------------
+[ -z "${KOHA_PANEL_LANG_FULL:-}" ] && KOHA_PANEL_LANG_FULL="en-GB"
+[ -z "${KOHA_PANEL_LANG:-}" ] && KOHA_PANEL_LANG="en"
 
 export KOHA_PANEL_LANG_FULL
 export KOHA_PANEL_LANG
 
-# ---------------------------------------------------------------
-# Internal language variable
-# ---------------------------------------------------------------
-SYS_LANG="$KOHA_PANEL_LANG"
+# ----------------------------------------------------------------------
+# Normalize language code used internally by the panel
+# ----------------------------------------------------------------------
+normalize_panel_language() {
+    case "$1" in
+        pt-*|pt_BR|pt_PT|por)
+            printf '%s' "pt"
+            ;;
+        en-*|en_GB|en_NZ|eng)
+            printf '%s' "en"
+            ;;
+        es-*|es_ES|spa)
+            printf '%s' "es"
+            ;;
+        fr-*|fra|fre)
+            printf '%s' "fr"
+            ;;
+        de-*|de_DE|de_CH|deu|ger)
+            printf '%s' "de"
+            ;;
+        it-*|ita)
+            printf '%s' "it"
+            ;;
+        nl-*|nld|dut)
+            printf '%s' "nl"
+            ;;
+        pl-*|pol)
+            printf '%s' "pl"
+            ;;
+        ru-*|rus)
+            printf '%s' "ru"
+            ;;
+        uk-*|ukr)
+            printf '%s' "uk"
+            ;;
+        ja-*|jpn)
+            printf '%s' "ja"
+            ;;
+        ko-*|kor)
+            printf '%s' "ko"
+            ;;
+        zh-Hans-*|zh-CN)
+            printf '%s' "zh-CN"
+            ;;
+        zh-Hant-*|zh-TW)
+            printf '%s' "zh-TW"
+            ;;
+        ar-*|ara)
+            printf '%s' "ar"
+            ;;
+        he-*|heb)
+            printf '%s' "he"
+            ;;
+        fa-*|fas|per)
+            printf '%s' "fa"
+            ;;
+        tr-*|tur)
+            printf '%s' "tr"
+            ;;
+        cs-*|ces|cze)
+            printf '%s' "cs"
+            ;;
+        sv-*|swe)
+            printf '%s' "sv"
+            ;;
+        nb-*|nn-*|no|nor)
+            printf '%s' "no"
+            ;;
+        ca-*|cat)
+            printf '%s' "ca"
+            ;;
+        *)
+            printf '%s' "${1%%-*}"
+            ;;
+    esac
+}
+
+SYS_LANG="$(normalize_panel_language "$KOHA_PANEL_LANG")"
 export SYS_LANG
 
-# ---------------------------------------------------------------
-# Translation cache
-# ---------------------------------------------------------------
+# ======================================================================
+# TRANSLATION ENGINE / MOTOR DE TRADUÇÃO DO PAINEL
+# ======================================================================
+
 declare -A _TRANS_CACHE
 
 t() {
@@ -92,67 +168,15 @@ t() {
     local api_key=""
     local response=""
     local json_payload=""
+    local target_lang="${KOHA_PANEL_LANG:-en}"
 
     # ------------------------------------------------------------------
-    # Idioma escolhido pelo usuário no painel.
-    # KOHA_PANEL_LANG é a fonte principal e não deve ser sobrescrita
-    # pelo locale do sistema depois da escolha manual.
+    # Always use the manually selected panel language when available.
     # ------------------------------------------------------------------
-    local target_lang="${KOHA_PANEL_LANG:-${SYS_LANG:-en}}"
-
-    # Normalização defensiva
-    case "$target_lang" in
-        pt-*|pt_BR|pt_PT|por)
-            target_lang="pt"
-            ;;
-        en-*|en_GB|en_NZ|eng)
-            target_lang="en"
-            ;;
-        es-*|es_ES|spa)
-            target_lang="es"
-            ;;
-        fr-*|fra|fre)
-            target_lang="fr"
-            ;;
-        de-*|deu|ger)
-            target_lang="de"
-            ;;
-        it-*|ita)
-            target_lang="it"
-            ;;
-        nl-*)
-            target_lang="nl"
-            ;;
-        pl-*|pol)
-            target_lang="pl"
-            ;;
-        ru-*|rus)
-            target_lang="ru"
-            ;;
-        uk-*|ukr)
-            target_lang="uk"
-            ;;
-        ja-*|jpn)
-            target_lang="ja"
-            ;;
-        ko-*|kor)
-            target_lang="ko"
-            ;;
-        zh-Hans-*|zh-CN)
-            target_lang="zh-CN"
-            ;;
-        zh-Hant-*|zh-TW)
-            target_lang="zh-TW"
-            ;;
-    esac
+    target_lang="$(normalize_panel_language "$target_lang")"
 
     # ------------------------------------------------------------------
-    # PORTUGUÊS
-    #
-    # Quando existirem dois argumentos:
-    #   t "Texto em português" "English text"
-    #
-    # não existe motivo para chamar a internet.
+    # Portuguese
     # ------------------------------------------------------------------
     if [[ "$target_lang" == "pt" && -n "${2:-}" ]]; then
         printf '%b' "$text_pt"
@@ -160,7 +184,7 @@ t() {
     fi
 
     # ------------------------------------------------------------------
-    # INGLÊS
+    # English
     # ------------------------------------------------------------------
     if [[ "$target_lang" == "en" ]]; then
         printf '%b' "$text_en"
@@ -168,26 +192,22 @@ t() {
     fi
 
     # ------------------------------------------------------------------
-    # Para os demais idiomas, a origem é SEMPRE a versão inglesa.
+    # All other languages:
+    # use English as the translation source.
     # ------------------------------------------------------------------
     source_text="$text_en"
-
-    # ------------------------------------------------------------------
-    # CACHE
-    # ------------------------------------------------------------------
     cache_key="${target_lang}|${source_text}"
 
+    # ------------------------------------------------------------------
+    # Translation cache
+    # ------------------------------------------------------------------
     if [[ -n "${_TRANS_CACHE["$cache_key"]+x}" ]]; then
         printf '%b' "${_TRANS_CACHE["$cache_key"]}"
         return 0
     fi
 
     # ------------------------------------------------------------------
-    # Lê a chave opcional do Google Cloud Translation.
-    #
-    # /etc/koha-easy-install/translation.conf
-    #
-    # GOOGLE_TRANSLATE_API_KEY="..."
+    # Read optional Google Cloud API key
     # ------------------------------------------------------------------
     if [ -n "${GOOGLE_TRANSLATE_API_KEY:-}" ]; then
         api_key="$GOOGLE_TRANSLATE_API_KEY"
@@ -203,17 +223,16 @@ t() {
     fi
 
     # ------------------------------------------------------------------
-    # DEPENDÊNCIAS
+    # Required local dependencies
     # ------------------------------------------------------------------
     if ! command -v curl >/dev/null 2>&1 || \
        ! command -v python3 >/dev/null 2>&1; then
-
         printf '%b' "$source_text"
         return 0
     fi
 
     # ==================================================================
-    # MÉTODO 1 - GOOGLE CLOUD TRANSLATION API OFICIAL
+    # METHOD 1 - GOOGLE CLOUD TRANSLATION API
     # ==================================================================
     if [ -n "$api_key" ]; then
 
@@ -272,7 +291,7 @@ except Exception:
     fi
 
     # ==================================================================
-    # MÉTODO 2 - FALLBACK GOOGLE TRANSLATE
+    # METHOD 2 - GOOGLE TRANSLATE FALLBACK
     # ==================================================================
     translated="$(
         curl -4fsS \
@@ -313,7 +332,7 @@ except Exception:
     fi
 
     # ------------------------------------------------------------------
-    # FALLBACK FINAL
+    # Final fallback
     # ------------------------------------------------------------------
     printf '%b' "$source_text"
     return 0
@@ -2370,7 +2389,7 @@ function_install_languages() {
     }
 
     # ==================================================================
-    # APPLY PANEL LANGUAGE IMMEDIATELY
+    # APPLY SELECTED LANGUAGE TO THE PANEL
     # ==================================================================
     export KOHA_PANEL_LANG_FULL="$choice"
 
@@ -2406,7 +2425,6 @@ function_install_languages() {
     # ==================================================================
     if [ "${EUID:-$(id -u)}" -eq 0 ]; then
         mkdir -p "$CONFIG_DIR" 2>/dev/null
-
         touch "$TRANSLATION_CONFIG"
 
         sed -i \
@@ -2421,17 +2439,15 @@ function_install_languages() {
     fi
 
     # ==================================================================
-    # RESET TRANSLATION CACHE
+    # APPLY NEW LANGUAGE IMMEDIATELY
     # ==================================================================
     _TRANS_CACHE=()
 
-    # IMPORTANT:
-    # Use the manual selection as the source of truth.
-    SYS_LANG="$KOHA_PANEL_LANG"
+    SYS_LANG="$(normalize_panel_language "$KOHA_PANEL_LANG")"
     export SYS_LANG
 
     # ==================================================================
-    # PREPARE OS LOCALE
+    # PREPARE SYSTEM LOCALE
     # ==================================================================
     clear
 
@@ -2471,7 +2487,7 @@ function_install_languages() {
     fi
 
     # ==================================================================
-    # INSTALL / UPDATE KOHA TRANSLATION
+    # KOHA TRANSLATION PACKAGE
     # ==================================================================
     local koha_trans_cmd
 
@@ -2553,7 +2569,7 @@ function_install_languages() {
             " >/dev/null 2>&1 || true
 
             # ----------------------------------------------------------
-            # STAFF INTERFACE - Koha 24.11+
+            # STAFF INTERFACE
             # ----------------------------------------------------------
             $mysql_runner -e "
                 INSERT INTO ${DB_NAME}.systempreferences
@@ -2565,7 +2581,7 @@ function_install_languages() {
             " >/dev/null 2>&1 || true
 
             # ----------------------------------------------------------
-            # Compatibilidade com versões antigas do Koha
+            # Legacy compatibility
             # ----------------------------------------------------------
             $mysql_runner -e "
                 UPDATE ${DB_NAME}.systempreferences
@@ -2574,7 +2590,7 @@ function_install_languages() {
             " >/dev/null 2>&1 || true
 
             # ----------------------------------------------------------
-            # Limpa sessões para que o novo idioma seja reconhecido
+            # Clear sessions
             # ----------------------------------------------------------
             $mysql_runner -e \
                 "DELETE FROM ${DB_NAME}.sessions;" \
